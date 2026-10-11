@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-    <title>Barkpocalypse</title>
+    <title>Woof Wars</title>
     <style>html,body{color:#cfe;background:#10181a;font:14px system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif}#boot{text-align:center;padding:24px}#err{white-space:pre-wrap;word-break:break-word;text-align:left;color:#ffb4a8;margin-top:12px;font:12px monospace}</style>
     <script>
       // If the game fails to start on someone's device, show why instead of a blank page.
@@ -17,7 +17,7 @@
     
   <style></style></head>
   <body>
-    <div id="root"><div id="boot">Loading Barkpocalypse…<div id="err"></div></div></div>
+    <div id="root"><div id="boot">Loading Woof Wars…<div id="err"></div></div></div>
   <script>
 fetch('game.js?v=2528549184').then(function(r){ showErr('game.js HTTP '+r.status+' '+r.headers.get('content-type')); return r.text() }).then(function(t){
   showErr('game.js bytes='+t.length)
