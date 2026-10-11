@@ -23,6 +23,7 @@ interface State {
   banner: Banner | null; kills: number; combo: number; comboT: number
 }
 // Combat simulation. Pure state + events; renderer only reads G and drains G.events.
+export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 + 40, y1: ARENA.y1 - 50 }
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
   pack: { x: 180, y: 380, tx: 180, ty: 380, hp: 220, max: 220 },
@@ -105,10 +106,11 @@ export function update(dtReal: number) {
   const dt = dtReal * G.speed; G.t += dt;
   const p = G.pack;
   // pack movement (drag target)
-  const dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx, dy);
-  if (d > 1) { const st = Math.min(d, 300 * dt); p.x += dx / d * st; p.y += dy / d * st; }
-  p.x = Math.max(ARENA.x0 + 40, Math.min(ARENA.x1 - 40, p.x));
-  p.y = Math.max(ARENA.y0 + 40, Math.min(ARENA.y1 - 50, p.y));
+  // Pack eases toward the drag target (exponential follow). Uses real dt so 2x battle speed doesn't change control feel.
+  const follow = Math.min(1, 22 * dtReal)
+  p.x += (p.tx - p.x) * follow; p.y += (p.ty - p.y) * follow
+  p.x = Math.max(PACK_BOUNDS.x0, Math.min(PACK_BOUNDS.x1, p.x));
+  p.y = Math.max(PACK_BOUNDS.y0, Math.min(PACK_BOUNDS.y1, p.y));
   if (G.comboT > 0 && (G.comboT -= dt) <= 0) G.combo = 0;
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null;
 

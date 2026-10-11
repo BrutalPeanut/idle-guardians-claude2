@@ -1,5 +1,5 @@
 import { W, H, ARENA } from './data'
-import { G, load, save, startStage, update, buyWeapon, tryMerge, mergeAll } from './sim'
+import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll } from './sim'
 import { R, benchRect, drainEvents, updateFx, render } from './render'
 import { Audio_ } from './audio'
 
@@ -16,18 +16,28 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const pt = (ev: PointerEvent) => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H } }
   const inR = (p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h
   let mode: 'bench' | 'pack' | 'btn' | null = null
+  // Relative drag: pack moves by the finger's delta from the initial touch (ax/ay = touch origin, px/py = pack position at that origin).
+  const drag = { ax: 0, ay: 0, px: 0, py: 0 }
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+  const dragTo = (p: { x: number; y: number }) => {
+    let tx = drag.px + (p.x - drag.ax), ty = drag.py + (p.y - drag.ay)
+    const cx = clamp(tx, PACK_BOUNDS.x0, PACK_BOUNDS.x1), cy = clamp(ty, PACK_BOUNDS.y0, PACK_BOUNDS.y1)
+    drag.px += cx - tx; drag.py += cy - ty; tx = cx; ty = cy // re-anchor at edges so reversing direction responds instantly
+    G.pack.tx = tx; G.pack.ty = ty
+    if (R.dragAnchor) { R.dragAnchor.cx = p.x; R.dragAnchor.cy = p.y }
+  }
 
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
     for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
     for (let i = 0; i < 8; i++) if (G.bench[i] !== null && inR(p, benchRect(i))) { R.drag = { from: i, x: p.x, y: p.y }; mode = 'bench'; return }
-    if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; R.dragTarget = true; G.pack.tx = p.x; G.pack.ty = p.y - 20 }
+    if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; drag.ax = p.x; drag.ay = p.y; drag.px = G.pack.x; drag.py = G.pack.y; G.pack.tx = G.pack.x; G.pack.ty = G.pack.y; R.dragAnchor = { sx: p.x, sy: p.y, cx: p.x, cy: p.y } }
   }
   const move = (ev: PointerEvent) => {
     const p = pt(ev)
     if (mode === 'bench' && R.drag) { R.drag.x = p.x; R.drag.y = p.y; R.dragOver = -1; for (let i = 0; i < 8; i++) if (inR(p, benchRect(i))) R.dragOver = i }
-    else if (mode === 'pack') { G.pack.tx = p.x; G.pack.ty = p.y - 20 }
+    else if (mode === 'pack') dragTo(p)
   }
   const fireButton = (k: string) => {
     if (k === 'speed') G.speed = G.speed > 1 ? 1 : 2
@@ -37,7 +47,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   }
   const up = (ev: PointerEvent) => {
     if (mode === 'btn' && R.pressed) { const r = R.btns[R.pressed]; if (r && inR(pt(ev), r)) fireButton(R.pressed); R.pressed = null }
-    R.dragOver = -1; R.dragTarget = false
+    R.dragOver = -1; R.dragAnchor = null
     if (mode === 'bench' && R.drag) {
       const p = pt(ev), from = R.drag.from; let to = -1
       for (let i = 0; i < 8; i++) if (inR(p, benchRect(i))) to = i
