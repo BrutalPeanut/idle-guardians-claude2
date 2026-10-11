@@ -26,11 +26,15 @@ export type GEvent =
   | { type: 'mortar_fire'; x: number; y: number }
   | { type: 'hold'; on: boolean }
   | { type: 'idle_collect'; gold: number }
+  | { type: 'down'; i: number; x: number; y: number }
+  | { type: 'revive'; i: number; x: number; y: number }
   | { type: 'nade_throw'; x: number; y: number }
 
 interface State {
   gold: number; stage: number; bought: number; bench: (number | null)[]; maxLevel: number
-  pack: { x: number; y: number; tx: number; ty: number; hp: number; max: number }
+  pack: { x: number; y: number; tx: number; ty: number }
+  /** Per-guardian health. A downed guardian (hp 0) stops firing and revives after REVIVE_T seconds. */
+  hp: number[]; mhp: number[]; reviveT: number[]
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
@@ -42,10 +46,11 @@ interface State {
 }
 
 export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 + 40, y1: ARENA.y1 - 50 }
+const REVIVE_T = 12
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425, hp: 220, max: 220 }, sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
@@ -88,7 +93,7 @@ export function startStage() {
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul)
-  G.pack.max = 220 + s * 14; G.pack.hp = G.pack.max
+  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
@@ -132,9 +137,20 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
   }
   G.events.push({ type: 'fire', kind: wd.kind, x: gp.x, y: gp.y, col: wd.col })
+}
+const alive = (i: number) => G.hp[i] > 0
+function hurt(i: number, dmg: number) {
+  if (!alive(i)) return
+  G.hp[i] -= dmg
+  if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = REVIVE_T; const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
+}
+function nearestAlive(x: number, y: number, n: number) {
+  let b = -1, bd = 1e9
+  for (let i = 0; i < n; i++) if (alive(i)) { const gp = guardianPos(i), d = Math.hypot(gp.x - x, gp.y - y); if (d < bd) { bd = d; b = i } }
+  return b
 }
 function hitCover(c: Cover, dmg: number, x: number, y: number) {
   c.hp -= dmg; c.flash = 0.12
@@ -186,7 +202,10 @@ export function update(dtReal: number) {
     r = pushOut(G.sup.x, G.sup.y, PACK_R, c); if (r) { G.sup.x = r.x; G.sup.y = r.y }
   }
   const centers = G.hold ? [p, G.sup] : [p]
-  for (const c of centers) if (hazardAt(c.x, c.y) === 'lava') { p.hp -= p.max * 0.035 * dt; if (Math.random() < dt * 4) G.events.push({ type: 'pack_hit', x: c.x + rnd(-14, 14), y: c.y - 24, v: Math.ceil(p.max * 0.035 * 0.25) }) }
+  for (let i = 0; i < n; i++) if (alive(i)) { // lava burns whoever stands in it; downed guardians come back after a rest
+    const gp = guardianPos(i)
+    if (hazardAt(gp.x, gp.y) === 'lava') { hurt(i, G.mhp[i] * 0.035 * dt); if (Math.random() < dt * 4) G.events.push({ type: 'pack_hit', x: gp.x + rnd(-10, 10), y: gp.y - 24, v: Math.ceil(G.mhp[i] * 0.035 * 0.25) }) }
+  } else if ((G.reviveT[i] -= dt) <= 0) { G.hp[i] = Math.ceil(G.mhp[i] * 0.4); const gp = guardianPos(i); G.events.push({ type: 'revive', i, x: gp.x, y: gp.y }) }
 
   if (G.comboT > 0 && (G.comboT -= dt) <= 0) G.combo = 0
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null
@@ -197,6 +216,7 @@ export function update(dtReal: number) {
   const ws = sortedWeapons()
   for (let i = 0; i < n; i++) {
     const st = G.status[i]; st.flank = 0; st.cover = false
+    if (!alive(i)) { G.flankOff[i] = 0; continue }
     const base = baseGuardianPos(i), gp = guardianPos(i)
     for (const e of G.enemies) if (e.kind === 'gunner') { for (const c of G.cover) if (c.side === 'player' && c.hp > 0 && segRect(e.x, e.y, gp.x, gp.y, c)) { st.cover = true; break } if (st.cover) break }
     const w = ws[i]
@@ -257,7 +277,8 @@ export function update(dtReal: number) {
     if (ehz === 'lava') { e.hp -= e.max * 0.07 * dt; if (e.hp <= 0) { killReward(e); continue } }
     if (e.dug) { // gunners / mortars hold position behind their barricade
       if ((e.cd -= dt) > 0) continue
-      const gp = guardianPos(Math.floor(Math.random() * n))
+      const li = []; for (let k = 0; k < n; k++) if (alive(k)) li.push(k)
+      const gp = guardianPos(li.length ? li[Math.floor(Math.random() * li.length)] : 0)
       if (e.kind === 'gunner') {
         const a = Math.atan2(gp.y - e.y, gp.x - e.x), bs = rules.bulletSpeed
         G.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs, vy: Math.sin(a) * bs, dmg: bulletDmg(G.stage), life: 3, pass: 0 })
@@ -273,7 +294,7 @@ export function update(dtReal: number) {
     for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < td) { td = d; tgt = c } }
     const slow = ehz === 'mud' ? 0.45 : ehz === 'shallows' ? 0.75 : 1
     if (td > 30) { e.x += (tgt.x - e.x) / td * e.spd * slow * dt; e.y += (tgt.y - e.y) / td * e.spd * slow * dt }
-    else { p.hp -= e.dmg * dt * aura; if (Math.random() < dt * 3) G.events.push({ type: 'pack_hit', x: tgt.x + rnd(-20, 20), y: tgt.y - 20, v: Math.ceil(e.dmg * aura) }) }
+    else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
     for (const c of G.cover) if (c.hp > 0) { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
     e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y))
   }
@@ -291,7 +312,7 @@ export function update(dtReal: number) {
       break
     }
     if (b.life <= 0) continue
-    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (Math.hypot(b.x - gp.x, b.y - gp.y) < 12) { b.life = 0; p.hp -= b.dmg * aura; G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(b.dmg * aura) }); break } }
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(b.x - gp.x, b.y - gp.y) < 12) { b.life = 0; hurt(i, b.dmg * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(b.dmg * aura) }); break } }
   }
   G.ebullets = G.ebullets.filter(b => b.life > 0)
 
@@ -312,14 +333,15 @@ export function update(dtReal: number) {
     s.t += dt
     if (s.t < s.dur) continue
     G.events.push({ type: 'boom', x: s.tx, y: s.ty, r: s.r })
-    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (Math.hypot(gp.x - s.tx, gp.y - s.ty) < s.r) { p.hp -= s.dmg * 0.5 * aura; G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(s.dmg * 0.5 * aura) }) } }
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - s.tx, gp.y - s.ty) < s.r) { hurt(i, s.dmg * 0.5 * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(s.dmg * 0.5 * aura) }) } }
     for (const c of G.cover) if (c.side === 'player' && c.hp > 0 && Math.hypot(c.x - s.tx, c.y - s.ty) < s.r + c.w / 2) hitCover(c, s.dmg * 0.4, c.x, c.y)
   }
   G.shells = G.shells.filter(s => s.t < s.dur)
   G.cover = G.cover.filter(c => c.hp > 0)
 
   // ---- wipe / clear ----
-  if (p.hp <= 0) { G.banner = { text: 'REGROUP!', t: 1.4 }; startStage(); return }
+  let anyAlive = false; for (let i = 0; i < n; i++) if (alive(i)) anyAlive = true
+  if (!anyAlive) { G.banner = { text: 'REGROUP!', t: 1.4 }; startStage(); return }
   if (G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
