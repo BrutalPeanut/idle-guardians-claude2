@@ -1,6 +1,6 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
-import { W, H, GUARDIANS, unlockedGuardians } from './data'
-import { G, questReady } from './sim'
+import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
+import { G, questReady, dogId, buyDog, setSquad, pk } from './sim'
 import { R, button, rr, icons, fmt, OUT } from './render'
 import type { Ctx } from './render'
 
@@ -72,6 +72,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'login': drawLogin(ctx, t); break
     case 'skills': drawSkills(ctx); break
     case 'weekly': drawWeekly(ctx); break
+    case 'kennel': drawKennel(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -109,7 +110,7 @@ export function drawGear(ctx: Ctx, t: number) {
     chestIcon(ctx, x + 24, 72, 0.75, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 46, 66); ctx.font = '700 11px system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c + (c ? '  OPEN' : ''), x + 46, 82)
   }
   for (let i = 0; i < n; i++) button(ctx, 'gt_' + i, 16 + i * 84, 106, 78, 28, { top: i === R.gearDog ? '#ffb347' : '#3a4850', bot: i === R.gearDog ? '#e0731a' : '#26323a', label: GUARDIANS[i].n, size: 12 })
-  const dog = R.gearDog
+  const dog = dogId(R.gearDog)
   SLOTS.forEach((sl, k) => { const x = 16 + k * 112, it = G.gear.find(g => g.on === dog && g.slot === sl) ?? null; R.btns['slot_' + k] = { x, y: 142, w: 104, h: 74 }; itemCard(ctx, x, 142, 104, 74, it, false, sl.toUpperCase()) })
   ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('INVENTORY  ' + invCount() + '/' + INV_MAX + '  (tap an item)', 16, 228)
   const inv = G.gear.filter(g => g.on < 0)
@@ -158,6 +159,14 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  if (k.startsWith('ks_')) { R.kSlot = +k.slice(3); return true }
+  if (k.startsWith('kd_')) {
+    const r = +k.slice(3)
+    if (!G.owned.includes(r)) { if (buyDog(r)) { G.banner = { text: ROSTER[r].n + ' joined the kennel!', sub: ROSTER[r].perkText, t: 1.8 }; Audio_.fanfare() } else G.banner = { text: 'Need ' + ROSTER[r].cost + ' coins', sub: 'Coins drop from bosses and Raids', t: 1.4 } }
+    else if (G.squad.includes(r)) { if (G.squad[R.kSlot] !== r) setSquad(R.kSlot, r) }
+    else setSquad(R.kSlot, r)
+    return true
+  }
   if (k === 'login_claim') { claimLogin(); return true }
   if (k.startsWith('sb_')) { R.skillTab = +k.slice(3); return true }
   if (k.startsWith('sk_')) { if (!buySkill(k.slice(3))) G.banner = { text: pointsLeft() < 1 ? 'No Paw Points left' : 'Maxed', sub: pointsLeft() < 1 ? 'Reach new stages or Rebirth to earn more' : undefined, t: 1.2 }; else Audio_.ui(); return true }
@@ -167,12 +176,12 @@ export function screenButton(k: string): boolean {
     return true
   }
   if (k === 'rv_tap') { if (R.reveal) { R.reveal.phase = 1; R.reveal.t = 0; const it = itemOf(R.reveal.id); if (it && it.rar >= 2) Audio_.fanfare(); else Audio_.coins() } return true }
-  if (k === 'rv_equip') { if (R.reveal) { equipItem(R.reveal.id, R.gearDog); R.sel = -1 } R.reveal = null; return true }
+  if (k === 'rv_equip') { if (R.reveal) { equipItem(R.reveal.id, dogId(R.gearDog)); R.sel = -1 } R.reveal = null; return true }
   if (k === 'rv_keep') { R.reveal = null; return true }
   if (k.startsWith('gt_')) { R.gearDog = +k.slice(3); return true }
-  if (k.startsWith('slot_')) { const sl = SLOTS[+k.slice(5)], it = G.gear.find(g => g.on === R.gearDog && g.slot === sl); if (it && !unequipItem(it.id)) G.banner = { text: 'Inventory full', t: 1 }; return true }
+  if (k.startsWith('slot_')) { const sl = SLOTS[+k.slice(5)], it = G.gear.find(g => g.on === dogId(R.gearDog) && g.slot === sl); if (it && !unequipItem(it.id)) G.banner = { text: 'Inventory full', t: 1 }; return true }
   if (k.startsWith('inv_')) { const it = G.gear.filter(g => g.on < 0)[+k.slice(4)]; R.sel = it ? it.id : -1; return true }
-  if (k === 'rv_equipsel') { if (R.sel >= 0) equipItem(R.sel, R.gearDog); R.sel = -1; return true }
+  if (k === 'rv_equipsel') { if (R.sel >= 0) equipItem(R.sel, dogId(R.gearDog)); R.sel = -1; return true }
   if (k === 'sellsel') { if (R.sel >= 0) { const g = sellItem(R.sel); G.banner = { text: '+' + fmt(g) + ' gold', t: 1 } } R.sel = -1; return true }
   return false
 }
@@ -242,3 +251,35 @@ export function drawSkills(ctx: Ctx) {
   button(ctx, 'respec', W / 2 - 90, 504, 180, 34, { top: '#b58cf0', bot: '#6a3fb8', label: 'Respec  (' + RESPEC_GEMS + ' gems)', size: 12, disabled: pointsSpent() === 0 })
 }
 registerTile({ id: 'skills', label: 'Skill Tree', sub: () => pointsLeft() > 0 ? pointsLeft() + ' points to spend' : 'Fang, Fur, Nose', icon: 'star', col: '#ff9ad8', badge: () => pointsLeft() > 0 })
+
+// ================= Kennel =================
+import { drawPlainDog } from './render'
+export function drawKennel(ctx: Ctx) {
+  panel(ctx, 'Kennel')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffd84a'; ctx.font = '800 16px system-ui,sans-serif'; ctx.fillText('Dungeon Coins: ' + G.coins, W / 2, 62)
+  const un = unlockedGuardians(G.stage)
+  for (let k = 0; k < 2; k++) {
+    const x = 16 + k * 170, y = 78, w = 158, h = 62, r = G.squad[k], d = ROSTER[r], sel = R.kSlot === k
+    button(ctx, 'ks_' + k, x, y, w, h, { top: sel ? '#3d5a6a' : '#2a3841', bot: sel ? '#27404d' : '#1a262d' })
+    if (sel) { ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 2; rr(ctx, x + 1, y + 1, w - 2, h - 2, 14); ctx.stroke() }
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y + 2, 46, h - 4); ctx.clip(); drawPlainDog(ctx, d, x + 28, y + 36, 0); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 9px system-ui,sans-serif'; ctx.fillText('SUPPORT SLOT ' + (k + 1), x + 54, y + 14)
+    ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(d.n, x + 54, y + 30)
+    ctx.fillStyle = un > 2 + k ? '#7af09a' : '#ff9a7a'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText(un > 2 + k ? d.role : 'Unlocks stage ' + (5 + 5 * k), x + 54, y + 47)
+  }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 10px system-ui,sans-serif'; ctx.fillText('Rudy and Cooper always lead. Pick a slot, then tap a dog.', W / 2, 152)
+  for (let r = 2; r < ROSTER.length; r++) {
+    const d = ROSTER[r], i = r - 2, x = 16, y = 164 + i * 51, w = W - 32, h = 46, owned = G.owned.includes(r), inSlot = G.squad.indexOf(r), can = G.coins >= (d.cost ?? 0)
+    button(ctx, 'kd_' + r, x, y, w, h, { top: inSlot >= 0 ? '#34513f' : owned ? '#2e3e48' : '#252f36', bot: inSlot >= 0 ? '#22382b' : owned ? '#1a2830' : '#1b2328' })
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 1, 44, h - 2); ctx.clip(); ctx.globalAlpha = owned ? 1 : 0.55; drawPlainDog(ctx, d, x + 24, y + 29, 0); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = owned ? '#fff' : '#b8c6cc'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(d.n + '  \u00b7  ' + d.breed, x + 52, y + 15)
+    ctx.fillStyle = owned ? '#ffd84a' : '#8fa0a8'; ctx.font = '600 10px system-ui,sans-serif'; ctx.fillText(d.perkText ?? '', x + 52, y + 32)
+    ctx.textAlign = 'right'; ctx.font = '800 11px system-ui,sans-serif'
+    if (inSlot >= 0) { ctx.fillStyle = '#7af09a'; ctx.fillText('SLOT ' + (inSlot + 1), x + w - 10, y + 15) }
+    else if (owned) { ctx.fillStyle = '#9fd0ff'; ctx.fillText('SELECT', x + w - 10, y + 15) }
+    else { ctx.fillStyle = can ? '#ffd84a' : '#ff8a7a'; ctx.fillText((d.cost ?? 0) + ' coins', x + w - 10, y + 15) }
+  }
+  void pk
+}
+registerTile({ id: 'kennel', label: 'Kennel', sub: () => G.coins + ' coins', icon: 'coin', col: '#ffb347', badge: () => ROSTER.some((d, r) => r >= 2 && !G.owned.includes(r) && G.coins >= (d.cost ?? 1e9)) })
