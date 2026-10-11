@@ -44,6 +44,7 @@ export type GEvent =
   | { type: 'idle_collect'; gold: number }
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
+  | { type: 'crate'; x: number; y: number; label: string; drop?: boolean }
   | { type: 'ability'; kind: 'frenzy' | 'shield' | 'tank' | 'panic'; x: number; y: number }
   | { type: 'login_claim'; day: number; label: string }
   | { type: 'chest_get'; tier: number; n: number }
@@ -91,6 +92,8 @@ interface State {
   /** Auto-abilities: master switch plus per-ability switches (all on by default). nadeTaught = the player has thrown a grenade by hand. */
   auto: AutoCfg; autoT: number; nadeTaught: boolean
   raid: RaidState | null; raidInfo: { day: string; used: number; extra: number; best: number }
+  /** Training levels (gold sink), the supply crate currently in the arena (tap it!) and the countdown to the next drop. */
+  train: Record<string, number>; crate: { x: number; y: number; t: number } | null; crateT: number
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
 }
 
@@ -103,7 +106,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
   stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, life: {}, achClaimed: [], pass: { s: 0, xp: 0, claimed: 0 }, spin: { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
@@ -204,6 +207,38 @@ export const skillLuck = () => 0.03 * sk('hunter')
 
 // ---- skills ----
 export const sk = (id: string) => G.skills[id] ?? 0
+
+// ---- Training: an endless gold sink. Every level is a small permanent boost, so there is always something worth buying. ----
+export interface TrainDef { id: string; name: string; text: string; icon: string; col: string; base: number; grow: number }
+export const TRAIN: TrainDef[] = [
+  { id: 'power',   name: 'Fang Training',   text: '+4% damage per level (stacks multiplicatively)', icon: 'sword', col: '#ff6a5a', base: 60, grow: 1.21 },
+  { id: 'haste',   name: 'Quick Paws',      text: '+1.5% fire rate per level',                       icon: 'frenzy', col: '#ffb347', base: 90, grow: 1.21 },
+  { id: 'vital',   name: 'Thick Fur',       text: '+5% max HP per level',                            icon: 'shield', col: '#5ab8ff', base: 50, grow: 1.17 },
+  { id: 'fortune', name: 'Treat Radar',     text: '+4% gold from kills per level',                   icon: 'coin',   col: '#ffd84a', base: 70, grow: 1.22 },
+]
+export const tl = (id: string) => G.train[id] ?? 0
+export const trainPow = () => Math.pow(1.04, tl('power'))
+export const trainCost = (id: string) => { const d = TRAIN.find(x => x.id === id)!; return Math.ceil(d.base * Math.pow(d.grow, tl(id))) }
+export const trainAffordable = () => unlocked('train') && TRAIN.some(d => G.gold >= trainCost(d.id))
+export function buyTrain(id: string): boolean {
+  const c = trainCost(id); if (!TRAIN.some(d => d.id === id) || G.gold < c) return false
+  G.gold -= c; G.train[id] = tl(id) + 1; track('trains'); if (id === 'vital') for (let i = 0; i < 4; i++) { const was = G.mhp[i]; G.mhp[i] = Math.round((110 + G.stage * 7) * GUARDIANS[i].hpMul * hpBonus(i)); if (G.hp[i] > 0) G.hp[i] += G.mhp[i] - was }
+  save(); return true
+}
+
+// ---- Supply crates: every minute or so one drops somewhere in the arena. Tap it before it fades for a prize. ----
+export const CRATE_LIFE = 9
+export function collectCrate(): string {
+  const c = G.crate; if (!c) return ''
+  G.crate = null; const r = Math.random(); let label: string
+  if (r < 0.55) { const g = Math.ceil(killGold(G.stage) * 25 * starMul()); G.gold += g; label = '+' + fmtN(g) + ' gold' }
+  else if (r < 0.72) { const n = 2 + Math.floor(G.stage / 12); G.coins += n; label = '+' + n + ' coins' }
+  else if (r < 0.84) { G.gems += 2; label = '+2 gems' }
+  else if (r < 0.96) { G.frenzyT = Math.max(G.frenzyT, 10); label = 'FRENZY 10s' }
+  else { addChest(G.stage < 20 ? 0 : 1); label = 'Chest!' }
+  track('crates'); G.events.push({ type: 'crate', x: c.x, y: c.y, label }); return label
+}
+const fmtN = (n: number) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : '' + n
 export const pointsSpent = () => Object.values(G.skills).reduce((a, b) => a + b, 0)
 export const pointsLeft = () => pointsEarned(G.best, G.rebirths) - pointsSpent()
 export function buySkill(id: string) {
@@ -218,12 +253,13 @@ export const nadeCdMax = () => NADE.cd * (pk('bark') ? 0.85 : 1) * Math.pow(0.85
 export const shieldDur = () => ABIL.shield.dur + bl('aegis') + 0.4 * sk('aegisS')
 export const frenzyDur = () => ABIL.frenzy.dur + 1.5 * bl('fury')
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
-export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1)
+// early stages are a bit beefier so the opening isn't over in two minutes; the bump fades out by the mid game
+export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
@@ -233,7 +269,7 @@ export function load() {
     const num = (v: unknown, d: number) => typeof v === 'number' && Number.isFinite(v) ? v : d
     const arr = <T,>(v: unknown, d: T[]) => Array.isArray(v) ? v as T[] : d
     const benchOk = arr<number | null>(s.bench, []).length === 8 ? s.bench : (() => { const b: (number | null)[] = new Array(8).fill(null); arr<number | null>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = v }); return b })()
-    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -278,7 +314,7 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + cp('gold') + goldGear() + 0.04 * sk('gold') + (wm('gold') ? 0.3 : 0)) * starMul())
+  const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + cp('gold') + goldGear() + 0.04 * sk('gold') + 0.04 * tl('fortune') + (wm('gold') ? 0.3 : 0)) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
@@ -297,11 +333,11 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
-const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + (wm('iron') ? 0.3 : 0)
+const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0)
 const alive = (i: number) => G.hp[i] > 0
 /** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
 export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
@@ -403,6 +439,14 @@ export function update(dtReal: number) {
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null
   for (const c of G.cover) if (c.flash > 0) c.flash -= dt
   if (G.spawned < G.toSpawn && (G.spawnT -= dt) <= 0) { spawnEnemy(); G.spawnT = isBoss(G.stage) ? 0.45 : 0.7 }
+  if (!G.raid && G.best >= 3) {
+    if (G.crate) { if ((G.crate.t -= dt) <= 0) G.crate = null }
+    else if ((G.crateT -= dt) <= 0) {
+      G.crateT = 45 + Math.random() * 40
+      const x = ARENA.x0 + 30 + Math.random() * (ARENA.x1 - ARENA.x0 - 60), y = ARENA.y0 + 40 + Math.random() * (ARENA.y1 - ARENA.y0 - 120)
+      G.crate = { x, y, t: CRATE_LIFE }; G.events.push({ type: 'crate', x, y, label: 'SUPPLY DROP', drop: true })
+    }
+  }
 
   // ---- guardians: status, targeting, auto-flank, fire ----
   const ws = sortedWeapons()
@@ -432,7 +476,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + cp('rate') + 0.08 * pk('spotter') + gb(i, 'rate') + 0.02 * sk('quick') + (wm('quick') ? 0.2 : 0))
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + cp('rate') + 0.08 * pk('spotter') + gb(i, 'rate') + 0.02 * sk('quick') + 0.015 * tl('haste') + (wm('quick') ? 0.2 : 0))
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }

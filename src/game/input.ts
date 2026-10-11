@@ -1,6 +1,6 @@
 import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
-import { unlocked, unlockStage, spinsLeft } from './sim'
+import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
 import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
@@ -42,6 +42,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     if (R.rebirth) { for (const k of ['rb_go', 'rb_close']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.help) { R.help = false; Audio_.ui(); return }
     for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
+    if (G.crate && Math.hypot(p.x - G.crate.x, p.y - G.crate.y) < 34) { collectCrate(); return }
     for (let i = 0; i < 8; i++) if (G.bench[i] !== null && inR(p, benchRect(i))) { R.drag = { from: i, x: p.x, y: p.y }; mode = 'bench'; return }
     if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; drag.ax = p.x; drag.ay = p.y; drag.px = G.pack.x; drag.py = G.pack.y; G.pack.tx = G.pack.x; G.pack.ty = G.pack.y; R.dragAnchor = { sx: p.x, sy: p.y, cx: p.x, cy: p.y } }
   }

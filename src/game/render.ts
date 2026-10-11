@@ -1,3 +1,4 @@
+import { nextGoal } from './meta'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { PERKS } from './clan'
@@ -46,6 +47,10 @@ export function drainEvents() {
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
     else if (e.type === 'cover_hit') { Audio_.hit(); burst(e.x, e.y, coverDust(e.kind), 4, 70); if (!(G.t - (R.coverT[e.id] ?? -9) < 0.35)) { R.coverT[e.id] = G.t; R.floats.push({ x: e.x, y: e.y - 6, v: Math.ceil(e.v), cover: true, t: 0 }) } }
     else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
+    else if (e.type === 'crate') {
+      if (e.drop) { Audio_.merge(2); burst(e.x, e.y, '#ffd84a', 14, 120); R.parts.push({ ring: true, x: e.x, y: e.y, r: 34, t: 0, life: 0.4 }) }
+      else { Audio_.coins(); burst(e.x, e.y, '#ffd84a', 22, 170); R.floats.push({ x: e.x, y: e.y - 24, v: e.label, gold: true, big: true, t: 0 }); for (let k = 0; k < 7; k++) R.coinsFly.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10), sx: e.x, sy: e.y, t: -k * 0.05, dur: rnd(0.55, 0.8) }) }
+    }
     else if (e.type === 'clan_level') { Audio_.fanfare(); G.banner = { text: 'CLAN LEVEL ' + e.lv, sub: PERKS[e.lv - 1].text, t: 2, big: true } }
     else if (e.type === 'raid_end') { Audio_.fanfare(); R.screen = 'raid' }
     else if (e.type === 'efire') Audio_.zap()
@@ -379,6 +384,19 @@ export function render(ctx: Ctx, t: number) {
     if (G.hp[i] > 0 && i === 1 && G.panicT > 0) { const k = G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, p = 1 + 0.08 * Math.sin(t * 22); ctx.strokeStyle = 'rgba(255,90,80,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(255,60,50,' + 0.2 * k + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(gp.x + Math.sin(t * 40) * 0.8, gp.y + 2, 24 * dogScale(i) * p, 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => { ctx.save(); try { o.d() } catch (e) { if (!R.errLogged) { R.errLogged = true; console.error("entity draw", e) } } ctx.restore() });
+  if (G.crate) { // supply crate: bobbing chest with a shrinking timer ring; tap it
+    const c = G.crate, bob = Math.sin(t * 5) * 3, f = c.t / 9, blink = c.t < 2.5 && Math.sin(t * 22) > 0
+    if (!blink) {
+      ctx.save(); ctx.translate(c.x, c.y + bob)
+      ctx.strokeStyle = 'rgba(255,216,74,.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 25, -Math.PI / 2, -Math.PI / 2 + f * 6.283); ctx.stroke()
+      ctx.fillStyle = 'rgba(255,216,74,' + (0.18 + 0.1 * Math.sin(t * 6)) + ')'; ctx.beginPath(); ctx.arc(0, 0, 25, 0, 6.283); ctx.fill()
+      ctx.fillStyle = OUT; rr(ctx, -15, -11, 30, 24, 5); ctx.fill()
+      const g = ctx.createLinearGradient(0, -9, 0, 11); g.addColorStop(0, '#ffcf5a'); g.addColorStop(1, '#c4761c'); ctx.fillStyle = g; rr(ctx, -13, -9, 26, 20, 4); ctx.fill()
+      ctx.fillStyle = '#7a4412'; ctx.fillRect(-13, -1, 26, 3); ctx.fillStyle = '#ffe9a0'; rr(ctx, -3, -3, 6, 7, 2); ctx.fill()
+      ctx.font = '400 9px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; outText(ctx, 'TAP', 0, -20, '#fff', 3)
+      ctx.restore()
+    }
+  }
   for (const s of G.shots) drawShot(ctx, s);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
     const f = g.t / g.dur, x = g.x + (g.tx - g.x) * f, y = g.y + (g.ty - g.y) * f, hgt = Math.sin(f * Math.PI) * 60
@@ -444,6 +462,7 @@ export function render(ctx: Ctx, t: number) {
       ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, bx + 0.5, 14.5, bw - 1, 11, 5); ctx.stroke()
     } }
 
+  if (!G.raid) { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 9px ' + FONT; outText(ctx, 'Next: ' + nextGoal(G.best), 16, 96, '#ffe9a0', 2.5) }
   button(ctx, 'help', 214, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 252, 8, 62, 34, { label: '2x', size: 15, top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 318, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
