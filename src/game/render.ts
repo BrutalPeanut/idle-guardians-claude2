@@ -38,6 +38,8 @@ export function drainEvents() {
     else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
     else if (e.type === 'efire') Audio_.zap()
     else if (e.type === 'mortar_fire') Audio_.whump()
+    else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
+    else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
     else if (e.type === 'nade_throw') Audio_.whump()
     else if (e.type === 'idle_collect') {
       Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
@@ -276,7 +278,7 @@ export function render(ctx: Ctx, t: number) {
   for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
-  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]) } }); }
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.globalAlpha = 1 } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
@@ -288,6 +290,11 @@ export function render(ctx: Ctx, t: number) {
   }
   drawShells(ctx, G.shells, t); drawEBullets(ctx, G.ebullets);
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); drawStatus(ctx, gp.x, gp.y, G.status[i]) }
+  for (let i = 0; i < n; i++) { // floating health bar over each guardian
+    const gp = guardianPos(i), f = Math.max(0, G.hp[i] / G.mhp[i]), w = 26
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; rr(ctx, gp.x - w / 2, gp.y - 28, w, 5, 2.5); ctx.fill()
+    if (f > 0) { ctx.fillStyle = f > 0.35 ? '#5be07f' : '#ff6a5a'; rr(ctx, gp.x - w / 2 + 0.5, gp.y - 27.5, Math.max(2, (w - 1) * f), 4, 2); ctx.fill() }
+  }
   for (const p of R.parts) {
     if (p.ring) { ctx.strokeStyle = 'rgba(255,200,90,' + (1 - p.t / p.life) + ')'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, p.r! * (p.t / p.life), 0, 6.283); ctx.stroke(); }
     else { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col!; ctx.beginPath(); ctx.arc(p.x, p.y, p.sz!, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1; }
@@ -322,13 +329,16 @@ export function render(ctx: Ctx, t: number) {
     ctx.strokeStyle = ready ? 'rgba(255,216,74,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = ready ? 1.6 : 1; rr(ctx, cx0 + 0.5, 45.5, cw - 1, 23, 10); ctx.stroke()
     icons.coin(ctx, cx0 + 13, 57, '#ffd84a'); ctx.textAlign = 'left'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillStyle = full ? '#ffcf8a' : '#fff2c2'
     ctx.fillText(full ? 'FULL ' + fmt(G.stash) : fmt(G.stash), cx0 + 24, 57.5) }
-  // pack HP
-  const hx = 118, hw = 92, hy = 14, hh = 12
-  ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('PACK', hx, 8)
-  ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, hx, hy, hw, hh, 6); ctx.fill()
-  const frac = Math.max(0, G.pack.hp / G.pack.max)
-  if (frac > 0) { const hgR = ctx.createLinearGradient(0, hy, 0, hy + hh); hgR.addColorStop(0, frac > 0.35 ? '#7af09a' : '#ff8a7a'); hgR.addColorStop(1, frac > 0.35 ? '#2fb85a' : '#d63a3a'); ctx.fillStyle = hgR; rr(ctx, hx + 1, hy + 1, Math.max(8, (hw - 2) * frac), hh - 2, 5); ctx.fill() }
-  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, hx + 0.5, hy + 0.5, hw - 1, hh - 1, 6); ctx.stroke()
+  // per-guardian health (initial + bar each; downed dogs show a revive countdown)
+  const hx = 118, hw = 92
+  { const nn = unlockedGuardians(G.stage), gap = 4, bw = (hw - gap * (nn - 1)) / nn
+    for (let i = 0; i < nn; i++) {
+      const bx = hx + i * (bw + gap), f = Math.max(0, G.hp[i] / G.mhp[i]), down = G.hp[i] <= 0, low = f <= 0.35
+      ctx.textAlign = 'left'; ctx.fillStyle = down ? '#ff8a7a' : '#9fb5aa'; ctx.font = '700 9px system-ui,sans-serif'; ctx.fillText(down ? 'zZ ' + Math.ceil(G.reviveT[i]) : GUARDIANS[i].n.toUpperCase().slice(0, Math.max(3, Math.floor(bw / 6))), bx, 9)
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, bx, 14, bw, 12, 5); ctx.fill()
+      if (f > 0) { const gr = ctx.createLinearGradient(0, 14, 0, 26); gr.addColorStop(0, low ? '#ff8a7a' : '#7af09a'); gr.addColorStop(1, low ? '#d63a3a' : '#2fb85a'); ctx.fillStyle = gr; rr(ctx, bx + 1, 15, Math.max(4, (bw - 2) * f), 10, 4); ctx.fill() }
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, bx + 0.5, 14.5, bw - 1, 11, 5); ctx.stroke()
+    } }
   ctx.textAlign = 'right'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText((isBoss(G.stage) ? 'BOSS · ' : '') + (G.toSpawn - G.spawned + G.enemies.length) + ' left', hx + hw, 37); ctx.textAlign = 'left'
   button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
