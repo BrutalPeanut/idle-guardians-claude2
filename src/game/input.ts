@@ -1,5 +1,5 @@
 import { W, H, ARENA } from './data'
-import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, accrueAway, collectStash } from './sim'
+import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, accrueAway, collectStash } from './sim'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome } from './render'
 import { Audio_ } from './audio'
 
@@ -45,6 +45,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'merge') mergeAll()
     else if (k === 'help') R.help = true
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
+    else if (k === 'nade') { const r = throwGrenade(); if (r === 'none') G.banner = { text: 'No targets', t: 0.9 } }
     else if (k === 'hold') { if (toggleHold() === 'locked') G.banner = { text: 'HOLD unlocks at stage 5', sub: 'Needs a support guardian (Bruno)', t: 1.6 } }
   }
   const up = (ev: PointerEvent) => {
