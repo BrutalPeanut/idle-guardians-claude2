@@ -299,6 +299,7 @@ function glass(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) 
 const fmt = (n: number) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : Math.floor(n).toString();
 
 export function render(ctx: Ctx, t: number) {
+  R.btns = {} // rebuilt every frame: a button from a closed modal must never stay tappable
   ctx.save();
   if (R.shake > 0.3) ctx.translate(rnd(-R.shake, R.shake), rnd(-R.shake, R.shake));
   const biome = drawBackground(ctx, t);
