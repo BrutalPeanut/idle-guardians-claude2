@@ -1,6 +1,6 @@
 import { W, H, ARENA } from './data'
-import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain } from './sim'
-import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth } from './render'
+import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
+import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests } from './render'
 import { Audio_ } from './audio'
 
 /** Boots the game on a canvas; returns a disposer. */
@@ -28,7 +28,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
     if (G.away) { const r = R.btns.welcome; if (r && inR(p, r)) { R.pressed = 'welcome'; mode = 'btn'; Audio_.ui() } return }
-    if (G.pick) { for (const k of ['pick0', 'pick1', 'pick2']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
+    if (G.pick) { for (const k of ['pick0', 'pick1', 'pick2', 'reroll']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
+    if (R.quests) { for (const k of ['qc0', 'qc1', 'qc2', 'q_close']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.rebirth) { for (const k of ['rb_go', 'rb_close']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.help) { R.help = false; Audio_.ui(); return }
     for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
@@ -47,6 +48,10 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'merge') mergeAll()
     else if (k === 'help') R.help = true
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
+    else if (k === 'quests') { ensureDaily(); R.quests = true }
+    else if (k === 'q_close') R.quests = false
+    else if (k.startsWith('qc')) { if (claimQuest(+k.slice(2))) Audio_.coins() }
+    else if (k === 'reroll') { if (!rerollBlessings()) G.banner = { text: 'Need ' + REROLL_COST + ' gems', sub: 'Earn gems from daily quests', t: 1.4 } }
     else if (k === 'stardust') R.rebirth = true
     else if (k === 'rb_close') R.rebirth = false
     else if (k === 'rb_go') { R.rebirth = false; if (!rebirthGain(G.stage)) G.banner = { text: 'Rebirth unlocks at stage 20', t: 1.4 }; else doRebirth() }
@@ -83,9 +88,9 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
-    while (acc >= 1 / 60) { if (!R.help && !R.rebirth && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
+    while (acc >= 1 / 60) { if (!R.help && !R.rebirth && !R.quests && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
     drainEvents(); updateFx(dt); render(ctx, T)
-    if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
+    if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
     raf = requestAnimationFrame(frame)
   }
   raf = requestAnimationFrame(frame)
