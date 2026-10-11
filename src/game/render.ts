@@ -20,9 +20,9 @@ interface Rect { x: number; y: number; w: number; h: number }
 export type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 export const OUT = '#241810';
-let bannerRef: unknown = null, bannerAt = 0
-export const FONT = '"Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
+export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -40,6 +40,7 @@ export function drainEvents() {
     } else if (e.type === 'kill') {
       Audio_.kill(); burst(e.x, e.y, e.kind === 'robot' ? '#9fb2c4' : '#7fc06a', 10, 110);
       R.floats.push({ x: e.x, y: e.y - 22, v: '+' + e.gold, gold: true, t: 0 });
+      if (e.gold > 0) for (let k = 0, n = e.kind === 'boss' ? 9 : 2; k < n && R.coinsFly.length < 60; k++) R.coinsFly.push({ x: e.x + rnd(-8, 8), y: e.y + rnd(-8, 8), sx: e.x, sy: e.y, t: -k * 0.04, dur: rnd(0.55, 0.8) });
       if (e.kind === 'boss') { R.flash = 0.6; R.shake = 10; }
     } else if (e.type === 'boom') { Audio_.boom(); burst(e.x, e.y, '#ff9a3a', 22, 180); R.parts.push({ ring: true, x: e.x, y: e.y, r: e.r, t: 0, life: 0.3 }); }
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
@@ -93,6 +94,8 @@ function burst(x: number, y: number, col: string, n: number, sp: number) {
 export function updateFx(dt: number) {
   for (const p of R.parts) { p.t += dt; if (!p.ring) { p.x += p.vx! * dt; p.y += p.vy! * dt; p.vx! *= 0.92; p.vy! *= 0.92; } }
   R.parts = R.parts.filter(p => p.t < p.life);
+  for (const c of R.coinsFly) { c.t += dt; if (c.t >= c.dur) R.goldBump = 0.18 }
+  R.coinsFly = R.coinsFly.filter(c => c.t < c.dur); R.goldBump = Math.max(0, R.goldBump - dt)
   for (const f of R.floats) { f.t += dt; f.y -= 28 * dt; }
   R.floats = R.floats.filter(f => f.t < 0.9);
   R.shake *= 0.86; R.flash = Math.max(0, R.flash - dt * 1.5);
@@ -300,7 +303,7 @@ export const icons: Record<string, Icon> = {
     else { c.beginPath(); c.moveTo(x + 5, y - 4); c.lineTo(x + 11, y + 4); c.moveTo(x + 11, y - 4); c.lineTo(x + 5, y + 4); c.stroke() } },
   merge: (c, x, y, col) => { c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2.2; c.lineCap = 'round'; c.lineJoin = 'round'
     c.beginPath(); c.moveTo(x - 9, y - 6); c.lineTo(x - 2, y); c.lineTo(x - 9, y + 6); c.stroke(); c.beginPath(); c.moveTo(x + 9, y - 6); c.lineTo(x + 2, y); c.lineTo(x + 9, y + 6); c.stroke() },
-  coin: (c, x, y, col) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, 6, 0, 6.283); c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1.2; c.stroke(); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x - 1, y - 3, 2, 6) },
+  coin: (c, x, y, col) => { const g = c.createRadialGradient(x - 2, y - 2, 1, x, y, 7); g.addColorStop(0, '#fff6c0'); g.addColorStop(0.45, col); g.addColorStop(1, '#c47a10'); c.fillStyle = g; c.beginPath(); c.arc(x, y, 6.5, 0, 6.283); c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.6; c.stroke(); c.strokeStyle = 'rgba(160,90,10,.7)'; c.lineWidth = 1; c.beginPath(); c.arc(x, y, 4, 0, 6.283); c.stroke(); c.fillStyle = 'rgba(255,255,255,.8)'; c.beginPath(); c.arc(x - 2.4, y - 2.6, 1.2, 0, 6.283); c.fill() },
   tank: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 9, y - 7); c.lineTo(x + 9, y - 7); c.lineTo(x + 9, y + 3); c.lineTo(x, y + 10); c.lineTo(x - 9, y + 3); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x - 6, y - 4, 12, 2.5); c.fillRect(x - 6, y, 12, 2.5) },
   panic: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 4, y - 10); c.lineTo(x + 4, y - 10); c.lineTo(x + 2, y + 2); c.lineTo(x - 2, y + 2); c.closePath(); c.fill(); c.stroke(); c.beginPath(); c.arc(x, y + 7, 2.8, 0, 6.283); c.fill(); c.stroke() },
   nade: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.arc(x, y + 2, 8, 0, 6.283); c.fill(); c.stroke(); c.fillRect(x - 3, y - 8, 6, 4); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 3, y - 7); c.lineTo(x + 8, y - 9); c.stroke() },
@@ -309,12 +312,12 @@ export const icons: Record<string, Icon> = {
   collar: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 3.4; c.beginPath(); c.ellipse(x, y, 8, 5.5, 0, 0, 6.283); c.stroke(); c.fillStyle = '#ffd84a'; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1; c.beginPath(); c.arc(x, y + 6.5, 3, 0, 6.283); c.fill(); c.stroke() },
   vest: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 7, y - 8); c.lineTo(x - 3, y - 8); c.lineTo(x, y - 4); c.lineTo(x + 3, y - 8); c.lineTo(x + 7, y - 8); c.lineTo(x + 8, y + 8); c.lineTo(x - 8, y + 8); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x, y + 8); c.stroke() },
   charm: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.arc(x - 6, y - 3, 3, 0, 6.283); c.arc(x - 6, y + 3, 3, 0, 6.283); c.arc(x + 6, y - 3, 3, 0, 6.283); c.arc(x + 6, y + 3, 3, 0, 6.283); c.fill(); c.fillRect(x - 6, y - 2.5, 12, 5); c.stroke() },
-  sword: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 8, y - 8); c.lineTo(x + 8, y - 3); c.lineTo(x - 3, y + 8); c.lineTo(x - 8, y + 3); c.lineTo(x + 3, y - 8); c.closePath(); c.fill(); c.stroke(); c.fillRect(x - 8, y + 4, 6, 3) },
+  sword: (c, x, y, col) => { c.save(); c.translate(x, y); c.rotate(0.785); c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(0, -11); c.lineTo(3, -7); c.lineTo(3, 4); c.lineTo(-3, 4); c.lineTo(-3, -7); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(-1.2, -7, 1.6, 10); c.fillStyle = col; c.fillRect(-6, 4, 12, 3); c.strokeRect(-6, 4, 12, 3); c.fillRect(-1.8, 7, 3.6, 5); c.beginPath(); c.arc(0, 13, 2.4, 0, 6.283); c.fill(); c.stroke(); c.restore() },
   gem: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x - 3, y - 8); c.lineTo(x + 3, y - 8); c.lineTo(x + 7, y - 3); c.lineTo(x, y + 8); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x + 7, y - 3); c.stroke() },
   star: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 4 : 9; c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad) } c.closePath(); c.fill(); c.stroke() },
   plus: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x + 6, y); c.moveTo(x, y - 6); c.lineTo(x, y + 6); c.stroke() },
 }
-interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string }
+interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string; round?: boolean; shine?: boolean }
 /** Modern pill button: vertical gradient, soft drop shadow, top gloss, press-down state. Registers its hit rect. */
 /** Outlined cartoon text: dark stroke under the fill so it reads on any background. */
 export function outText(ctx: Ctx, txt: string, x: number, y: number, fill: string, lw = 3, stroke = OUT) {
@@ -330,7 +333,7 @@ export function plate(ctx: Ctx, x: number, y: number, w: number, h: number, r: n
 }
 export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
   R.btns[key] = { x, y, w, h }
-  const down = R.pressed === key, dy = down ? 2.5 : 0, rad = Math.min(14, h / 2.2), lip = down ? 1 : 4, fh = h - 4
+  const down = R.pressed === key, dy = down ? 2.5 : 0, rad = o.round ? h / 2 : Math.min(14, h / 2.2), lip = down ? 1 : 4, fh = h - 4
   const top = o.disabled ? '#6a767d' : o.top, bot = o.disabled ? '#434d54' : o.bot
   ctx.save()
   // drop shadow + dark bottom lip gives the button depth
@@ -342,8 +345,12 @@ export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h
   ctx.fillStyle = 'rgba(255,255,255,.17)'; rr(ctx, x + 4, y + 3.5 + dy, w - 8, fh * 0.32, rad - 3); ctx.fill()
   ctx.strokeStyle = OUT; ctx.lineWidth = 2.4; rr(ctx, x + 1.2, y + 1.2 + dy, w - 2.4, fh - 2.4, rad); ctx.stroke()
   if (down) { ctx.fillStyle = 'rgba(0,0,0,.16)'; rr(ctx, x + 1.5, y + 1.5 + dy, w - 3, fh - 3, rad - 1); ctx.fill() }
+  if (o.shine && !o.disabled) { // idle shine sweep: a soft diagonal glint crosses the button every ~2.5s
+    const ph = (performance.now() / 1000 % 2.6) / 0.7
+    if (ph < 1) { ctx.save(); rr(ctx, x + 1.5, y + 1.5 + dy, w - 3, fh - 3, rad - 1); ctx.clip(); const sx = x - 30 + (w + 60) * ph; ctx.fillStyle = 'rgba(255,255,255,.38)'; ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + 14, y); ctx.lineTo(sx - 6, y + h); ctx.lineTo(sx - 20, y + h); ctx.closePath(); ctx.fill(); ctx.restore() }
+  }
   const col = o.disabled ? 'rgba(255,255,255,.6)' : '#fff', cy = y + dy + fh / 2 + 0.5
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '800 ' + (o.size || 13) + 'px ' + FONT
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 ' + (o.size || 13) + 'px ' + FONT
   const tw = o.label ? ctx.measureText(o.label).width : 0, iw = o.icon ? 20 : 0, gap = o.icon && o.label ? 6 : 0, total = tw + iw + gap
   let cx = x + w / 2 - total / 2
   if (o.icon) { icons[o.icon](ctx, cx + iw / 2, cy, col); cx += iw + gap }
@@ -357,7 +364,8 @@ export function render(ctx: Ctx, t: number) {
   R.btns = {} // rebuilt every frame: a button from a closed modal must never stay tappable
   ctx.save();
   if (R.shake > 0.3) ctx.translate(rnd(-R.shake, R.shake), rnd(-R.shake, R.shake));
-  const biome = drawBackground(ctx, t);
+  drawBackground(ctx, t);
+  { const vg = ctx.createRadialGradient(W / 2, (ARENA.y0 + ARENA.y1) / 2, 140, W / 2, (ARENA.y0 + ARENA.y1) / 2, 330); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.38)'); ctx.fillStyle = vg; ctx.fillRect(0, ARENA.y0 - 4, W, ARENA.y1 - ARENA.y0 + 8) }
   for (const h of G.hazards) drawHazard(ctx, h, t);
   if (G.hold) drawHold(ctx, G.hold.x, G.hold.y, t);
   // sort-by-y entities
@@ -391,26 +399,31 @@ export function render(ctx: Ctx, t: number) {
     else { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col!; ctx.beginPath(); ctx.arc(p.x, p.y, p.sz!, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1; }
   }
   for (const f of R.floats) {
-    ctx.globalAlpha = Math.min(1, (0.9 - f.t) * 3); ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = OUT;
-    const sz = f.big ? 22 : f.blast ? 20 : f.kill ? 15 : f.crit ? 17 : f.cover ? 10 : f.flank ? 14 : 12;
-    ctx.font = 'bold ' + sz + 'px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif';
+    ctx.globalAlpha = Math.min(1, (0.9 - f.t) * 3); ctx.textAlign = 'center'; ctx.lineWidth = f.crit || f.big || f.blast ? 4.5 : 3.5; ctx.lineJoin = 'round'; ctx.strokeStyle = OUT;
+    const sz0 = f.big ? 22 : f.blast ? 20 : f.kill ? 15 : f.crit ? 17 : f.cover ? 10 : f.flank ? 14 : 12, sz = Math.round(sz0 * (f.t < 0.12 ? 1 + 0.6 * (1 - f.t / 0.12) : 1));
+    ctx.font = '400 ' + sz + 'px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
     ctx.fillStyle = f.cover ? '#cfd8dc' : f.gold ? '#ffd84a' : f.hurt ? '#ff6a6a' : f.flank ? '#ffab40' : f.blast ? '#ff9a3a' : f.kill ? '#ff5a5a' : f.crit ? '#ffe45a' : '#fff';
     const txt = typeof f.v === 'number' ? (f.blast ? 'BLAST ' : '') + fmt(f.v) + (f.crit ? '!' : '') : f.v;
     ctx.strokeText(txt, f.x, f.y); ctx.fillText(txt, f.x, f.y); ctx.globalAlpha = 1;
   }
   // combo
-  if (G.combo >= 3) { ctx.textAlign = 'center'; ctx.font = 'bold 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = OUT; ctx.fillStyle = '#ffb84a'; ctx.strokeText('COMBO x' + G.combo, 90, ARENA.y1 - 8); ctx.fillText('COMBO x' + G.combo, 90, ARENA.y1 - 8); }
+  if (G.combo >= 3) { ctx.textAlign = 'center'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = OUT; ctx.fillStyle = '#ffb84a'; ctx.strokeText('COMBO x' + G.combo, 90, ARENA.y1 - 8); ctx.fillText('COMBO x' + G.combo, 90, ARENA.y1 - 8); }
   ctx.restore();
 
   // ---------- HUD ----------
   const hg = ctx.createLinearGradient(0, 0, 0, 72); hg.addColorStop(0, '#22333f'); hg.addColorStop(1, '#101b22')
   ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 72); ctx.fillStyle = OUT; ctx.fillRect(0, 72, W, 2.5); ctx.fillStyle = '#ffd84a'; ctx.globalAlpha = 0.85; ctx.fillRect(0, 70, W, 1.5); ctx.globalAlpha = 1
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left'
-  ctx.font = '800 20px ' + FONT; outText(ctx, 'Stage ' + G.stage, 12, 18, '#fff', 4)
-  ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#9fb5aa'; ctx.fillText(biome.n, 12, 37)
+  ctx.font = '400 20px ' + FONT; outText(ctx, 'Stage ' + G.stage, 12, 18, '#fff', 4)
+  ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#9fb5aa'
+  { const rem = G.toSpawn - G.spawned + G.enemies.length; if (pstage !== G.stage || rem > pmax) { pstage = G.stage; pmax = rem }
+    const raid = !!G.raid && !G.raid.result, f = raid ? Math.max(0, G.raid!.t) / RAID.dur : pmax > 0 ? 1 - rem / pmax : 1, boss = isBoss(G.stage) || raid
+    ctx.fillStyle = OUT; rr(ctx, 10, 27, 100, 14, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.14)'; rr(ctx, 12, 29, 96, 10, 5); ctx.fill()
+    if (f > 0.01) { const gb2 = ctx.createLinearGradient(0, 29, 0, 39); gb2.addColorStop(0, boss ? '#ff9ad8' : '#ffe27a'); gb2.addColorStop(1, boss ? '#c4378f' : '#e8841a'); ctx.fillStyle = gb2; rr(ctx, 12, 29, Math.max(8, 96 * Math.min(1, f)), 10, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.35)'; rr(ctx, 14, 30, Math.max(4, 96 * Math.min(1, f) - 4), 3, 2); ctx.fill() }
+    ctx.textAlign = 'center'; ctx.font = '400 9px ' + FONT; outText(ctx, raid ? 'RAID  ' + Math.ceil(Math.max(0, G.raid!.t)) + 's' : (boss ? 'BOSS  ' : '') + rem + ' left', 60, 34.5, '#fff', 2.5); ctx.textAlign = 'left' }
   // gold chip
-  const gtxt = fmt(G.gold); ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; const gw = ctx.measureText(gtxt).width + 34
-  glass(ctx, 10, 45, gw, 24, 10); icons.coin(ctx, 23, 45 + 24 / 2, '#ffd84a'); ctx.fillStyle = '#ffe9a0'; ctx.textAlign = 'left'; ctx.fillText(gtxt, 34, 45 + 24 / 2 + 0.5)
+  const gtxt = fmt(G.gold); ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const gw = ctx.measureText(gtxt).width + 34
+  glass(ctx, 14, 47, gw - 4, 20, 10); ctx.save(); ctx.translate(18, 57); ctx.scale(1.55, 1.55); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore(); ctx.textAlign = 'left'; ctx.font = '400 ' + (15 + Math.round(R.goldBump * 30)) + 'px ' + FONT; outText(ctx, gtxt, 34, 57.5, R.goldBump > 0 ? '#fff' : '#fff0b0', 3)
   // idle stash chip (tap to collect)
   { const cx0 = 10 + gw + 6, cw = 208 - cx0, cap = idleCap(G.stage), f = Math.min(1, G.stash / cap), full = f >= 0.999, ready = f >= 0.15
     R.btns.collect = { x: cx0, y: 45, w: cw, h: 24 }
@@ -418,19 +431,19 @@ export function render(ctx: Ctx, t: number) {
     glass(ctx, cx0, 45, cw, 24, 10)
     ctx.save(); rr(ctx, cx0, 45, cw, 24, 10); ctx.clip(); ctx.fillStyle = full ? 'rgba(255,170,60,.55)' : 'rgba(255,216,74,.32)'; ctx.fillRect(cx0, 45, cw * f, 24); ctx.restore()
     ctx.strokeStyle = ready ? 'rgba(255,216,74,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = ready ? 1.6 : 1; rr(ctx, cx0 + 0.5, 45.5, cw - 1, 23, 10); ctx.stroke()
-    icons.coin(ctx, cx0 + 13, 57, '#ffd84a'); ctx.textAlign = 'left'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = full ? '#ffcf8a' : '#fff2c2'
+    icons.coin(ctx, cx0 + 13, 57, '#ffd84a'); ctx.textAlign = 'left'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = full ? '#ffcf8a' : '#fff2c2'
     ctx.fillText(full ? 'FULL ' + fmt(G.stash) : fmt(G.stash), cx0 + 24, 57.5) }
   // per-guardian health (initial + bar each; downed dogs show a revive countdown)
   const hx = 118, hw = 92
   { const nn = unlockedGuardians(G.stage), gap = 4, bw = (hw - gap * (nn - 1)) / nn
     for (let i = 0; i < nn; i++) {
       const bx = hx + i * (bw + gap), f = Math.max(0, G.hp[i] / G.mhp[i]), down = G.hp[i] <= 0, low = f <= 0.35
-      ctx.textAlign = 'left'; ctx.fillStyle = down ? '#ff8a7a' : '#9fb5aa'; ctx.font = '700 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(down ? 'zZ ' + Math.ceil(G.reviveT[i]) : GUARDIANS[i].n.toUpperCase().slice(0, Math.max(3, Math.floor(bw / 6))), bx, 9)
-      ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, bx, 14, bw, 12, 5); ctx.fill()
-      if (f > 0) { const gr = ctx.createLinearGradient(0, 14, 0, 26); gr.addColorStop(0, low ? '#ff8a7a' : '#7af09a'); gr.addColorStop(1, low ? '#d63a3a' : '#2fb85a'); ctx.fillStyle = gr; rr(ctx, bx + 1, 15, Math.max(4, (bw - 2) * f), 10, 4); ctx.fill() }
+      ctx.textAlign = 'left'; ctx.fillStyle = down ? '#ff8a7a' : '#9fb5aa'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(down ? 'zZ ' + Math.ceil(G.reviveT[i]) : GUARDIANS[i].n.toUpperCase().slice(0, Math.max(3, Math.floor(bw / 6))), bx, 9)
+      ctx.fillStyle = OUT; rr(ctx, bx - 1, 13, bw + 2, 14, 6); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, bx + 1, 15, bw - 2, 10, 4); ctx.fill()
+      if (f > 0) { const gr = ctx.createLinearGradient(0, 15, 0, 25); gr.addColorStop(0, low ? '#ff9a8a' : f < 0.65 ? '#ffe27a' : '#9af5ae'); gr.addColorStop(1, low ? '#d63a3a' : f < 0.65 ? '#e8a21a' : '#2fb85a'); ctx.fillStyle = gr; rr(ctx, bx + 1, 15, Math.max(4, (bw - 2) * f), 10, 4); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.4)'; rr(ctx, bx + 2.5, 16, Math.max(2, (bw - 5) * f), 3, 2); ctx.fill() }
       ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, bx + 0.5, 14.5, bw - 1, 11, 5); ctx.stroke()
     } }
-  ctx.textAlign = 'right'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#c9d8d0'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(G.raid ? 'RAID · ' + Math.ceil(Math.max(0, G.raid.t)) + 's' : (isBoss(G.stage) ? 'BOSS · ' : '') + (G.toSpawn - G.spawned + G.enemies.length) + ' left', hx + hw, 37); ctx.textAlign = 'left'
+
   button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 310, 8, 42, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
@@ -439,15 +452,15 @@ export function render(ctx: Ctx, t: number) {
     R.btns.stardust = { x: sx, y: 45, w: sw, h: 24 }
     glass(ctx, sx, 45, sw, 24, 10)
     ctx.strokeStyle = can ? 'rgba(190,150,255,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = can ? 1.6 : 1; rr(ctx, sx + 0.5, 45.5, sw - 1, 23, 10); ctx.stroke()
-    icons.star(ctx, sx + 13, 57, '#c9a6ff'); ctx.textAlign = 'left'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = '#e4d3ff'
+    icons.star(ctx, sx + 13, 57, '#c9a6ff'); ctx.textAlign = 'left'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#e4d3ff'
     ctx.fillText(fmt(G.stardust) + (G.stardust ? '  +' + Math.round(G.stardust * STAR_BONUS * 100) + '%' : ''), sx + 25, 57.5)
-    if (can) { ctx.textAlign = 'right'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = '#c9a6ff'; ctx.fillText('REBIRTH', sx + sw - 8, 57.5) } }
+    if (can) { ctx.textAlign = 'right'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#c9a6ff'; ctx.fillText('REBIRTH', sx + sw - 8, 57.5) } }
 
   { let bx = 10 // owned blessings as small coloured chips under the HUD
     for (const b of BLESSINGS) { const c = bl(b.id); if (!c) continue
       glass(ctx, bx, 70, 30, 16, 8); ctx.save(); ctx.translate(bx + 8, 78); ctx.scale(0.7, 0.7); icons[b.icon](ctx, 0, 0, b.col); ctx.restore()
-      ctx.fillStyle = '#fff'; ctx.font = '800 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('' + c, bx + 17, 78.5); bx += 33 } }
-  { const wmod = weekMod(); ctx.font = '700 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; const tw = ctx.measureText(wmod.name.toUpperCase()).width + 16
+      ctx.fillStyle = '#fff'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('' + c, bx + 17, 78.5); bx += 33 } }
+  { const wmod = weekMod(); ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(wmod.name.toUpperCase()).width + 16
     glass(ctx, W - 10 - tw, 70, tw, 16, 8); ctx.fillStyle = wmod.col; ctx.textAlign = 'center'; ctx.fillText(wmod.name.toUpperCase(), W - 10 - tw / 2, 78.5) }
   // drag anchor: faint ring where the touch began, dot + tether at the finger
   if (R.dragAnchor) { const a = R.dragAnchor; ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2
@@ -459,10 +472,10 @@ export function render(ctx: Ctx, t: number) {
   const ag = ctx.createLinearGradient(0, BENCH.y - 24, 0, H); ag.addColorStop(0, '#1c2c37'); ag.addColorStop(1, '#0d171d')
   ctx.fillStyle = ag; ctx.fillRect(0, BENCH.y - 24, W, H - BENCH.y + 24)
   ctx.fillStyle = OUT; ctx.fillRect(0, BENCH.y - 26, W, 2.5); ctx.fillStyle = '#ffd84a'; ctx.globalAlpha = 0.85; ctx.fillRect(0, BENCH.y - 23.5, W, 1.5); ctx.globalAlpha = 1
-  ctx.textAlign = 'left'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; outText(ctx, 'ARMORY  ·  drag to merge', 10, BENCH.y - 11, '#c9dcd2', 3)
+  ctx.textAlign = 'left'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, 'ARMORY  ·  drag to merge', 10, BENCH.y - 11, '#c9dcd2', 3)
   { const gy = BENCH.y - 21, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
     glass(ctx, 206, gy, 62, 18, 9); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
     button(ctx, 'menu', 274, gy - 1, 76, 20, { top: '#5b6c75', bot: '#3a4850', label: 'MENU', size: 11 })
     if (rdy || pointsLeft() > 0 || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
@@ -477,20 +490,21 @@ export function render(ctx: Ctx, t: number) {
   if (R.drag) { const d = R.drag; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6; drawCard(ctx, d.x - BENCH.w / 2, d.y - BENCH.h / 2 - 10, BENCH.w, BENCH.h, G.bench[d.from] ?? 0, 1.12, undefined); ctx.restore() }
   // action bar
   const cost = buyCost(), can = G.gold >= cost && G.bench.includes(null)
-  button(ctx, 'buy', 10, ACTION_BAR.y, 142, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
+  button(ctx, 'buy', 10, ACTION_BAR.y, 142, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
   button(ctx, 'merge', 158, ACTION_BAR.y, 96, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
   button(ctx, 'hold', 260, ACTION_BAR.y, 90, ACTION_BAR.h, { top: G.hold ? '#ffb347' : '#b58cf0', bot: G.hold ? '#e0731a' : '#7a4ec0', disabled: unlockedGuardians(G.stage) <= 2, label: G.hold ? 'RECALL' : 'HOLD', size: 13 })
   { // active ability row under the arena: shield, frenzy, grenade. Each shows its cooldown sweep, or a drain bar while active.
     const ns = 40, ny = ARENA.y1 - 44
     const abil = (key: string, x: number, icon: string, top: string, bot: string, cd: number, cdMax: number, act: number, actMax: number) => {
       const ready = cd <= 0 && act <= 0
-      button(ctx, key, x, ny, ns, ns, { top: act > 0 ? top : ready ? top : '#5a666d', bot: act > 0 ? bot : ready ? bot : '#39434a', icon, disabled: !ready && act <= 0 })
+      if (ready) { const k = 0.5 + 0.5 * Math.sin(performance.now() / 260); ctx.strokeStyle = 'rgba(255,255,255,' + (0.18 + 0.3 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + ns / 2, ny + ns / 2, ns / 2 + 3 + k * 2, 0, 6.283); ctx.stroke() }
+      button(ctx, key, x, ny, ns, ns, { top: act > 0 ? top : ready ? top : '#5a666d', bot: act > 0 ? bot : ready ? bot : '#39434a', icon, disabled: !ready && act <= 0, round: true })
       if (act > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x + ns / 2, ny + ns / 2, ns / 2 + 2, -Math.PI / 2, -Math.PI / 2 + 6.283 * act / actMax); ctx.stroke() }
-      else if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.55)'; rr(ctx, x, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(x, ny, ns, ns * (cd / cdMax)); ctx.restore()
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1) }
+      else if (cd > 0) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.moveTo(x + ns / 2, ny + ns / 2); ctx.arc(x + ns / 2, ny + ns / 2, ns / 2 - 2, -Math.PI / 2, -Math.PI / 2 + 6.283 * (cd / cdMax)); ctx.closePath(); ctx.fill(); ctx.restore()
+        ctx.textAlign = 'center'; ctx.font = '400 16px ' + FONT; outText(ctx, Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1, '#fff', 3.5) }
     }
-    button(ctx, 'auto', 70, ARENA.y1 - 44, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 10 })
-    ctx.fillStyle = '#fff'; ctx.font = '800 8px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ARENA.y1 - 8)
+    button(ctx, 'auto', 70, ARENA.y1 - 44, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
+    ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ARENA.y1 - 8)
     abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
     abil('panic', 165, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
     abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
@@ -500,9 +514,9 @@ export function render(ctx: Ctx, t: number) {
   if (G.stage <= 5 && !G.nadeTaught && G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1) { // grenade teaching hint: pulsing ring + bubble over the button
     const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 326, cy = ARENA.y1 - 24
     ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 25 + 3 * k, 0, 6.283); ctx.stroke()
-    const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
+    const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
   }
-  if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
+  if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
   if (G.raid && !G.raid.result) { // raid scoreboard: damage bar with tier ticks
     const bx = 62, by = 92, bw = 236, top = raidBase() * RAID.tiers[3], f = Math.min(1, G.raid.dmg / top)
@@ -510,7 +524,12 @@ export function render(ctx: Ctx, t: number) {
     ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, bx, by, bw, 16, 8); ctx.fill()
     const gr = ctx.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, '#ff9a3a'); gr.addColorStop(1, '#ff4a6a'); ctx.fillStyle = gr; if (f > 0.02) { rr(ctx, bx, by, Math.max(10, bw * f), 16, 8); ctx.fill() }
     RAID.tiers.forEach((m, k) => { const x = bx + bw * (m / RAID.tiers[3]); ctx.fillStyle = G.raid!.dmg >= raidBase() * m ? RAID.cols[k] : 'rgba(255,255,255,.55)'; ctx.fillRect(x - 1, by - 1, 2, 18) })
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(G.raid.dmg) + ' dmg', bx + bw / 2, by + 8.5)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(G.raid.dmg) + ' dmg', bx + bw / 2, by + 8.5)
+  }
+  for (const c of R.coinsFly) { // loot coins arc up to the gold counter
+    if (c.t < 0) continue
+    const k = c.t / c.dur, e = k * k * (3 - 2 * k), px = c.sx + (22 - c.sx) * e, py = c.sy + (57 - c.sy) * e - Math.sin(k * Math.PI) * 38
+    ctx.save(); ctx.translate(px, py); ctx.scale(0.9 - 0.25 * k, 0.9 - 0.25 * k); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore()
   }
   // banner: ribbon with tails, outlined text, pop-in
   if (G.banner) {
@@ -519,8 +538,8 @@ export function render(ctx: Ctx, t: number) {
     const age = (performance.now() - bannerAt) / 1000, pop = age < 0.28 ? 1 + 0.35 * Math.pow(1 - age / 0.28, 2) * Math.cos(age * 22) : 1
     const a = Math.min(1, b.t * 2.5); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     const big = !!b.big, tsz = big ? 30 : 23
-    ctx.font = '800 ' + tsz + 'px ' + FONT; const tw = ctx.measureText(b.text).width
-    ctx.font = '700 12.5px ' + FONT; const sw = b.sub ? ctx.measureText(b.sub).width : 0
+    ctx.font = '400 ' + tsz + 'px ' + FONT; const tw = ctx.measureText(b.text).width
+    ctx.font = '400 12.5px ' + FONT; const sw = b.sub ? ctx.measureText(b.sub).width : 0
     const bw = Math.min(W - 40, Math.max(tw, sw) + 56), bh = b.sub ? 72 : 48, bx = W / 2 - bw / 2, by = 150, cy = by + bh / 2
     const c1 = big ? '#ffd24a' : '#4d9bff', c2 = big ? '#e8741a' : '#2a56c4'
     ctx.save(); ctx.translate(W / 2, cy); ctx.scale(pop, pop); ctx.translate(-W / 2, -cy)
@@ -532,8 +551,8 @@ export function render(ctx: Ctx, t: number) {
     ctx.strokeStyle = OUT; ctx.lineWidth = 3; rr(ctx, bx, by, bw, bh, 14); ctx.stroke()
     ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2; rr(ctx, bx + 3.5, by + 3.5, bw - 7, bh - 7, 11); ctx.stroke()
     if (big) for (const [sx, sy, r0] of [[bx + 10, by + 10, 4], [bx + bw - 12, by + bh - 12, 3.4], [bx + bw - 16, by + 12, 2.6]] as [number, number, number][]) { const tw2 = 0.6 + 0.4 * Math.sin(age * 9 + sx); ctx.fillStyle = 'rgba(255,255,255,' + tw2 + ')'; ctx.beginPath(); ctx.moveTo(sx, sy - r0 * 2); ctx.lineTo(sx + r0 * 0.6, sy - r0 * 0.6); ctx.lineTo(sx + r0 * 2, sy); ctx.lineTo(sx + r0 * 0.6, sy + r0 * 0.6); ctx.lineTo(sx, sy + r0 * 2); ctx.lineTo(sx - r0 * 0.6, sy + r0 * 0.6); ctx.lineTo(sx - r0 * 2, sy); ctx.lineTo(sx - r0 * 0.6, sy - r0 * 0.6); ctx.closePath(); ctx.fill() }
-    ctx.font = '800 ' + tsz + 'px ' + FONT; outText(ctx, b.text, W / 2, b.sub ? by + 25 : cy + 1, '#fff', big ? 6 : 5)
-    if (b.sub) { ctx.font = '700 12.5px ' + FONT; outText(ctx, b.sub, W / 2, by + 52, '#fff6d8', 4) }
+    ctx.font = '400 ' + tsz + 'px ' + FONT; outText(ctx, b.text, W / 2, b.sub ? by + 25 : cy + 1, '#fff', big ? 6 : 5)
+    if (b.sub) { ctx.font = '400 12.5px ' + FONT; outText(ctx, b.sub, W / 2, by + 52, '#fff6d8', 4) }
     ctx.restore(); ctx.globalAlpha = 1
   }
   if (R.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.7, R.flash) + ')'; ctx.fillRect(0, 0, W, H); }
@@ -548,10 +567,10 @@ function drawCard(ctx: Ctx, x: number, y: number, w: number, h: number, lvl: num
   ctx.strokeStyle = OUT; ctx.lineWidth = 2.6; rr(ctx, 0, 0, w, h, 11); ctx.stroke(); ctx.strokeStyle = armedBy !== undefined ? 'rgba(255,226,120,.95)' : 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.4; rr(ctx, 2.6, 2.6, w - 5.2, h - 5.2, 9); ctx.stroke()
   ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(w / 2, 20, 22, 3, 0, 0, 6.283); ctx.fill()
   drawWeaponIcon(ctx, lvl, w / 2, 13.5, 0.82)
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 9.5px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
-  outText(ctx, wd.n.length > 15 ? 'Mk 19 Launcher' : wd.n, w / 2, 29, '#fff', 3); ctx.fillStyle = '#fff2c2'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; outText(ctx, 'Lv ' + (lvl + 1), w / 2, 41, '#fff2c2', 3)
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 9.5px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+  outText(ctx, wd.n.length > 15 ? 'Mk 19 Launcher' : wd.n, w / 2, 29, '#fff', 3); ctx.fillStyle = '#fff2c2'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, 'Lv ' + (lvl + 1), w / 2, 41, '#fff2c2', 3)
   ctx.shadowColor = 'transparent'
-  if (armedBy !== undefined) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(11, 11, 8, 0, 6.283); ctx.fill(); ctx.fillStyle = '#3a2a08'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(GUARDIANS[armedBy].tag, 11, 11.5) }
+  if (armedBy !== undefined) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(11, 11, 8, 0, 6.283); ctx.fill(); ctx.fillStyle = '#3a2a08'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(GUARDIANS[armedBy].tag, 11, 11.5) }
   ctx.restore()
 }
 
@@ -559,8 +578,8 @@ function drawCard(ctx: Ctx, x: number, y: number, w: number, h: number, lvl: num
 export function drawHelp(ctx: Ctx) {
   ctx.fillStyle = 'rgba(6,10,12,.94)'; ctx.fillRect(0, 0, W, H)
   const rules = rulesFor(G.stage), bi = BIOMES[biomeIndex(G.stage)]
-  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 20px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('How to win', 18, 30)
-  ctx.fillStyle = '#ffd84a'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(bi.n, 18, 49); ctx.fillStyle = '#9fb5aa'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(rules.tip, 18, 66)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '400 20px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('How to win', 18, 30)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(bi.n, 18, 49); ctx.fillStyle = '#9fb5aa'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(rules.tip, 18, 66)
   const rows: [string, string, string][] = [
     ['shield', 'In cover', 'Bullets hit your cover first. It cracks, and under 35% HP it leaks half the damage.'],
     ['arrows', 'Flanking', 'A clear line round an enemy barricade: x1.35 when a guardian shuffles, x1.55 when you placed them.'],
@@ -582,13 +601,13 @@ export function drawHelp(ctx: Ctx) {
     else if (icon === 'coin') { ctx.scale(1.8, 1.8); icons.coin(ctx, 0, 0, '#ffd84a') }
     else { ctx.strokeStyle = '#ffc34a'; ctx.lineWidth = 2.2; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.ellipse(0, 6, 13, 6, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.strokeStyle = '#d8d0c0'; ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -10); ctx.stroke(); ctx.fillStyle = '#ffc34a'; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -6); ctx.lineTo(0, -2); ctx.closePath(); ctx.fill() }
     ctx.restore()
-    ctx.fillStyle = '#fff'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(title, 62, y + 5)
-    ctx.fillStyle = '#c9d8d0'; ctx.font = '500 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+    ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(title, 62, y + 5)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '500 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
     const words = body.split(' '); let line = '', ly = y + 22
     for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > W - 80 && line) { ctx.fillText(line, 62, ly); line = w; ly += 15 } else line = test }
     ctx.fillText(line, 62, ly); y = ly + 22
   }
-  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Tap anywhere to resume', W / 2, H - 22)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Tap anywhere to resume', W / 2, H - 22)
 }
 
 /** "Welcome back" modal shown after time away; only the COLLECT button is live. */
@@ -601,19 +620,19 @@ export function drawWelcome(ctx: Ctx, t: number) {
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24; ctx.fillStyle = g; rr(ctx, cx, cy, cw, ch, 22); ctx.fill(); ctx.restore()
   ctx.strokeStyle = 'rgba(255,216,74,.55)'; ctx.lineWidth = 1.5; rr(ctx, cx + 0.75, cy + 0.75, cw - 1.5, ch - 1.5, 22); ctx.stroke()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#fff'; ctx.font = '800 24px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Welcome back!', W / 2, cy + 34)
+  ctx.fillStyle = '#fff'; ctx.font = '400 24px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Welcome back!', W / 2, cy + 34)
   const h = Math.floor(a.minutes / 60), m = Math.floor(a.minutes % 60)
-  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Your pack guarded the base for ' + (h ? h + 'h ' : '') + m + 'm', W / 2, cy + 62)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Your pack guarded the base for ' + (h ? h + 'h ' : '') + m + 'm', W / 2, cy + 62)
   const bob = Math.sin(t * 4) * 2
   ctx.save(); ctx.translate(W / 2 - 62, cy + 112 + bob); ctx.scale(3.2, 3.2); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore()
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 38px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('+' + fmt(a.gold), W / 2 - 46, cy + 112 + bob)
-  ctx.textAlign = 'center'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 38px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('+' + fmt(a.gold), W / 2 - 46, cy + 112 + bob)
+  ctx.textAlign = 'center'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
   if (a.capped) { ctx.fillStyle = '#ffb27a'; ctx.fillText('Stash was full after ' + IDLE.capHours + 'h. Come back sooner to earn more!', W / 2, cy + 160) }
   else { ctx.fillStyle = '#7f929a'; ctx.fillText('Stash fills for up to ' + IDLE.capHours + 'h while you are away.', W / 2, cy + 160) }
   button(ctx, 'welcome', cx + 40, cy + 184, cw - 80, 54, { top: '#52d273', bot: '#25994a', label: 'COLLECT', icon: 'coin', size: 18 })
   if (a.gold >= 1) { const left = adsLeft(), ok = left > 0
     button(ctx, 'welcome_ad', cx + 40, cy + 246, cw - 80, 40, { top: ok ? '#b58cf0' : '#5a666d', bot: ok ? '#6a3fb8' : '#39434a', label: 'Watch ad: collect 2x', size: 13, disabled: !ok })
-    ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(ok ? 'Optional. ' + left + ' ads left today' : 'No ads left today', W / 2, cy + 297) }
+    ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(ok ? 'Optional. ' + left + ' ads left today' : 'No ads left today', W / 2, cy + 297) }
 }
 
 /** Blessing pick: three cards, the game is paused until one is chosen. */
@@ -622,11 +641,11 @@ export function drawPick(ctx: Ctx, t: number) {
   R.btns = {}
   ctx.fillStyle = 'rgba(4,8,10,.86)'; ctx.fillRect(0, 0, W, H)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 26px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Choose a Blessing', W / 2, 70)
-  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Stacks until your next Rebirth', W / 2, 98)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 26px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Choose a Blessing', W / 2, 70)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Stacks until your next Rebirth', W / 2, 98)
   { const ok = adsLeft() > 0; button(ctx, 'reroll_ad', W / 2 + 6, H - 86, 150, 40, { top: ok ? '#b58cf0' : '#5a666d', bot: ok ? '#6a3fb8' : '#39434a', label: 'Free reroll (ad)', size: 12, disabled: !ok }) }
   button(ctx, 'reroll', W / 2 - 156, H - 86, 150, 40, { top: G.gems >= REROLL_COST ? '#5ab8ff' : '#5a666d', bot: G.gems >= REROLL_COST ? '#2b6fd0' : '#39434a', icon: 'gem', label: 'Reroll  ' + REROLL_COST, size: 13, disabled: G.gems < REROLL_COST })
-  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('You have ' + G.gems + ' gems', W / 2, H - 32)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('You have ' + G.gems + ' gems', W / 2, H - 32)
   G.pick.forEach((id, i) => {
     const b = BLESSINGS.find(x => x.id === id)!, x = 24, y = 130 + i * 130, w = W - 48, h = 112, own = bl(id)
     const down = R.pressed === 'pick' + i, dy = down ? 2 : 0
@@ -636,9 +655,9 @@ export function drawPick(ctx: Ctx, t: number) {
     ctx.strokeStyle = b.col; ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 3 + i); ctx.lineWidth = 2; rr(ctx, x + 1, y + dy + 1, w - 2, h - 2, 18); ctx.stroke(); ctx.globalAlpha = 1
     ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(x + 52, y + dy + h / 2, 32, 0, 6.283); ctx.fill()
     ctx.save(); ctx.translate(x + 52, y + dy + h / 2); ctx.scale(2.4, 2.4); icons[b.icon](ctx, 0, 0, b.col); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 20px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(b.name, x + 100, y + dy + 36)
-    ctx.fillStyle = '#d6e4dc'; ctx.font = '600 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(b.desc, x + 100, y + dy + 62)
-    ctx.fillStyle = b.col; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(own ? 'Owned x' + own + '  →  x' + (own + 1) : 'NEW', x + 100, y + dy + 88)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 20px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(b.name, x + 100, y + dy + 36)
+    ctx.fillStyle = '#d6e4dc'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(b.desc, x + 100, y + dy + 62)
+    ctx.fillStyle = b.col; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(own ? 'Owned x' + own + '  →  x' + (own + 1) : 'NEW', x + 100, y + dy + 88)
   })
 }
 
@@ -651,17 +670,17 @@ export function drawRebirth(ctx: Ctx, t: number) {
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24; ctx.fillStyle = g; rr(ctx, cx, cy, cw, ch, 22); ctx.fill(); ctx.restore()
   ctx.strokeStyle = 'rgba(190,150,255,.6)'; ctx.lineWidth = 1.5; rr(ctx, cx + 0.75, cy + 0.75, cw - 1.5, ch - 1.5, 22); ctx.stroke()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#fff'; ctx.font = '800 24px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Rebirth', W / 2, cy + 32)
+  ctx.fillStyle = '#fff'; ctx.font = '400 24px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Rebirth', W / 2, cy + 32)
   ctx.save(); ctx.translate(W / 2, cy + 82); ctx.scale(3.4 + 0.15 * Math.sin(t * 3), 3.4 + 0.15 * Math.sin(t * 3)); icons.star(ctx, 0, 0, '#c9a6ff'); ctx.restore()
   if (gain) {
-    ctx.fillStyle = '#e4d3ff'; ctx.font = '800 28px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('+' + gain + ' Stardust', W / 2, cy + 134)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+    ctx.fillStyle = '#e4d3ff'; ctx.font = '400 28px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('+' + gain + ' Stardust', W / 2, cy + 134)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
     ctx.fillText('Permanent damage & gold: +' + Math.round(G.stardust * STAR_BONUS * 100) + '%  →  +' + Math.round((G.stardust + gain) * STAR_BONUS * 100) + '%', W / 2, cy + 162)
     ctx.fillStyle = '#ffb27a'; ctx.fillText('Resets stage, gold, weapons, blessings and stash.', W / 2, cy + 192)
     ctx.fillStyle = '#7f929a'; ctx.fillText('Stardust and Rebirths are kept forever.', W / 2, cy + 212)
   } else {
-    ctx.fillStyle = '#ffd84a'; ctx.font = '800 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Reach stage ' + REBIRTH_MIN + ' to Rebirth', W / 2, cy + 134)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('You are on stage ' + G.stage + '. Rebirthing earns Stardust,', W / 2, cy + 168); ctx.fillText('a permanent damage and gold bonus.', W / 2, cy + 188)
+    ctx.fillStyle = '#ffd84a'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Reach stage ' + REBIRTH_MIN + ' to Rebirth', W / 2, cy + 134)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('You are on stage ' + G.stage + '. Rebirthing earns Stardust,', W / 2, cy + 168); ctx.fillText('a permanent damage and gold bonus.', W / 2, cy + 188)
     ctx.fillStyle = '#e4d3ff'; ctx.fillText('Stardust: ' + G.stardust + '   Rebirths: ' + G.rebirths, W / 2, cy + 218)
   }
   if (gain) { button(ctx, 'rb_go', cx + 24, cy + 240, cw - 48, 40, { top: '#b58cf0', bot: '#6a3fb8', label: 'REBIRTH', size: 15 }); button(ctx, 'rb_close', cx + 24, cy + 288, cw - 48, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Not yet', size: 13 }) }
@@ -673,20 +692,20 @@ export function drawQuests(ctx: Ctx, t: number) {
   R.btns = {}
   ctx.fillStyle = 'rgba(4,8,10,.88)'; ctx.fillRect(0, 0, W, H)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#fff'; ctx.font = '800 24px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Daily Quests', W / 2, 52)
+  ctx.fillStyle = '#fff'; ctx.font = '400 24px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Daily Quests', W / 2, 52)
   ctx.save(); ctx.translate(W / 2 - 32, 86); ctx.scale(1.2, 1.2); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
-  ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('' + G.gems, W / 2 - 14, 87)
-  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Resets at midnight. Gems buy blessing rerolls.', W / 2, 114)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + G.gems, W / 2 - 14, 87)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Resets at midnight. Gems buy blessing rerolls.', W / 2, 114)
   G.daily.q.forEach((q, i) => {
     const d = questDef(q.id), x = 20, y = 136 + i * 112, w = W - 40, h = 98, done = q.prog >= d.target, f = Math.min(1, q.prog / d.target)
     const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#2a3a44'); g.addColorStop(1, '#17232b')
     ctx.fillStyle = g; rr(ctx, x, y, w, h, 16); ctx.fill(); ctx.strokeStyle = q.claimed ? 'rgba(255,255,255,.1)' : done ? 'rgba(111,214,255,.8)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1.5; rr(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 16); ctx.stroke()
-    ctx.textAlign = 'left'; ctx.fillStyle = q.claimed ? '#7f929a' : '#fff'; ctx.font = '800 15px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.text, x + 14, y + 24)
+    ctx.textAlign = 'left'; ctx.fillStyle = q.claimed ? '#7f929a' : '#fff'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.text, x + 14, y + 24)
     ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, x + 14, y + 42, w - 28, 12, 6); ctx.fill()
     if (f > 0) { ctx.fillStyle = done ? '#6fd6ff' : '#ffd84a'; rr(ctx, x + 15, y + 43, Math.max(8, (w - 30) * f), 10, 5); ctx.fill() }
-    ctx.fillStyle = '#c9d8d0'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(q.prog + ' / ' + d.target, x + 14, y + 70)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(q.prog + ' / ' + d.target, x + 14, y + 70)
     ctx.fillStyle = '#6fd6ff'; ctx.fillText('+' + d.gems + ' gems  + gold', x + 14, y + 86)
-    if (q.claimed) { ctx.textAlign = 'right'; ctx.fillStyle = '#7f929a'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('CLAIMED', x + w - 14, y + 74) }
+    if (q.claimed) { ctx.textAlign = 'right'; ctx.fillStyle = '#7f929a'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('CLAIMED', x + w - 14, y + 74) }
     else { if (done && adsLeft() > 0) button(ctx, 'qa' + i, x + w - 168, y + 56, 56, 34, { top: '#b58cf0', bot: '#6a3fb8', label: 'Ad 2x', size: 11 })
       button(ctx, 'qc' + i, x + w - 104, y + 56, 92, 34, { top: done ? '#52d273' : '#5a666d', bot: done ? '#25994a' : '#39434a', label: done ? 'CLAIM' : 'In progress', size: done ? 14 : 11, disabled: !done }) }
   })
@@ -700,13 +719,19 @@ export function drawAd(ctx: Ctx, t: number) {
   R.btns = {}
   ctx.fillStyle = 'rgba(2,4,6,.94)'; ctx.fillRect(0, 0, W, H)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#7f929a'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('TEST AD  -  no real ad network connected', W / 2, 40)
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('TEST AD  -  no real ad network connected', W / 2, 40)
   const g = ctx.createLinearGradient(40, 120, 320, 400); g.addColorStop(0, '#3a2f66'); g.addColorStop(1, '#1d6a7a')
   ctx.fillStyle = g; rr(ctx, 40, 120, W - 80, 280, 20); ctx.fill()
-  ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 26px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Your ad here', W / 2, 250 + Math.sin(t * 3) * 4)
+  ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '400 26px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Your ad here', W / 2, 250 + Math.sin(t * 3) * 4)
   const f = Math.min(1, a.t / a.dur)
   ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, 60, 430, W - 120, 10, 5); ctx.fill(); ctx.fillStyle = '#ffd84a'; rr(ctx, 60, 430, Math.max(6, (W - 120) * f), 10, 5); ctx.fill()
-  if (!a.done) { ctx.fillStyle = '#c9d8d0'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Reward in ' + Math.ceil(a.dur - a.t) + 's', W / 2, 466) }
+  if (!a.done) { ctx.fillStyle = '#c9d8d0'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Reward in ' + Math.ceil(a.dur - a.t) + 's', W / 2, 466) }
   else button(ctx, 'ad_done', W / 2 - 90, 460, 180, 48, { top: '#52d273', bot: '#25994a', label: 'CLAIM REWARD', size: 15 })
   void adCooldown; void ADS
+}
+
+// Give every icon a thick dark sticker outline (silhouette drawn in 8 directions under the real icon).
+for (const k of ['tank', 'panic', 'nade', 'shield', 'frenzy', 'vest', 'charm', 'sword', 'gem', 'star', 'collar', 'bolt', 'plus', 'merge']) {
+  const f = icons[k]
+  icons[k] = (c, x, y, col) => { for (let a = 0; a < 8; a++) f(c, x + Math.cos(a * 0.7854) * 1.5, y + Math.sin(a * 0.7854) * 1.5, OUT); f(c, x, y, col) }
 }
