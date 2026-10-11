@@ -75,24 +75,75 @@ function eyes(ctx: Ctx, x: number, y: number, s: number, look: number) {
   }
 }
 function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing: boolean, tgt: Enemy | undefined) {
-  const bob = Math.sin(t * 6 + x) * 1.2;
-  y += bob;
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 15, 12, 4, 0, 0, 6.283); ctx.fill();
-  blob(ctx, x, y + 6, 9, 8, g.fur, g.shade);                         // body
-  blob(ctx, x - 6, y + 14, 3.5, 3, g.fur, g.shade); blob(ctx, x + 6, y + 14, 3.5, 3, g.fur, g.shade); // paws
-  blob(ctx, x - 10, y - 8, 4.5, 8, g.ear, null); blob(ctx, x + 10, y - 8, 4.5, 8, g.ear, null);        // ears
-  blob(ctx, x, y - 4, 12, 11, g.fur, g.shade);                       // head
-  eyes(ctx, x, y - 5, 1, tgt ? Math.sign(tgt.x - x) : 0);
-  ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.9, 0, 0, 6.283); ctx.fill();          // nose
-  // collar
-  ctx.fillStyle = '#d63a3a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 8, y + 3, 16, 3.5, 1.5); ctx.fill(); ctx.stroke();
-  if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill(); }
+  const bob = Math.sin(t * 6 + x) * 1.2
+  y += bob
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 15, g.look === 'cooper' ? 10.5 : 12.5, 4, 0, 0, 6.283); ctx.fill()
+  const look = tgt ? Math.sign(tgt.x - x) : 0
+  if (g.look === 'rudy') drawRudy(ctx, g, x, y, t, look)
+  else if (g.look === 'cooper') drawCooper(ctx, g, x, y, t, look)
+  else drawPlainDog(ctx, g, x, y, look)
+  if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill() }
+}
+function collar(ctx: Ctx, x: number, y: number, col: string, tag: boolean) {
+  ctx.fillStyle = col; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 8, y + 3, 16, 3.5, 1.5); ctx.fill(); ctx.stroke()
+  if (tag) { ctx.fillStyle = '#f0c24a'; ctx.beginPath(); ctx.arc(x, y + 8, 1.9, 0, 6.283); ctx.fill(); ctx.stroke() }
+}
+function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number) {
+  blob(ctx, x, y + 6, 9, 8, g.fur, g.shade)
+  blob(ctx, x - 6, y + 14, 3.5, 3, g.fur, g.shade); blob(ctx, x + 6, y + 14, 3.5, 3, g.fur, g.shade)
+  blob(ctx, x - 10, y - 8, 4.5, 8, g.ear, null); blob(ctx, x + 10, y - 8, 4.5, 8, g.ear, null)
+  blob(ctx, x, y - 4, 12, 11, g.fur, g.shade)
+  eyes(ctx, x, y - 5, 1, look)
+  ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.9, 0, 0, 6.283); ctx.fill()
+  collar(ctx, x, y, '#d63a3a', false)
+}
+/** Rudy: English cream golden. Near-white fluffy coat, long floppy ears, brown nose, big open-mouth smile, dark collar with tag. */
+function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
+  const wag = Math.sin(t * 9 + x) * 3
+  blob(ctx, x + 11 + wag * 0.4, y + 5 + wag * 0.2, 7, 4.6, g.fur, g.shade)                          // plume tail
+  blob(ctx, x, y + 6, 10.5, 8.8, g.fur, g.shade)                                                    // body
+  for (const dx of [-6, -2, 2, 6]) blob(ctx, x + dx, y + 10, 3.7, 3.2, g.fur, null)                 // chest feathering
+  blob(ctx, x - 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade) // fluffy paws
+  blob(ctx, x - 11.5, y - 1, 4.8, 9.6, g.ear, g.shade); blob(ctx, x + 11.5, y - 1, 4.8, 9.6, g.ear, g.shade)       // long floppy ears
+  blob(ctx, x, y - 4, 12.6, 11.6, g.fur, g.shade)                                                   // head
+  blob(ctx, x, y + 0.8, 7, 4.8, '#fdf8ea', null)                                                    // light muzzle
+  eyes(ctx, x, y - 6.5, 1, look)
+  ctx.fillStyle = '#6a3f2e'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.ellipse(x, y - 1.2, 3.3, 2.3, 0, 0, 6.283); ctx.fill(); ctx.stroke() // brown nose
+  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.ellipse(x - 1, y - 2, 1, 0.6, 0, 0, 6.283); ctx.fill()
+  ctx.fillStyle = '#7a2d3a'; ctx.beginPath(); ctx.ellipse(x, y + 2.4, 4.6, 3.4, 0, 0, Math.PI); ctx.fill(); ctx.stroke() // open mouth
+  ctx.fillStyle = '#ff90a8'; ctx.beginPath(); ctx.ellipse(x + 0.4, y + 4.8, 2.6, 2.2, 0, 0, Math.PI); ctx.fill()           // tongue
+  collar(ctx, x, y + 1, '#3a3f46', true)
+}
+/** Cooper: short-coated tan mix. Dark muzzle, one perked ear + one folded, white chest patch, head tilt, wide worried eyes. */
+function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
+  const wag = Math.sin(t * 8 + x) * 3
+  ctx.strokeStyle = OUT; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + 7, y + 9); ctx.quadraticCurveTo(x + 15, y + 8 + wag, x + 15, y + 1 + wag); ctx.stroke() // whip tail
+  ctx.strokeStyle = g.fur; ctx.lineWidth = 2.4; ctx.stroke(); ctx.lineCap = 'butt'
+  blob(ctx, x, y + 6, 8.3, 8.6, g.fur, g.shade)                                                     // lean body
+  blob(ctx, x, y + 9, 4, 5.2, '#f7f1e6', null)                                                      // white chest patch
+  blob(ctx, x - 5.5, y + 14.5, 3.1, 3, g.fur, g.shade); blob(ctx, x + 5.5, y + 14.5, 3.1, 3, g.fur, g.shade)
+  ctx.save(); ctx.translate(x, y - 4); ctx.rotate(-0.14)                                            // head tilt
+  ctx.fillStyle = g.ear; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
+  ctx.beginPath(); ctx.moveTo(-11, -3); ctx.lineTo(-10.5, -12.5); ctx.quadraticCurveTo(-6, -14, -3, -8.5); ctx.closePath(); ctx.fill(); ctx.stroke() // perked rose ear
+  ctx.beginPath(); ctx.moveTo(3, -9); ctx.lineTo(13, -11); ctx.lineTo(11.5, -2); ctx.closePath(); ctx.fill(); ctx.stroke()    // folded ear
+  blob(ctx, 0, 0, 11.6, 10.6, g.fur, g.shade)                                                       // head
+  blob(ctx, 0, 4.2, 6.8, 5, '#4a3329', null)                                                        // dark boxy muzzle
+  ctx.fillStyle = '#16100d'; ctx.beginPath(); ctx.ellipse(0, 2.4, 3, 2.1, 0, 0, 6.283); ctx.fill()  // nose
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, 4.4); ctx.lineTo(0, 6); ctx.moveTo(-3, 7); ctx.quadraticCurveTo(0, 8.4, 3, 7); ctx.stroke()
+  for (const sx of [-1, 1]) {                                                                       // wide, slightly worried eyes
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(sx * 4.6, -1.8, 3.6, 4.2, 0, 0, 6.283); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#2a1a10'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9, -1.4, 2, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9 + 0.7, -2.2, 0.8, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = g.shade; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(sx * 2.2, -7.2 + (sx < 0 ? 0.6 : 0)); ctx.lineTo(sx * 7.2, -7.4 - (sx < 0 ? 0.6 : 0)); ctx.stroke() // brow
+  }
+  ctx.restore()
+  collar(ctx, x, y + 1, '#d63a3a', false)
 }
 /** Weapon held in both paws across the body, aimed at the current target, with recoil kick on fire. */
 function drawHeld(ctx: Ctx, lvl: number, gx: number, gy: number, tgt: Enemy | undefined, firing: boolean, t: number, g: Guardian) {
-  const bob = Math.sin(t * 6 + gx) * 1.2, cy = gy + 7 + bob
+  const bob = Math.sin(t * 6 + gx) * 1.2, cy = gy + 10 + bob
   const dx = tgt ? tgt.x - gx : 1, dy = tgt ? tgt.y - cy : 0, flip = dx < 0
-  const ang = Math.max(-1, Math.min(1, Math.atan2(dy, Math.abs(dx))))
+  const ang = Math.max(-0.4, Math.min(0.4, Math.atan2(dy, Math.abs(dx)) * 0.5)) // keep the weapon below the face
   ctx.save(); ctx.translate(gx + (flip ? -3 : 3), cy); ctx.scale(flip ? -1 : 1, 1); ctx.rotate(ang)
   ctx.translate(firing ? 3 : 7, 0)
   drawWeaponIcon(ctx, lvl, 0, 0, 0.66)
