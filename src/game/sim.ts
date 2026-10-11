@@ -1,6 +1,8 @@
 import { ARENA, WEAPONS, GUARDIANS, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
+import { rollItem, INV_MAX } from './gear'
+import type { Item, Stat } from './gear'
 import { dayKey, rollDaily, questDef } from './quests'
 import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
@@ -34,6 +36,7 @@ export type GEvent =
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
   | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
+  | { type: 'chest_get'; tier: number; n: number }
   | { type: 'quest_claim'; gems: number; gold: number }
   | { type: 'rebirth'; gain: number }
   | { type: 'blessing'; id: string }
@@ -46,6 +49,8 @@ interface State {
   hp: number[]; mhp: number[]; reviveT: number[]
   /** Damage breakdown for the Stats screen (this run; reset on Rebirth and on reload). */
   stats: Stats
+  /** Gear: every item owned (on = wearer's roster index, -1 = inventory) and unopened chests per tier. */
+  gear: Item[]; chests: number[]; nextItem: number
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
@@ -71,7 +76,7 @@ const REVIVE_T = 12
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
@@ -109,6 +114,31 @@ export function rerollBlessings(free = false) {
   if (!G.pick || (!free && G.gems < REROLL_COST)) return false
   if (!free) G.gems -= REROLL_COST; offerBlessings(); save(); return true
 }
+// ---- gear ----
+/** Roster index of the dog standing in pack slot i (identity until the Kennel lets you swap support dogs). */
+export const dogId = (i: number) => i
+export const gb = (i: number, stat: Stat) => { let v = 0; const d = dogId(i); for (const it of G.gear) if (it.on === d && it.stat === stat) v += it.val; return v }
+export const goldGear = () => { let v = 0; for (let i = 0; i < unlockedGuardians(G.stage); i++) v += gb(i, 'gold'); return v }
+export const invCount = () => G.gear.filter(it => it.on < 0).length
+export const sellValue = (it: Item) => Math.ceil(idleRate(Math.max(G.stage, 5)) * (2 + it.rar * 3))
+export function addChest(tier: number, n = 1) { G.chests[tier] += n; G.events.push({ type: 'chest_get', tier, n }) }
+/** Open one chest: the item goes to the inventory (or is sold on the spot if the inventory is full). */
+export function openChest(tier: number): { item: Item; sold: number } | null {
+  if (G.chests[tier] <= 0) return null
+  G.chests[tier]--; const it = rollItem(G.nextItem++, tier, G.stage, skillLuck())
+  let sold = 0
+  if (invCount() >= INV_MAX) { sold = sellValue(it); G.gold += sold } else G.gear.push(it)
+  save(); return { item: it, sold }
+}
+export function equipItem(id: number, dog: number) {
+  const it = G.gear.find(x => x.id === id); if (!it) return false
+  for (const o of G.gear) if (o.on === dog && o.slot === it.slot) o.on = -1
+  it.on = dog; save(); return true
+}
+export function unequipItem(id: number) { const it = G.gear.find(x => x.id === id); if (!it || invCount() >= INV_MAX) return false; it.on = -1; save(); return true }
+export function sellItem(id: number) { const k = G.gear.findIndex(x => x.id === id); if (k < 0) return 0; const g = sellValue(G.gear[k]); G.gold += g; G.gear.splice(k, 1); save(); return g }
+export const skillLuck = () => 0 // replaced by the Skill tree
+
 export const bl = (id: string) => G.blessings[id] ?? 0
 export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast'))
 export const shieldDur = () => ABIL.shield.dur + bl('aegis')
@@ -119,13 +149,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -141,7 +171,7 @@ export function startStage() {
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul)
-  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * (1 + 0.15 * bl('vital'))); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
+  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * (1 + 0.15 * bl('vital') + gb(i, 'hp'))); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
@@ -169,7 +199,7 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')) * starMul())
+  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + goldGear()) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
@@ -182,12 +212,12 @@ function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = 
 }
 function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   const gp = guardianPos(i), wd = WEAPONS[w]
-  const crit = Math.random() < 0.1 + 0.06 * bl('crit'), mult = (crit ? 2 : 1) * (flank === 2 ? 1.55 : flank === 1 ? 1.35 : 1)
+  const crit = Math.random() < 0.1 + 0.06 * bl('crit') + gb(i, 'crit'), mult = (crit ? 2 : 1) * (flank === 2 ? 1.55 : flank === 1 ? 1.35 : 1)
   const n = wd.pellets || 1
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -300,7 +330,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid'))
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + gb(i, 'rate'))
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }
@@ -408,6 +438,7 @@ export function update(dtReal: number) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages')
+    if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0) }
     G.stage++; startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()

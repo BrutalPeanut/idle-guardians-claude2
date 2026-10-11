@@ -1,6 +1,6 @@
 import { W, H, ARENA } from './data'
 import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
-import { drawScreen } from './screens'
+import { drawScreen, screenButton } from './screens'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests, drawAd } from './render'
 import { Audio_ } from './audio'
@@ -47,6 +47,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   }
   const adGate = (r: string) => { if (r === 'cap') G.banner = { text: 'No ads left today', sub: 'Back tomorrow', t: 1.4 }; else if (r === 'cooldown') G.banner = { text: 'Ad not ready yet', sub: 'Try again in a moment', t: 1.4 } }
   const fireButton = (k: string) => {
+    if (screenButton(k)) return
     if (k === 'speed') G.speed = G.speed > 1 ? 1 : 2
     else if (k === 'mute') Audio_.toggleMute()
     else if (k === 'buy') { if (!buyWeapon()) G.banner = { text: G.bench.includes(null) ? 'Not enough gold' : 'Armory full — merge!', t: 1 } }
