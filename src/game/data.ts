@@ -1,6 +1,6 @@
 // Static game data. No logic here.
 export const W = 360, H = 640;
-export const ARENA = { x0: 8, y0: 74, x1: 352, y1: 470 };
+export const ARENA = { x0: 8, y0: 74, x1: 352, y1: 462 };
 export const ERAS = ['Stone Age', 'Archery', 'Sidearms', 'Longarms', 'Automatics', 'Heavy Ordnance'];
 // 13-rung ladder (locked). dmg = per projectile, rate = shots/sec
 export interface Weapon { n: string; era: number; dmg: number; rate: number; spd: number; kind: WeaponKind; col: string; pellets?: number; splash?: number }
@@ -37,4 +37,5 @@ export const BIOMES = [
   { n: 'Frostbound Snowfield', top: '#9db8d6', bot: '#dfeaf5', ground: '#cfdcea' },
   { n: 'Lantern Swamp', top: '#2b3d3a', bot: '#1a2926', ground: '#25382f' },
 ];
-export const BENCH = { x: 8, y: 496, cols: 4, rows: 2, w: 82, h: 62, gap: 6 };
+export const BENCH = { x: 8, y: 488, cols: 4, rows: 2, w: 82, h: 50, gap: 6 };
+export const ACTION_BAR = { y: 598, h: 36 };
