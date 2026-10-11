@@ -1,11 +1,12 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl } from './sim'
+import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
 import { BLESSINGS } from './blessings'
+import { QUEST_POOL, questDef } from './quests'
 import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
@@ -14,7 +15,7 @@ interface Rect { x: number; y: number; w: number; h: number }
 type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, rebirth: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -48,6 +49,7 @@ export function drainEvents() {
     }
     else if (e.type === 'blessing') { Audio_.fanfare(); const b = BLESSINGS.find(x => x.id === e.id)!; G.banner = { text: b.name.toUpperCase() + ' x' + bl(e.id), sub: b.desc, t: 1.8, big: true }; R.flash = 0.25 }
     else if (e.type === 'rebirth') { Audio_.fanfare(); G.banner = { text: 'REBORN', sub: '+' + e.gain + ' Stardust', t: 2.4, big: true }; R.flash = 0.8 }
+    else if (e.type === 'quest_claim') { Audio_.coins(); G.banner = { text: 'QUEST DONE', sub: '+' + e.gems + ' gems  +' + fmt(e.gold) + ' gold', t: 1.6 } }
     else if (e.type === 'nade_throw') Audio_.whump()
     else if (e.type === 'idle_collect') {
       Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
@@ -263,6 +265,7 @@ const icons: Record<string, Icon> = {
   shield: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 8, y - 8); c.lineTo(x + 8, y - 8); c.lineTo(x + 8, y + 1); c.quadraticCurveTo(x + 8, y + 8, x, y + 10); c.quadraticCurveTo(x - 8, y + 8, x - 8, y + 1); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x, y - 6); c.lineTo(x, y + 7); c.stroke() },
   frenzy: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; for (const dx of [-5, 3]) { c.beginPath(); c.moveTo(x + dx - 4, y - 8); c.lineTo(x + dx + 5, y); c.lineTo(x + dx - 4, y + 8); c.lineTo(x + dx - 1, y); c.closePath(); c.fill(); c.stroke() } },
   sword: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 8, y - 8); c.lineTo(x + 8, y - 3); c.lineTo(x - 3, y + 8); c.lineTo(x - 8, y + 3); c.lineTo(x + 3, y - 8); c.closePath(); c.fill(); c.stroke(); c.fillRect(x - 8, y + 4, 6, 3) },
+  gem: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x - 3, y - 8); c.lineTo(x + 3, y - 8); c.lineTo(x + 7, y - 3); c.lineTo(x, y + 8); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x + 7, y - 3); c.stroke() },
   star: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 4 : 9; c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad) } c.closePath(); c.fill(); c.stroke() },
   plus: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x + 6, y); c.moveTo(x, y - 6); c.lineTo(x, y + 6); c.stroke() },
 }
@@ -395,7 +398,13 @@ export function render(ctx: Ctx, t: number) {
   const ag = ctx.createLinearGradient(0, BENCH.y - 24, 0, H); ag.addColorStop(0, 'rgba(10,16,19,.86)'); ag.addColorStop(1, 'rgba(10,16,19,.97)')
   ctx.fillStyle = ag; ctx.fillRect(0, BENCH.y - 24, W, H - BENCH.y + 24)
   ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(0, BENCH.y - 24, W, 1)
-  ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('ARMORY  ·  drag matching weapons together to merge', 10, BENCH.y - 11)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('ARMORY  ·  drag to merge', 10, BENCH.y - 11)
+  { const qx = 214, qy = BENCH.y - 21, qw = 136, qh = 18, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
+    R.btns.quests = { x: qx, y: qy, w: qw, h: qh }
+    glass(ctx, qx, qy, qw, qh, 9); ctx.strokeStyle = rdy ? 'rgba(120,220,255,' + (0.45 + 0.5 * pl) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = rdy ? 1.6 : 1; rr(ctx, qx + 0.5, qy + 0.5, qw - 1, qh - 1, 9); ctx.stroke()
+    ctx.save(); ctx.translate(qx + 12, qy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('' + G.gems, qx + 23, qy + 9.5)
+    ctx.textAlign = 'right'; ctx.fillStyle = rdy ? '#6fd6ff' : '#9fb5aa'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(rdy ? 'QUESTS  (' + rdy + ')' : 'DAILY QUESTS', qx + qw - 8, qy + 9.5) }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
   order.slice(0, n).forEach((o, k) => armed.set(o.i, k))
   for (let i = 0; i < 8; i++) {
@@ -523,6 +532,8 @@ export function drawPick(ctx: Ctx, t: number) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.fillStyle = '#ffd84a'; ctx.font = '800 26px system-ui,sans-serif'; ctx.fillText('Choose a Blessing', W / 2, 70)
   ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText('Stacks until your next Rebirth', W / 2, 98)
+  button(ctx, 'reroll', W / 2 - 80, H - 86, 160, 40, { top: G.gems >= REROLL_COST ? '#5ab8ff' : '#5a666d', bot: G.gems >= REROLL_COST ? '#2b6fd0' : '#39434a', icon: 'gem', label: 'Reroll  ' + REROLL_COST, size: 14, disabled: G.gems < REROLL_COST })
+  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('You have ' + G.gems + ' gems', W / 2, H - 32)
   G.pick.forEach((id, i) => {
     const b = BLESSINGS.find(x => x.id === id)!, x = 24, y = 130 + i * 130, w = W - 48, h = 112, own = bl(id)
     const down = R.pressed === 'pick' + i, dy = down ? 2 : 0
@@ -562,4 +573,29 @@ export function drawRebirth(ctx: Ctx, t: number) {
   }
   if (gain) { button(ctx, 'rb_go', cx + 24, cy + 240, cw - 48, 40, { top: '#b58cf0', bot: '#6a3fb8', label: 'REBIRTH', size: 15 }); button(ctx, 'rb_close', cx + 24, cy + 288, cw - 48, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Not yet', size: 13 }) }
   else button(ctx, 'rb_close', cx + 24, cy + 270, cw - 48, 44, { top: '#5b6c75', bot: '#3a4850', label: 'Close', size: 14 })
+}
+
+/** Daily quests: three objectives, claim for gems + gold. */
+export function drawQuests(ctx: Ctx, t: number) {
+  R.btns = {}
+  ctx.fillStyle = 'rgba(4,8,10,.88)'; ctx.fillRect(0, 0, W, H)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#fff'; ctx.font = '800 24px system-ui,sans-serif'; ctx.fillText('Daily Quests', W / 2, 52)
+  ctx.save(); ctx.translate(W / 2 - 32, 86); ctx.scale(1.2, 1.2); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+  ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 18px system-ui,sans-serif'; ctx.fillText('' + G.gems, W / 2 - 14, 87)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText('Resets at midnight. Gems buy blessing rerolls.', W / 2, 114)
+  G.daily.q.forEach((q, i) => {
+    const d = questDef(q.id), x = 20, y = 136 + i * 112, w = W - 40, h = 98, done = q.prog >= d.target, f = Math.min(1, q.prog / d.target)
+    const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#2a3a44'); g.addColorStop(1, '#17232b')
+    ctx.fillStyle = g; rr(ctx, x, y, w, h, 16); ctx.fill(); ctx.strokeStyle = q.claimed ? 'rgba(255,255,255,.1)' : done ? 'rgba(111,214,255,.8)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1.5; rr(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 16); ctx.stroke()
+    ctx.textAlign = 'left'; ctx.fillStyle = q.claimed ? '#7f929a' : '#fff'; ctx.font = '800 15px system-ui,sans-serif'; ctx.fillText(d.text, x + 14, y + 24)
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, x + 14, y + 42, w - 28, 12, 6); ctx.fill()
+    if (f > 0) { ctx.fillStyle = done ? '#6fd6ff' : '#ffd84a'; rr(ctx, x + 15, y + 43, Math.max(8, (w - 30) * f), 10, 5); ctx.fill() }
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(q.prog + ' / ' + d.target, x + 14, y + 70)
+    ctx.fillStyle = '#6fd6ff'; ctx.fillText('+' + d.gems + ' gems  + gold', x + 14, y + 86)
+    if (q.claimed) { ctx.textAlign = 'right'; ctx.fillStyle = '#7f929a'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText('CLAIMED', x + w - 14, y + 74) }
+    else button(ctx, 'qc' + i, x + w - 104, y + 56, 92, 34, { top: done ? '#52d273' : '#5a666d', bot: done ? '#25994a' : '#39434a', label: done ? 'CLAIM' : 'In progress', size: done ? 14 : 11, disabled: !done })
+  })
+  void QUEST_POOL; void t
+  button(ctx, 'q_close', W / 2 - 70, H - 70, 140, 40, { top: '#5b6c75', bot: '#3a4850', label: 'Close', size: 14 })
 }
