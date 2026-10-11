@@ -1,6 +1,6 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
-import { G, questReady, dogId, buyDog, setSquad, pk } from './sim'
+import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT } from './render'
 import type { Ctx } from './render'
 
@@ -73,6 +73,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'skills': drawSkills(ctx); break
     case 'weekly': drawWeekly(ctx); break
     case 'kennel': drawKennel(ctx); break
+    case 'raid': drawRaid(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -159,6 +160,8 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  if (k === 'raid_go') { if (startRaid()) { R.screen = null; Audio_.fanfare() } else G.banner = { text: 'No raid attempts left', sub: 'Back tomorrow, or watch an ad for one more', t: 1.6 }; return true }
+  if (k === 'raid_done') { closeRaid(); R.screen = null; return true }
   if (k.startsWith('ks_')) { R.kSlot = +k.slice(3); return true }
   if (k.startsWith('kd_')) {
     const r = +k.slice(3)
@@ -283,3 +286,41 @@ export function drawKennel(ctx: Ctx) {
   void pk
 }
 registerTile({ id: 'kennel', label: 'Kennel', sub: () => G.coins + ' coins', icon: 'coin', col: '#ffb347', badge: () => ROSTER.some((d, r) => r >= 2 && !G.owned.includes(r) && G.coins >= (d.cost ?? 1e9)) })
+
+// ================= Boss Raid =================
+export function drawRaid(ctx: Ctx) {
+  const res = G.raid?.result
+  panel(ctx, 'Boss Raid', !res)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  const base = raidBase()
+  if (res) {
+    const t = res.tier, col = t >= 0 ? RAID.cols[t] : '#7f929a'
+    ctx.fillStyle = col; ctx.font = '800 30px system-ui,sans-serif'; ctx.fillText(t >= 0 ? RAID.names[t].toUpperCase() : 'NO TIER', W / 2, 100)
+    ctx.fillStyle = '#fff'; ctx.font = '800 40px system-ui,sans-serif'; ctx.fillText(fmt(res.dmg), W / 2, 150)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '700 12px system-ui,sans-serif'; ctx.fillText(res.best ? 'NEW PERSONAL BEST!' : 'Total damage  \u00b7  Best ' + fmt(G.raidInfo.best), W / 2, 182)
+    ctx.fillStyle = '#ffd84a'; ctx.font = '800 22px system-ui,sans-serif'; ctx.fillText('+' + res.coins + ' Dungeon Coins', W / 2, 240)
+    if (res.chest >= 0) { ctx.fillStyle = '#9fd0ff'; ctx.fillText('+1 ' + CHEST_NAMES[res.chest], W / 2, 276) }
+    const nx = RAID.tiers.findIndex(m => res.dmg < base * m)
+    ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'
+    if (nx >= 0) ctx.fillText(fmt(base * RAID.tiers[nx] - res.dmg) + ' more damage for ' + RAID.names[nx], W / 2, 330); else ctx.fillText('Top tier cleared!', W / 2, 330)
+    ctx.fillText('The stage restarts when you continue.', W / 2, 352)
+    button(ctx, 'raid_done', W / 2 - 100, 400, 200, 48, { top: '#52d273', bot: '#25994a', label: 'CONTINUE', size: 16 })
+    return
+  }
+  ctx.fillStyle = '#ff9ad8'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText('Hit the boss as hard as you can for ' + RAID.dur + ' seconds', W / 2, 66)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Adds and boss shells hit back. Use your abilities. Gold is off in raids.', W / 2, 86)
+  // tier table
+  RAID.names.forEach((n, k) => {
+    const y = 112 + k * 50, hit = G.raidInfo.best >= base * RAID.tiers[k]
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; rr(ctx, 16, y, W - 32, 44, 12); ctx.fill(); ctx.strokeStyle = hit ? RAID.cols[k] : 'rgba(255,255,255,.1)'; ctx.lineWidth = 1.5; rr(ctx, 16.75, y + 0.75, W - 33.5, 42.5, 12); ctx.stroke()
+    ctx.textAlign = 'left'; ctx.fillStyle = RAID.cols[k]; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(n, 30, y + 16)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(fmt(base * RAID.tiers[k]) + ' damage', 30, y + 32)
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd84a'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillText(RAID.coins[k] + ' coins' + (RAID.chest[k] >= 0 ? '  +  ' + CHEST_NAMES[RAID.chest[k]].split(' ')[0] + ' chest' : ''), W - 30, y + 24)
+  })
+  ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '700 12px system-ui,sans-serif'; ctx.fillText('Best: ' + fmt(G.raidInfo.best) + (G.raidInfo.best ? '  (' + (raidTier(G.raidInfo.best) >= 0 ? RAID.names[raidTier(G.raidInfo.best)] : 'no tier') + ')' : ''), W / 2, 326)
+  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Targets scale with your current stage (' + G.stage + ').', W / 2, 346)
+  const left = raidLeft()
+  button(ctx, 'raid_go', W / 2 - 110, 372, 220, 54, { top: left ? '#ff7a5a' : '#4a565d', bot: left ? '#c42f2f' : '#2f3a40', label: left ? 'START RAID  (' + left + ' left today)' : 'No attempts left', size: 15, disabled: !left })
+  button(ctx, 'raid_ad', W / 2 - 110, 436, 220, 38, { top: '#b58cf0', bot: '#6a3fb8', label: 'Watch an ad: +1 attempt', size: 12 })
+}
+registerTile({ id: 'raid', label: 'Boss Raid', sub: () => raidLeft() + ' attempts today', icon: 'sword', col: '#ff6a5a', badge: () => raidLeft() > 0 })

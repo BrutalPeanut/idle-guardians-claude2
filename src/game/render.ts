@@ -1,6 +1,6 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES } from './sim'
+import { G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -42,6 +42,7 @@ export function drainEvents() {
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
     else if (e.type === 'cover_hit') { Audio_.hit(); burst(e.x, e.y, coverDust(e.kind), 4, 70); if (!(G.t - (R.coverT[e.id] ?? -9) < 0.35)) { R.coverT[e.id] = G.t; R.floats.push({ x: e.x, y: e.y - 6, v: Math.ceil(e.v), cover: true, t: 0 }) } }
     else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
+    else if (e.type === 'raid_end') { Audio_.fanfare(); R.screen = 'raid' }
     else if (e.type === 'efire') Audio_.zap()
     else if (e.type === 'mortar_fire') Audio_.whump()
     else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
@@ -414,7 +415,7 @@ export function render(ctx: Ctx, t: number) {
       if (f > 0) { const gr = ctx.createLinearGradient(0, 14, 0, 26); gr.addColorStop(0, low ? '#ff8a7a' : '#7af09a'); gr.addColorStop(1, low ? '#d63a3a' : '#2fb85a'); ctx.fillStyle = gr; rr(ctx, bx + 1, 15, Math.max(4, (bw - 2) * f), 10, 4); ctx.fill() }
       ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, bx + 0.5, 14.5, bw - 1, 11, 5); ctx.stroke()
     } }
-  ctx.textAlign = 'right'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText((isBoss(G.stage) ? 'BOSS · ' : '') + (G.toSpawn - G.spawned + G.enemies.length) + ' left', hx + hw, 37); ctx.textAlign = 'left'
+  ctx.textAlign = 'right'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(G.raid ? 'RAID · ' + Math.ceil(Math.max(0, G.raid.t)) + 's' : (isBoss(G.stage) ? 'BOSS · ' : '') + (G.toSpawn - G.spawned + G.enemies.length) + ' left', hx + hw, 37); ctx.textAlign = 'left'
   button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 310, 8, 42, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
@@ -481,6 +482,14 @@ export function render(ctx: Ctx, t: number) {
   }
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
+  if (G.raid && !G.raid.result) { // raid scoreboard: damage bar with tier ticks
+    const bx = 62, by = 92, bw = 236, top = raidBase() * RAID.tiers[3], f = Math.min(1, G.raid.dmg / top)
+    glass(ctx, bx - 4, by - 3, bw + 8, 22, 11)
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, bx, by, bw, 16, 8); ctx.fill()
+    const gr = ctx.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, '#ff9a3a'); gr.addColorStop(1, '#ff4a6a'); ctx.fillStyle = gr; if (f > 0.02) { rr(ctx, bx, by, Math.max(10, bw * f), 16, 8); ctx.fill() }
+    RAID.tiers.forEach((m, k) => { const x = bx + bw * (m / RAID.tiers[3]); ctx.fillStyle = G.raid!.dmg >= raidBase() * m ? RAID.cols[k] : 'rgba(255,255,255,.55)'; ctx.fillRect(x - 1, by - 1, 2, 18) })
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(fmt(G.raid.dmg) + ' dmg', bx + bw / 2, by + 8.5)
+  }
   // banner
   if (G.banner) {
     const b = G.banner, a = Math.min(1, b.t * 2.5); ctx.globalAlpha = a; ctx.textAlign = 'center'

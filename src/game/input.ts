@@ -58,6 +58,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'help') R.help = true
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
     else if (k === 'ad_done') finishAd()
+    else if (k === 'raid_ad') { if (R.screen === 'raid') adGate(showRewardedAd('raid', () => { G.raidInfo.extra++; G.banner = { text: '+1 Raid attempt', t: 1.4 } })) }
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }
     else if (k === 'reroll_ad') { if (G.pick) adGate(showRewardedAd('reroll', () => { rerollBlessings(true) })) }
     else if (k.startsWith('qa')) { const qi = +k.slice(2); if (R.quests) adGate(showRewardedAd('quest2x', () => { if (claimQuest(qi, 2)) Audio_.coins() })) }

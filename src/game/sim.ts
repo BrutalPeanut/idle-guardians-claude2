@@ -33,6 +33,7 @@ export type GEvent =
   | { type: 'cover_break'; x: number; y: number; w: number; kind: Cover['kind'] }
   | { type: 'efire'; x: number; y: number }
   | { type: 'mortar_fire'; x: number; y: number }
+  | { type: 'raid_end' }
   | { type: 'hold'; on: boolean }
   | { type: 'idle_collect'; gold: number }
   | { type: 'down'; i: number; x: number; y: number }
@@ -77,6 +78,8 @@ interface State {
   /** Idle income: gold waiting in the kennel stash (must be collected), last time we saw the player, and the welcome-back summary. */
   /** Kennel: owned roster indexes, the two support slots (roster indexes) and dungeon coins. */
   owned: number[]; squad: number[]; coins: number
+  /** Boss Raid: live run (null when not raiding) and the per-day attempt ledger + all-time best score. */
+  raid: RaidState | null; raidInfo: { day: string; used: number; extra: number; best: number }
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
 }
 
@@ -90,7 +93,7 @@ export const G: State = {
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
-  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0,
+  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
  * Idle income. Tuned against measured active play (~40 kills/min): idle pays IDLE.factor of active income, and the stash
@@ -208,13 +211,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -259,10 +262,11 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + goldGear() + 0.04 * sk('gold') + (wm('gold') ? 0.3 : 0)) * starMul())
+  const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + goldGear() + 0.04 * sk('gold') + (wm('gold') ? 0.3 : 0)) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
+  if (G.raid) G.raid.dmg += Math.min(dmg, Math.max(0, e.hp))
   e.hp -= dmg; e.flash = 0.1
   if (gi >= 0) G.stats.dealt[gi] += dmg
   if (flank) { track('flank'); const fk = flankMul(), m = fl === 2 ? 1 + 0.55 * fk : 1 + 0.35 * fk; G.stats.flank += dmg * (1 - 1 / m) }
@@ -347,6 +351,7 @@ export function useAbility(kind: 'frenzy' | 'shield' | 'tank' | 'panic'): 'ok' |
 
 export function update(dtReal: number) {
   if (Math.floor(G.t) % 20 === 0) ensureDaily() // cheap midnight rollover check
+  if (G.raid?.result) closeRaid()
   const dt = dtReal * G.speed; G.t += dt
   G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)
   const p = G.pack, n = unlockedGuardians(G.stage), rules = rulesFor(G.stage)
@@ -507,8 +512,11 @@ export function update(dtReal: number) {
 
   // ---- wipe / clear ----
   let anyAlive = false; for (let i = 0; i < n; i++) if (alive(i)) anyAlive = true
+  if (!anyAlive && G.raid) { endRaid(); return }
+  if (G.raid) raidTick(dt)
+  if (G.raid?.result) return
   if (!anyAlive) { G.banner = { text: 'REGROUP!', t: 1.4 }; startStage(); return }
-  if (G.spawned >= G.toSpawn && G.enemies.length === 0) {
+  if (!G.raid && G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages')
@@ -587,3 +595,46 @@ export function mergeAll() {
   }
   return any
 }
+
+// ================= Boss Raid =================
+/** A 45s damage race against a towering boss. Score = total damage; tiers pay Dungeon Coins and chests. 3 attempts a day (+1 per rewarded ad). */
+export interface RaidState { t: number; dmg: number; phase: number; shellT: number; addT: number; boss: Enemy | null; result: null | { tier: number; dmg: number; coins: number; chest: number; best: boolean } }
+export const RAID = { dur: 45, attempts: 3, tiers: [0.6, 1.2, 2, 3.2], names: ['Bronze', 'Silver', 'Gold', 'Platinum'], cols: ['#d08a52', '#c9d3da', '#ffd84a', '#8fe8ff'], coins: [6, 12, 20, 32], chest: [-1, 0, 1, 2] }
+/** Damage that counts as a baseline run: roughly one stage's worth of enemy health at your current stage. */
+export const raidBase = () => hpScale(G.stage) * (6 + 1.5 * G.stage)
+function rollRaid() { const d = dayKey(); if (G.raidInfo.day !== d) G.raidInfo = { day: d, used: 0, extra: 0, best: G.raidInfo.best } }
+export const raidLeft = () => { rollRaid(); return Math.max(0, RAID.attempts + G.raidInfo.extra - G.raidInfo.used) }
+export const raidTier = (dmg: number) => { let t = -1; RAID.tiers.forEach((m, k) => { if (dmg >= raidBase() * m) t = k }); return t }
+function spawnRaidBoss(phase: number) {
+  const hp = raidBase() * 1.2 * (1 + 0.5 * (phase - 1))
+  const e: Enemy = { x: 180, y: 140, hp, max: hp, spd: 0, r: 30, kind: 'boss', flash: 0, wob: 0, dmg: 0, cd: 99 }
+  G.enemies.push(e); if (G.raid) G.raid.boss = e
+}
+export function startRaid(): boolean {
+  rollRaid(); if (G.raid || raidLeft() <= 0) return false
+  G.raidInfo.used++; startStage()
+  G.enemies.length = 0; G.cover = G.cover.filter(c => c.side === 'player'); G.hazards = []; G.toSpawn = 0; G.spawned = 1 // spawned>0 so spawnEnemy() never makes a stage boss
+  G.raid = { t: RAID.dur, dmg: 0, phase: 1, shellT: 2.5, addT: 1.2, boss: null, result: null }
+  spawnRaidBoss(1)
+  G.banner = { text: 'BOSS RAID', sub: 'Deal as much damage as you can in ' + RAID.dur + 's', t: 2.2, big: true }
+  save(); return true
+}
+function raidTick(dt: number) {
+  const r = G.raid!; if (r.result) return
+  if ((r.t -= dt) <= 0) { endRaid(); return }
+  if (!r.boss || !G.enemies.includes(r.boss)) { r.phase++; spawnRaidBoss(r.phase); G.banner = { text: 'PHASE ' + r.phase, sub: 'The boss is back and bigger', t: 1.6 } }
+  if ((r.shellT -= dt) <= 0 && r.boss) {
+    const live: number[] = []; for (let i = 0; i < unlockedGuardians(G.stage); i++) if (alive(i)) live.push(i)
+    if (live.length) { const gp = guardianPos(live[Math.floor(Math.random() * live.length)]); G.shells.push({ x: r.boss.x, y: r.boss.y, tx: gp.x + rnd(-14, 14), ty: gp.y + rnd(-8, 8), t: 0, dur: 1.4, r: 52, dmg: 10 + G.stage * 2 }); G.events.push({ type: 'mortar_fire', x: r.boss.x, y: r.boss.y }) }
+    r.shellT = Math.max(1.5, 3.4 - 0.25 * r.phase)
+  }
+  if ((r.addT -= dt) <= 0 && G.enemies.length < 9) { spawnEnemy(); r.addT = 1.3 }
+}
+function endRaid() {
+  const r = G.raid!, tier = raidTier(r.dmg), coins = tier >= 0 ? RAID.coins[tier] : 2, chest = tier >= 0 ? RAID.chest[tier] : -1
+  G.coins += coins; if (chest >= 0) addChest(chest)
+  const best = r.dmg > G.raidInfo.best; if (best) G.raidInfo.best = r.dmg
+  r.result = { tier, dmg: r.dmg, coins, chest, best }; G.enemies.length = 0; G.shells.length = 0; G.ebullets.length = 0
+  G.events.push({ type: 'raid_end' }); save()
+}
+export function closeRaid() { G.raid = null; startStage() }
