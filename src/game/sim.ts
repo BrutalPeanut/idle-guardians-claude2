@@ -53,6 +53,8 @@ interface State {
   stardust: number; rebirths: number
   /** Gems (earned from daily quests, spent on blessing rerolls) and today's quests. */
   gems: number; daily: Daily
+  /** Rewarded-ad usage today (see ads.ts) and the No-Ads purchase flag. */
+  ads: { day: string; used: number }; noAds: boolean
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -68,7 +70,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -92,16 +94,16 @@ export function track(id: string, n = 1) {
   const tgt = questDef(id).target; q.prog = Math.min(tgt, q.prog + n)
 }
 export const questReady = () => G.daily.q.filter(q => !q.claimed && q.prog >= questDef(q.id).target).length
-export function claimQuest(i: number) {
+export function claimQuest(i: number, mult = 1) {
   ensureDaily(); const q = G.daily.q[i], d = q && questDef(q.id)
   if (!q || q.claimed || q.prog < d.target) return false
-  q.claimed = true; G.gems += d.gems; const gold = Math.ceil(idleRate(G.stage) * 8); G.gold += gold
-  G.events.push({ type: 'quest_claim', gems: d.gems, gold }); save(); return true
+  q.claimed = true; const gems = d.gems * mult; G.gems += gems; const gold = Math.ceil(idleRate(G.stage) * 8) * mult; G.gold += gold
+  G.events.push({ type: 'quest_claim', gems, gold }); save(); return true
 }
 export const REROLL_COST = 5
-export function rerollBlessings() {
-  if (!G.pick || G.gems < REROLL_COST) return false
-  G.gems -= REROLL_COST; offerBlessings(); save(); return true
+export function rerollBlessings(free = false) {
+  if (!G.pick || (!free && G.gems < REROLL_COST)) return false
+  if (!free) G.gems -= REROLL_COST; offerBlessings(); save(); return true
 }
 export const bl = (id: string) => G.blessings[id] ?? 0
 export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast'))
@@ -113,13 +115,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -438,10 +440,11 @@ export function accrueAway(now = Date.now()) {
   if (gained >= 1) G.away = { minutes: mins, gold: gained, capped: gained < earned * 0.98 }
 }
 /** Move the whole stash into gold. Returns how much was collected. */
-export function collectStash() {
-  const gold = Math.floor(G.stash); G.away = null
-  if (gold < 1) return 0
-  G.gold += gold; G.stash -= gold
+export function collectStash(mult = 1) {
+  const base = Math.floor(G.stash); G.away = null
+  if (base < 1) return 0
+  const gold = base * mult
+  G.gold += gold; G.stash -= base
   G.events.push({ type: 'idle_collect', gold }); save(); return gold
 }
 
