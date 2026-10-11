@@ -1,6 +1,6 @@
 import { W, H, ARENA } from './data'
-import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll } from './sim'
-import { R, benchRect, drainEvents, updateFx, render } from './render'
+import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold } from './sim'
+import { R, benchRect, drainEvents, updateFx, render, drawHelp } from './render'
 import { Audio_ } from './audio'
 
 /** Boots the game on a canvas; returns a disposer. */
@@ -30,6 +30,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
+    if (R.help) { R.help = false; Audio_.ui(); return }
     for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
     for (let i = 0; i < 8; i++) if (G.bench[i] !== null && inR(p, benchRect(i))) { R.drag = { from: i, x: p.x, y: p.y }; mode = 'bench'; return }
     if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; drag.ax = p.x; drag.ay = p.y; drag.px = G.pack.x; drag.py = G.pack.y; G.pack.tx = G.pack.x; G.pack.ty = G.pack.y; R.dragAnchor = { sx: p.x, sy: p.y, cx: p.x, cy: p.y } }
@@ -44,6 +45,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'mute') Audio_.toggleMute()
     else if (k === 'buy') { if (!buyWeapon()) G.banner = { text: G.bench.includes(null) ? 'Not enough gold' : 'Armory full — merge!', t: 1 } }
     else if (k === 'merge') mergeAll()
+    else if (k === 'help') R.help = true
+    else if (k === 'hold') { if (toggleHold() === 'locked') G.banner = { text: 'HOLD unlocks at stage 5', sub: 'Needs a support guardian (Bruno)', t: 1.6 } }
   }
   const up = (ev: PointerEvent) => {
     if (mode === 'btn' && R.pressed) { const r = R.btns[R.pressed]; if (r && inR(pt(ev), r)) fireButton(R.pressed); R.pressed = null }
@@ -72,8 +75,9 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
-    while (acc >= 1 / 60) { update(1 / 60); acc -= 1 / 60 }
+    while (acc >= 1 / 60) { if (!R.help) update(1 / 60); acc -= 1 / 60 }
     drainEvents(); updateFx(dt); render(ctx, T)
+    if (R.help) drawHelp(ctx)
     raf = requestAnimationFrame(frame)
   }
   raf = requestAnimationFrame(frame)
