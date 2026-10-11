@@ -1,10 +1,11 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, NADE, ABIL } from './sim'
+import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, nadeCdMax, shieldDur, frenzyDur, bl } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
+import { BLESSINGS } from './blessings'
 import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
@@ -41,10 +42,11 @@ export function drainEvents() {
     else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
     else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
     else if (e.type === 'ability') {
-      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', sub: 'No damage for ' + ABIL.shield.dur + 's', t: 1.2 } }
-      else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + ABIL.frenzy.dur + 's', t: 1.2 } }
+      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', sub: 'No damage for ' + shieldDur() + 's', t: 1.2 } }
+      else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + frenzyDur() + 's', t: 1.2 } }
       R.flash = 0.15
     }
+    else if (e.type === 'blessing') { Audio_.fanfare(); const b = BLESSINGS.find(x => x.id === e.id)!; G.banner = { text: b.name.toUpperCase() + ' x' + bl(e.id), sub: b.desc, t: 1.8, big: true }; R.flash = 0.25 }
     else if (e.type === 'nade_throw') Audio_.whump()
     else if (e.type === 'idle_collect') {
       Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
@@ -259,6 +261,8 @@ const icons: Record<string, Icon> = {
   nade: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.arc(x, y + 2, 8, 0, 6.283); c.fill(); c.stroke(); c.fillRect(x - 3, y - 8, 6, 4); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 3, y - 7); c.lineTo(x + 8, y - 9); c.stroke() },
   shield: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 8, y - 8); c.lineTo(x + 8, y - 8); c.lineTo(x + 8, y + 1); c.quadraticCurveTo(x + 8, y + 8, x, y + 10); c.quadraticCurveTo(x - 8, y + 8, x - 8, y + 1); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x, y - 6); c.lineTo(x, y + 7); c.stroke() },
   frenzy: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; for (const dx of [-5, 3]) { c.beginPath(); c.moveTo(x + dx - 4, y - 8); c.lineTo(x + dx + 5, y); c.lineTo(x + dx - 4, y + 8); c.lineTo(x + dx - 1, y); c.closePath(); c.fill(); c.stroke() } },
+  sword: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 8, y - 8); c.lineTo(x + 8, y - 3); c.lineTo(x - 3, y + 8); c.lineTo(x - 8, y + 3); c.lineTo(x + 3, y - 8); c.closePath(); c.fill(); c.stroke(); c.fillRect(x - 8, y + 4, 6, 3) },
+  star: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 4 : 9; c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad) } c.closePath(); c.fill(); c.stroke() },
   plus: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x + 6, y); c.moveTo(x, y - 6); c.lineTo(x, y + 6); c.stroke() },
 }
 interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string }
@@ -370,6 +374,10 @@ export function render(ctx: Ctx, t: number) {
   ctx.textAlign = 'center'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillStyle = G.speed > 1 ? '#ffcf8a' : '#7f929a'; ctx.fillText(G.speed > 1 ? '2× ON' : 'SPEED 1×', 284, 54)
   ctx.fillStyle = '#7f929a'; ctx.fillText(Audio_.muted ? 'MUTED' : 'SOUND', 331, 54)
 
+  { let bx = 10 // owned blessings as small coloured chips under the HUD
+    for (const b of BLESSINGS) { const c = bl(b.id); if (!c) continue
+      glass(ctx, bx, 70, 30, 16, 8); ctx.save(); ctx.translate(bx + 8, 78); ctx.scale(0.7, 0.7); icons[b.icon](ctx, 0, 0, b.col); ctx.restore()
+      ctx.fillStyle = '#fff'; ctx.font = '800 9px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('' + c, bx + 17, 78.5); bx += 33 } }
   // drag anchor: faint ring where the touch began, dot + tether at the finger
   if (R.dragAnchor) { const a = R.dragAnchor; ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2
     ctx.beginPath(); ctx.arc(a.sx, a.sy, 22, 0, 6.283); ctx.fill(); ctx.stroke()
@@ -405,9 +413,9 @@ export function render(ctx: Ctx, t: number) {
       else if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.55)'; rr(ctx, x, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(x, ny, ns, ns * (cd / cdMax)); ctx.restore()
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1) }
     }
-    abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, ABIL.shield.cd, G.shieldT, ABIL.shield.dur)
-    abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, ABIL.frenzy.cd, G.frenzyT, ABIL.frenzy.dur)
-    abil('nade', 306, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, NADE.cd, 0, 1)
+    abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
+    abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
+    abil('nade', 306, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1)
   }
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
@@ -455,7 +463,7 @@ export function drawHelp(ctx: Ctx) {
     ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
     ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
     ['coin', 'Idle stash', 'Your pack keeps earning gold while you are away (up to ' + IDLE.capHours + 'h). Tap the stash chip under the gold counter to collect it.'],
-    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + ABIL.shield.dur + 's. Frenzy (yellow): double fire rate for ' + ABIL.frenzy.dur + 's. Grenade (orange): blasts the biggest clump.'],
+    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + shieldDur() + 's. Frenzy (yellow): double fire rate for ' + frenzyDur() + 's. Grenade (orange): blasts the biggest clump.'],
     ['hold', 'HOLD', 'Plants Bruno and Luna. Drag then steers only Rudy & Cooper round the barricades. RECALL regroups.'],
   ]
   let y = 92
@@ -498,4 +506,27 @@ export function drawWelcome(ctx: Ctx, t: number) {
   if (a.capped) { ctx.fillStyle = '#ffb27a'; ctx.fillText('Stash was full after ' + IDLE.capHours + 'h. Come back sooner to earn more!', W / 2, cy + 160) }
   else { ctx.fillStyle = '#7f929a'; ctx.fillText('Stash fills for up to ' + IDLE.capHours + 'h while you are away.', W / 2, cy + 160) }
   button(ctx, 'welcome', cx + 40, cy + 190, cw - 80, 54, { top: '#52d273', bot: '#25994a', label: 'COLLECT', icon: 'coin', size: 18 })
+}
+
+/** Blessing pick: three cards, the game is paused until one is chosen. */
+export function drawPick(ctx: Ctx, t: number) {
+  if (!G.pick) return
+  R.btns = {}
+  ctx.fillStyle = 'rgba(4,8,10,.86)'; ctx.fillRect(0, 0, W, H)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffd84a'; ctx.font = '800 26px system-ui,sans-serif'; ctx.fillText('Choose a Blessing', W / 2, 70)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText('Stacks until your next Rebirth', W / 2, 98)
+  G.pick.forEach((id, i) => {
+    const b = BLESSINGS.find(x => x.id === id)!, x = 24, y = 130 + i * 130, w = W - 48, h = 112, own = bl(id)
+    const down = R.pressed === 'pick' + i, dy = down ? 2 : 0
+    R.btns['pick' + i] = { x, y, w, h }
+    const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#2c3b44'); g.addColorStop(1, '#18242b')
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4; ctx.fillStyle = g; rr(ctx, x, y + dy, w, h, 18); ctx.fill(); ctx.restore()
+    ctx.strokeStyle = b.col; ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 3 + i); ctx.lineWidth = 2; rr(ctx, x + 1, y + dy + 1, w - 2, h - 2, 18); ctx.stroke(); ctx.globalAlpha = 1
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(x + 52, y + dy + h / 2, 32, 0, 6.283); ctx.fill()
+    ctx.save(); ctx.translate(x + 52, y + dy + h / 2); ctx.scale(2.4, 2.4); icons[b.icon](ctx, 0, 0, b.col); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 20px system-ui,sans-serif'; ctx.fillText(b.name, x + 100, y + dy + 36)
+    ctx.fillStyle = '#d6e4dc'; ctx.font = '600 14px system-ui,sans-serif'; ctx.fillText(b.desc, x + 100, y + dy + 62)
+    ctx.fillStyle = b.col; ctx.font = '700 12px system-ui,sans-serif'; ctx.fillText(own ? 'Owned x' + own + '  →  x' + (own + 1) : 'NEW', x + 100, y + dy + 88)
+  })
 }
