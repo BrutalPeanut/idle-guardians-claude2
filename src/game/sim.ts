@@ -1,6 +1,8 @@
 import { ARENA, WEAPONS, GUARDIANS, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
+import { dayKey, rollDaily, questDef } from './quests'
+import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
@@ -30,6 +32,7 @@ export type GEvent =
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
   | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
+  | { type: 'quest_claim'; gems: number; gold: number }
   | { type: 'rebirth'; gain: number }
   | { type: 'blessing'; id: string }
   | { type: 'nade_throw'; x: number; y: number }
@@ -48,6 +51,8 @@ interface State {
   blessings: Record<string, number>; pick: string[] | null
   /** Rebirth currency (permanent) and how many times the player has reborn. */
   stardust: number; rebirths: number
+  /** Gems (earned from daily quests, spent on blessing rerolls) and today's quests. */
+  gems: number; daily: Daily
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -63,7 +68,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -79,6 +84,25 @@ export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60
 export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
 export const starMul = () => 1 + STAR_BONUS * G.stardust
 export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
+// ---- daily quests ----
+/** Roll a fresh set when the local date changes. */
+export function ensureDaily() { const d = dayKey(); if (G.daily.day !== d) G.daily = rollDaily(d) }
+export function track(id: string, n = 1) {
+  ensureDaily(); const q = G.daily.q.find(x => x.id === id); if (!q) return
+  const tgt = questDef(id).target; q.prog = Math.min(tgt, q.prog + n)
+}
+export const questReady = () => G.daily.q.filter(q => !q.claimed && q.prog >= questDef(q.id).target).length
+export function claimQuest(i: number) {
+  ensureDaily(); const q = G.daily.q[i], d = q && questDef(q.id)
+  if (!q || q.claimed || q.prog < d.target) return false
+  q.claimed = true; G.gems += d.gems; const gold = Math.ceil(idleRate(G.stage) * 8); G.gold += gold
+  G.events.push({ type: 'quest_claim', gems: d.gems, gold }); save(); return true
+}
+export const REROLL_COST = 5
+export function rerollBlessings() {
+  if (!G.pick || G.gems < REROLL_COST) return false
+  G.gems -= REROLL_COST; offerBlessings(); save(); return true
+}
 export const bl = (id: string) => G.blessings[id] ?? 0
 export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast'))
 export const shieldDur = () => ABIL.shield.dur + bl('aegis')
@@ -89,13 +113,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -137,13 +161,14 @@ const blocked = (ax: number, ay: number, bx: number, by: number) => { for (const
 const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.coverId && c.hp > 0)
 
 function killReward(e: Enemy) {
-  G.kills++; G.combo++; G.comboT = 2.5
+  track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
   const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
   e.hp -= dmg; e.flash = 0.1
+  if (flank) track('flank')
   const kill = e.hp <= 0
   G.events.push({ type: 'dmg', x: e.x, y: e.y - e.r, v: dmg, crit, kill, flank })
   if (kill) killReward(e)
@@ -198,7 +223,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
   G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 * starMul() })
-  G.nadeCd = nadeCdMax(); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
+  G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
 /** Frenzy: every gun fires at double rate. Shield: the whole pack takes no damage. Both are tap-to-use with a cooldown. */
@@ -206,10 +231,11 @@ export const ABIL = { frenzy: { dur: 6, cd: 18, mul: 2 }, shield: { dur: 5, cd: 
 export function useAbility(kind: 'frenzy' | 'shield'): 'ok' | 'cooldown' {
   if (kind === 'frenzy') { if (G.frenzyCd > 0) return 'cooldown'; G.frenzyT = frenzyDur(); G.frenzyCd = ABIL.frenzy.cd }
   else { if (G.shieldCd > 0) return 'cooldown'; G.shieldT = shieldDur(); G.shieldCd = ABIL.shield.cd }
-  G.events.push({ type: 'ability', kind, x: G.pack.x, y: G.pack.y }); return 'ok'
+  track('abil'); G.events.push({ type: 'ability', kind, x: G.pack.x, y: G.pack.y }); return 'ok'
 }
 
 export function update(dtReal: number) {
+  if (Math.floor(G.t) % 20 === 0) ensureDaily() // cheap midnight rollover check
   const dt = dtReal * G.speed; G.t += dt
   G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)
   const p = G.pack, n = unlockedGuardians(G.stage), rules = rulesFor(G.stage)
@@ -372,7 +398,7 @@ export function update(dtReal: number) {
   if (G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
-    const cleared = G.stage
+    const cleared = G.stage; track('stages')
     G.stage++; startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()
@@ -423,7 +449,7 @@ export function collectStash() {
 export function buyWeapon() {
   const slot = G.bench.indexOf(null), c = buyCost()
   if (slot < 0 || G.gold < c) return false
-  G.gold -= c; G.bought++
+  G.gold -= c; G.bought++; track('buys')
   G.bench[slot] = Math.max(0, G.maxLevel - 3)
   save(); return true
 }
@@ -432,7 +458,7 @@ export function tryMerge(a: number, b: number) {
   if (a === b || va === null || va !== vb || va >= WEAPONS.length - 1) return false
   // every guardian keeps its own gun: only surplus weapons (beyond one per dog) can be merged away
   if (G.bench.filter(v => v !== null).length - 1 < unlockedGuardians(G.stage)) { G.banner = { text: 'EACH DOG NEEDS A GUN', sub: 'Buy a spare weapon, then merge the extra', t: 1.6 }; return false }
-  const lvl = va + 1; G.bench[b] = lvl; G.bench[a] = null
+  const lvl = va + 1; G.bench[b] = lvl; G.bench[a] = null; track('merges')
   G.events.push({ type: 'merge', slot: b, level: lvl })
   if (lvl > G.maxLevel) { G.maxLevel = lvl; G.events.push({ type: 'unlock', level: lvl, newEra: WEAPONS[lvl].era !== WEAPONS[lvl - 1].era }) }
   save(); return true
