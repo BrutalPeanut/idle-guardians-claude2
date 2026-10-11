@@ -130,6 +130,32 @@ function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number)
   ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.9, 0, 0, 6.283); ctx.fill()
   collar(ctx, x, y, '#d63a3a', false)
 }
+/** Small fur spike: a triangle poking out of an outline at (x,y) pointing along `ang`. Used for scruffiness. */
+function tuft(ctx: Ctx, x: number, y: number, ang: number, len: number, w: number, fill: string) {
+  const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx
+  ctx.fillStyle = fill; ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.lineJoin = 'round'
+  ctx.beginPath(); ctx.moveTo(x + px * w, y + py * w); ctx.lineTo(x + dx * len, y + dy * len); ctx.lineTo(x - px * w, y - py * w); ctx.closePath(); ctx.fill(); ctx.stroke()
+}
+/** Green army-style helmet sitting on top of a head centred at (x,y). strap = chin strap fastened; otherwise loose straps dangle. */
+function helmet(ctx: Ctx, x: number, y: number, hw: number, strapped: boolean, t: number, tilt = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(tilt)
+  ctx.fillStyle = '#6a9a3e'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
+  ctx.beginPath(); ctx.moveTo(-hw, 0); ctx.bezierCurveTo(-hw, -hw * 1.02, hw, -hw * 1.02, hw, 0); ctx.quadraticCurveTo(0, hw * 0.3, -hw, 0); ctx.closePath(); ctx.fill(); ctx.stroke()
+  ctx.save(); ctx.clip(); ctx.fillStyle = '#4b7429'; ctx.beginPath(); ctx.ellipse(hw * 0.35, -hw * 0.1, hw * 1.05, hw * 0.75, 0, 0, 6.283); ctx.fill(); ctx.restore()   // cel shade
+  ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(-hw * 0.38, -hw * 0.62, hw * 0.26, hw * 0.12, -0.5, 0, 6.283); ctx.fill()                       // highlight
+  ctx.strokeStyle = '#3a5a22'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-hw * 0.96, -hw * 0.08); ctx.quadraticCurveTo(0, hw * 0.34, hw * 0.96, -hw * 0.08); ctx.stroke() // rim band
+  ctx.restore()
+  if (!strapped) { // loose chin straps swinging free
+    const sw = Math.sin(t * 7) * 1.2
+    for (const sx of [-1, 1]) {
+      const bx = x + sx * (hw - 1), by = y + 1
+      ctx.strokeStyle = OUT; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + sx * 2.5 + sw, by + 5, bx + sx * 1.5 + sw * 1.4, by + 10); ctx.stroke()
+      ctx.strokeStyle = '#7a6a3a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + sx * 2.5 + sw, by + 5, bx + sx * 1.5 + sw * 1.4, by + 10); ctx.stroke()
+      ctx.fillStyle = '#c9b37a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1; ctx.beginPath(); ctx.rect(bx + sx * 1.5 + sw * 1.4 - 1.6, by + 9, 3.2, 3.2); ctx.fill(); ctx.stroke()
+    }
+    ctx.lineCap = 'butt'
+  }
+}
 /** Rudy: cute golden retriever. Warm cream-gold coat, darker golden floppy ears, big sparkly eyes, rosy cheeks, feathered tail and chest, tongue out. */
 function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
   const wag = Math.sin(t * 9 + x) * 3
@@ -143,7 +169,7 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
     ctx.beginPath(); ctx.moveTo(x + sx * 8, y - 12); ctx.quadraticCurveTo(x + sx * 18, y - 11, x + sx * 15.5, y + 3); ctx.quadraticCurveTo(x + sx * 12, y + 5, x + sx * 9.5, y - 1); ctx.closePath(); ctx.fill(); ctx.stroke()
   }
   blob(ctx, x, y - 4.5, 14.2, 12.8, g.fur, g.shade)                                                   // big round head
-  for (const dx of [-5, 0, 5]) { ctx.fillStyle = '#fff8e6'; ctx.beginPath(); ctx.ellipse(x + dx, y - 16, 3.4, 2.4, 0, Math.PI, 0); ctx.fill() } // fluffy forehead tufts
+  for (const [a, l] of [[-2.9, 4.5], [3.05, 4.5], [2.35, 5], [0.8, 5], [0.15, 4.5]] as [number, number][]) tuft(ctx, x + Math.cos(a) * 12.6, y - 4.5 + Math.sin(a) * 11.4, a, l, 3.2, g.fur)   // scruffy fur sticking out round the head
   blob(ctx, x, y + 1.8, 6, 4.2, '#fffaf0', null)                                                  // light muzzle
   ctx.fillStyle = 'rgba(255,130,120,.55)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9.6, y - 0.2, 3.2, 2.1, 0, 0, 6.283); ctx.fill() } // rosy cheeks
   for (const sx of [-1, 1]) {                                                                       // big shiny eyes
@@ -158,7 +184,10 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
   ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y + 1.4); ctx.lineTo(x, y + 3); ctx.moveTo(x - 4.2, y + 2.2); ctx.quadraticCurveTo(x - 2, y + 5, x, y + 3); ctx.quadraticCurveTo(x + 2, y + 5, x + 4.2, y + 2.2); ctx.stroke() // smile
   ctx.fillStyle = '#ff8fa8'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(x + 0.5, y + 4.4, 2.6, 2.8, 0, 0, Math.PI); ctx.fill(); ctx.stroke() // tongue
   ctx.strokeStyle = 'rgba(160,70,90,.6)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x + 0.5, y + 3.6); ctx.lineTo(x + 0.5, y + 6); ctx.stroke()
+  for (const [dx, l] of [[-6, 4.5], [0, 4], [6, 4.5]] as [number, number][]) tuft(ctx, x + dx, y + 12.5, Math.PI / 2 + dx * 0.06, l, 3, '#fbeccb')   // ragged chest ruff
   collar(ctx, x, y + 4.2, '#c0392b', true)
+  for (const [dx, a] of [[-7, 1.9], [-3, 1.4], [2, 1.7], [7, 1.2]] as [number, number][]) tuft(ctx, x + dx, y - 9.2, a, 4, 2.8, g.fur)   // messy fringe poking out under the rim
+  helmet(ctx, x + 0.5, y - 10.5, 12.2, false, t, 0.1)   // green helmet, straps hanging loose
 }
 /** Cooper: short-coated tan mix. Dark muzzle, one perked ear + one folded, white chest patch, head tilt, wide worried eyes. */
 function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
@@ -182,6 +211,10 @@ function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9 + 0.7, -2.2, 0.8, 0, 6.283); ctx.fill()
     ctx.strokeStyle = g.shade; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(sx * 2.2, -7.2 + (sx < 0 ? 0.6 : 0)); ctx.lineTo(sx * 7.2, -7.4 - (sx < 0 ? 0.6 : 0)); ctx.stroke() // brow
   }
+  helmet(ctx, 0, -7.4, 10.8, true, t)                                                               // green helmet, strap fastened
+  ctx.strokeStyle = OUT; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-10.2, -7); ctx.quadraticCurveTo(-11, 6, -4.5, 9.6); ctx.quadraticCurveTo(0, 11.6, 4.5, 9.6); ctx.quadraticCurveTo(11, 6, 10.2, -7); ctx.stroke()
+  ctx.strokeStyle = '#7a6a3a'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineCap = 'butt'
+  ctx.fillStyle = '#c9b37a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.rect(-2, 8.8, 4, 4); ctx.fill(); ctx.stroke()  // buckle
   ctx.restore()
   collar(ctx, x, y + 1, '#d63a3a', false)
 }
