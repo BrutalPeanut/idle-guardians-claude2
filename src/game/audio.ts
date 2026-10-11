@@ -53,9 +53,31 @@ export const Audio_ = (() => {
     heavy:   () => { burst(0.14, 0.4, 'lowpass', 1500, 150); tone('sine', 90, 35, 0.14, 0.4); },
     grenade: () => { tone('sine', 140, 50, 0.2, 0.4); burst(0.12, 0.2, 'lowpass', 900, 200); },
   };
+  // ---- per-weapon sounds: layered crack (noise) + body (sine thump) + room tail, with random pitch so repeats don't sound robotic ----
+  const rv = () => 0.94 + Math.random() * 0.12
+  const crack = (vol: number, dur: number, f0: number, f1 = f0 * 0.4, type: BiquadFilterType = 'highpass') => burst(dur, vol, type, f0 * rv(), f1)
+  const thump = (f0: number, f1: number, dur: number, vol: number) => tone('sine', f0 * rv(), f1, dur, vol)
+  const tail = (dur: number, vol: number, lp = 1200) => burst(dur, vol, 'lowpass', lp, lp * 0.15)
+  const click = (vol = 0.14, f = 2400) => { burst(0.02, vol, 'bandpass', f * rv(), f * 0.6); tone('square', 900, 400, 0.015, vol * 0.4) }
+  const later = (ms: number, fn: () => void) => { setTimeout(fn, ms) }
+  const weapon: (() => void)[] = [
+    /* 0 Thrown Rock */ () => { burst(0.14, 0.22, 'bandpass', 500 * rv(), 1400); thump(140, 70, 0.05, 0.12) },
+    /* 1 Slingshot */ () => { tone('sine', 420 * rv(), 1100, 0.05, 0.14); later(40, () => { tone('triangle', 260, 90, 0.1, 0.16); burst(0.05, 0.12, 'highpass', 3500, 2000) }) },
+    /* 2 Recurve Bow */ () => { tone('triangle', 170 * rv(), 120, 0.22, 0.26); tone('sawtooth', 340 * rv(), 220, 0.1, 0.07); burst(0.05, 0.2, 'bandpass', 1800, 900); later(60, () => burst(0.16, 0.1, 'bandpass', 2400, 700)) },
+    /* 3 Compound Bow */ () => { click(0.1, 1800); tone('triangle', 300 * rv(), 210, 0.12, 0.22); burst(0.04, 0.22, 'highpass', 3200, 1800); later(40, () => burst(0.12, 0.09, 'bandpass', 3000, 900)) },
+    /* 4 Pistol */ () => { crack(0.42, 0.06, 2600); thump(170, 55, 0.09, 0.32); tail(0.2, 0.1, 1500) },
+    /* 5 Revolver */ () => { crack(0.5, 0.08, 2000); thump(120, 40, 0.16, 0.42); tail(0.36, 0.14, 1100); later(210, () => click(0.07, 1500)) },
+    /* 6 Hunting Rifle */ () => { crack(0.6, 0.09, 3000, 900); thump(95, 32, 0.22, 0.5); tail(0.55, 0.18, 1400); later(240, () => click(0.12, 1800)); later(330, () => click(0.12, 1300)) },
+    /* 7 Shotgun */ () => { burst(0.26, 0.55, 'lowpass', 2800 * rv(), 220); crack(0.34, 0.05, 1800); thump(85, 28, 0.24, 0.5); tail(0.5, 0.16, 900); later(330, () => click(0.14, 900)); later(430, () => click(0.18, 700)) },
+    /* 8 SMG */ () => { crack(0.2, 0.035, 3400, 1500); thump(210, 90, 0.04, 0.16) },
+    /* 9 Assault Rifle */ () => { crack(0.3, 0.05, 2800, 1000); thump(140, 55, 0.07, 0.26); tail(0.12, 0.05, 1400) },
+    /* 10 Minigun */ () => { crack(0.14, 0.03, 2600, 1200); tone('square', 95 * rv(), 70, 0.045, 0.1) },
+    /* 11 M2 Browning */ () => { crack(0.5, 0.07, 1700, 600); thump(75, 28, 0.2, 0.55); tail(0.34, 0.16, 800) },
+    /* 12 Mk 19 */ () => { thump(125, 42, 0.14, 0.46); burst(0.1, 0.28, 'bandpass', 700 * rv(), 250); later(30, () => tone('sine', 300, 120, 0.07, 0.12)); tail(0.2, 0.08, 700) },
+  ]
   return {
     resume,
-    fire(kind: WeaponKind) { if (ctx && fire[kind]) fire[kind](); },
+    fire(kind: WeaponKind, w?: number) { if (!ctx) return; if (w !== undefined && weapon[w]) weapon[w](); else if (fire[kind]) fire[kind]() },
     hit() { tone('square', 300, 120, 0.05, 0.08); },
     kill() { tone('triangle', 520, 880, 0.08, 0.12); },
     boom() { burst(0.35, 0.5, 'lowpass', 1800, 80); tone('sine', 80, 30, 0.3, 0.4); },

@@ -25,7 +25,7 @@ export function benchRect(i: number): Rect {
 
 export function drainEvents() {
   for (const e of G.events) {
-    if (e.type === 'fire') Audio_.fire(e.kind);
+    if (e.type === 'fire') Audio_.fire(e.kind, e.w);
     else if (e.type === 'hit') { Audio_.hit(); burst(e.x, e.y, e.col, 3, 60); }
     else if (e.type === 'dmg') {
       R.floats.push({ x: e.x + rnd(-8, 8), y: e.y, v: e.v, crit: e.crit, kill: e.kill, blast: e.blast, flank: e.flank, t: 0 });

@@ -14,7 +14,7 @@ export interface Nade { x: number; y: number; tx: number; ty: number; t: number;
 export interface Status { cover: boolean; flank: 0 | 1 | 2 } // flank: 1 = auto-flank, 2 = manual (player-placed)
 export interface Banner { text: string; sub?: string; t: number; big?: boolean }
 export type GEvent =
-  | { type: 'fire'; kind: WeaponKind; x: number; y: number; col: string }
+  | { type: 'fire'; kind: WeaponKind; w: number; x: number; y: number; col: string }
   | { type: 'hit'; x: number; y: number; col: string }
   | { type: 'dmg'; x: number; y: number; v: number; crit: boolean; kill: boolean; blast?: boolean; flank?: boolean }
   | { type: 'kill'; x: number; y: number; kind: Enemy['kind']; gold: number }
@@ -184,7 +184,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
     G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
   }
-  G.events.push({ type: 'fire', kind: wd.kind, x: gp.x, y: gp.y, col: wd.col })
+  G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
 const alive = (i: number) => G.hp[i] > 0
 function hurt(i: number, dmg: number) {
