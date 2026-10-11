@@ -10,9 +10,9 @@
       // If the game fails to start on someone's device, show why instead of a blank page.
       window.__igOK = false
       function showErr(m) { var e = document.getElementById('err'); if (e) e.textContent += m + '\n' }
-      window.addEventListener('error', function (ev) { showErr('Error: ' + (ev.message || ev.error) + (ev.filename ? ' @' + ev.filename.slice(-30) + ':' + ev.lineno : '')) })
+      window.addEventListener('error', function (ev) { showErr('Error: ' + (ev.message || ev.error) + (ev.filename ? ' @' + ev.filename.slice(-30) + ':' + ev.lineno : '') + (ev.error && ev.error.stack ? '\n' + String(ev.error.stack).slice(0, 300) : '')) }, true)
       window.addEventListener('unhandledrejection', function (ev) { showErr('Rejection: ' + (ev.reason && ev.reason.message || ev.reason)) })
-      setTimeout(function () { if (!window.__igOK) showErr('Game did not start after 3s. ' + navigator.userAgent) }, 3000)
+      setTimeout(function () { if (!window.__igOK) showErr('Game did not start after 3s. stage=' + (window.__igStage || 'bundle-never-ran') + ' ready=' + document.readyState + ' ' + navigator.userAgent) }, 3000)
     </script>
   </head>
   <body>
