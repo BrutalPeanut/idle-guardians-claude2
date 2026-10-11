@@ -1,3 +1,4 @@
+import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft } from './sim'
 import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
@@ -100,7 +101,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   }
   const noMenu = (e: Event) => e.preventDefault()
   const vis = () => { if (document.hidden) save(); else accrueAway() }
-  const autosave = setInterval(() => { if (!document.hidden) save() }, 15000)
+  const autosave = setInterval(() => { if (!document.hidden) { save(); void submit() } }, 15000)
   cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move)
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.addEventListener('contextmenu', noMenu)
   document.addEventListener('visibilitychange', vis)
