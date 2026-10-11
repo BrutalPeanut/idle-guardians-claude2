@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <title>Idle Guardians</title>
+    <style>html,body{color:#cfe;background:#10181a;font:14px system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif}#boot{text-align:center;padding:24px}#err{white-space:pre-wrap;word-break:break-word;text-align:left;color:#ffb4a8;margin-top:12px;font:12px monospace}</style>
+    <script>
+      // If the game fails to start on someone's device, show why instead of a blank page.
+      window.__igOK = false
+      function showErr(m) { var e = document.getElementById('err'); if (e) e.textContent += m + '\n' }
+      window.addEventListener('error', function (ev) { showErr('Error: ' + (ev.message || ev.error) + (ev.filename ? ' @' + ev.filename.slice(-30) + ':' + ev.lineno : '') + (ev.error && ev.error.stack ? '\n' + String(ev.error.stack).slice(0, 300) : '')) }, true)
+      window.addEventListener('unhandledrejection', function (ev) { showErr('Rejection: ' + (ev.reason && ev.reason.message || ev.reason)) })
+      setTimeout(function () { if (!window.__igOK) showErr('Game did not start after 3s. stage=' + (window.__igStage || 'bundle-never-ran') + ' ready=' + document.readyState + ' ' + navigator.userAgent) }, 3000)
+    </script>
+    
+  <style></style></head>
+  <body>
+    <div id="root"><div id="boot">Loading Idle Guardians…<div id="err"></div></div></div>
+  <script>
+fetch('game.js?v=18697707').then(function(r){ showErr('game.js HTTP '+r.status+' '+r.headers.get('content-type')); return r.text() }).then(function(t){
+  showErr('game.js bytes='+t.length)
+  try { var s=document.createElement('script'); s.textContent=t; document.body.appendChild(s); showErr('executed; stage='+window.__igStage) } catch(e) { showErr('run threw: '+(e&&e.message)) }
+}).catch(function(e){ showErr('fetch failed: '+e) })
+</script></body>
+</html>
