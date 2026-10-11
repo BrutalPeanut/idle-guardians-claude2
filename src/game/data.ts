@@ -24,9 +24,9 @@ export const WEAPONS: Weapon[] = [
 export interface Guardian { n: string; breed: string; role: string; fur: string; shade: string; ear: string; off: [number, number]; look: 'rudy' | 'cooper' | 'plain'; hpMul: number; dmgMul: number }
 export const GUARDIANS: Guardian[] = [
   { n: 'Rudy',   breed: 'English Cream Golden', role: 'Leader',  fur: '#f8f0dc', shade: '#e6d5ae', ear: '#ecdcb4', off: [0, -10], look: 'rudy', hpMul: 1.3, dmgMul: 1.1 },
-  { n: 'Cooper', breed: 'Mutt',                 role: 'Support', fur: '#dc9248', shade: '#b86f31', ear: '#b86f31', off: [-34, 14], look: 'cooper', hpMul: 1.2, dmgMul: 1.1 },
-  { n: 'Bruno',  breed: 'Bulldog',              role: 'Tank',    fur: '#e9e4dc', shade: '#c3baa9', ear: '#b0743f', off: [34, 14], look: 'plain', hpMul: 0.9, dmgMul: 0.88 },
-  { n: 'Luna',   breed: 'Husky',                role: 'DPS',     fur: '#cfd6de', shade: '#9aa6b5', ear: '#4b5666', off: [0, 40], look: 'plain', hpMul: 0.7, dmgMul: 0.92 },
+  { n: 'Cooper', breed: 'Mutt',                 role: 'Support', fur: '#dc9248', shade: '#b86f31', ear: '#b86f31', off: [-42, 12], look: 'cooper', hpMul: 1.2, dmgMul: 1.1 },
+  { n: 'Bruno',  breed: 'Bulldog',              role: 'Tank',    fur: '#e9e4dc', shade: '#c3baa9', ear: '#b0743f', off: [42, 16], look: 'plain', hpMul: 0.9, dmgMul: 0.88 },
+  { n: 'Luna',   breed: 'Husky',                role: 'DPS',     fur: '#cfd6de', shade: '#9aa6b5', ear: '#4b5666', off: [0, 48], look: 'plain', hpMul: 0.7, dmgMul: 0.92 },
 ];
 export const unlockedGuardians = (stage: number) => Math.min(GUARDIANS.length, 2 + Math.floor(stage / 5));
 export const BIOMES = [
