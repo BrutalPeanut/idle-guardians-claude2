@@ -6,6 +6,8 @@ import { pointsEarned, RESPEC_GEMS, SKILLS } from './skills'
 import { rollItem, INV_MAX } from './gear'
 import type { Item, Stat } from './gear'
 import { dayKey, rollDaily, questDef } from './quests'
+import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, PASS_XP_GAIN, SPIN_SEGS, ACH_XP, seasonIndex, passReward, UNLOCK_STAGE } from './meta'
+import type { Reward } from './meta'
 import { clanPerk, clanHunt, clanLevel, clanById, weekKey, weeklyPool, MILESTONES, XP_PER_LEVEL } from './clan'
 import type { PlayerClan } from './clan'
 import type { Daily } from './quests'
@@ -84,6 +86,8 @@ interface State {
   owned: number[]; squad: number[]; coins: number
   /** Boss Raid: live run (null when not raiding) and the per-day attempt ledger + all-time best score. */
   clan: PlayerClan | null
+  /** Lifetime counters (achievements), claimed achievement ids, season pass progress, lucky spin ledger. */
+  life: Record<string, number>; achClaimed: string[]; pass: { s: number; xp: number; claimed: number }; spin: { day: string; free: number; ad: number }
   /** Auto-abilities: master switch plus per-ability switches (all on by default). nadeTaught = the player has thrown a grenade by hand. */
   auto: AutoCfg; autoT: number; nadeTaught: boolean
   raid: RaidState | null; raidInfo: { day: string; used: number; extra: number; best: number }
@@ -100,7 +104,7 @@ export const G: State = {
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
-  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
+  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, life: {}, achClaimed: [], pass: { s: 0, xp: 0, claimed: 0 }, spin: { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
  * Idle income. Tuned against measured active play (~40 kills/min): idle pays IDLE.factor of active income, and the stash
@@ -119,6 +123,7 @@ export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max
 /** Roll a fresh set when the local date changes. */
 export function ensureDaily() { const d = dayKey(); if (G.daily.day !== d) G.daily = rollDaily(d) }
 export function track(id: string, n = 1) {
+  G.life[id] = (G.life[id] ?? 0) + n
   ensureDaily(); const q = G.daily.q.find(x => x.id === id); if (!q) return
   const tgt = questDef(id).target; q.prog = Math.min(tgt, q.prog + n)
 }
@@ -126,7 +131,7 @@ export const questReady = () => G.daily.q.filter(q => !q.claimed && q.prog >= qu
 export function claimQuest(i: number, mult = 1) {
   ensureDaily(); const q = G.daily.q[i], d = q && questDef(q.id)
   if (!q || q.claimed || q.prog < d.target) return false
-  q.claimed = true; const gems = d.gems * mult; G.gems += gems; const gold = Math.ceil(idleRate(G.stage) * 8) * mult; G.gold += gold
+  q.claimed = true; addPassXp(PASS_XP_GAIN.quest); const gems = d.gems * mult; G.gems += gems; const gold = Math.ceil(idleRate(G.stage) * 8) * mult; G.gold += gold
   G.events.push({ type: 'quest_claim', gems, gold }); save(); return true
 }
 export const REROLL_COST = 5
@@ -152,7 +157,7 @@ export function claimLogin() {
   if (r.gems) G.gems += r.gems
   if (r.goldMin) G.gold += Math.ceil(idleRate(Math.max(G.stage, 3)) * r.goldMin)
   if (r.chest !== undefined) addChest(r.chest)
-  G.events.push({ type: 'login_claim', day, label: r.label }); save(); return true
+  addPassXp(PASS_XP_GAIN.login); G.events.push({ type: 'login_claim', day, label: r.label }); save(); return true
 }
 
 // ---- weekly modifier ----
@@ -218,13 +223,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -534,7 +539,7 @@ export function update(dtReal: number) {
   if (!G.raid && G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
-    const cleared = G.stage; track('stages')
+    const cleared = G.stage; track('stages'); addPassXp(isBoss(cleared) ? PASS_XP_GAIN.boss : PASS_XP_GAIN.stage); if (isBoss(cleared)) track('bosses')
     if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0); G.coins += Math.round((4 + Math.floor(cleared / 5)) * (1 + cp('coins'))); clanContribute(12) } else clanContribute(3)
     G.stage++; G.best = Math.max(G.best, G.stage); startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
@@ -650,7 +655,7 @@ function endRaid() {
   G.coins += coins; if (chest >= 0) addChest(chest)
   const best = r.dmg > G.raidInfo.best; if (best) G.raidInfo.best = r.dmg
   r.result = { tier, dmg: r.dmg, coins, chest, best }; G.enemies.length = 0; G.shells.length = 0; G.ebullets.length = 0
-  clanContribute(Math.round(10 + 25 * Math.min(2, r.dmg / raidBase())), r.dmg)
+  track('raids'); addPassXp(PASS_XP_GAIN.raid); clanContribute(Math.round(10 + 25 * Math.min(2, r.dmg / raidBase())), r.dmg)
   G.events.push({ type: 'raid_end' }); save()
 }
 export function closeRaid() { G.raid = null; startStage() }
@@ -684,4 +689,30 @@ function autoAbilities() {
   if (A.panic && G.panicCd <= 0 && G.panicT <= 0 && alive(1) && n > 1 && G.hp[1] / G.mhp[1] > 0.7 && (live >= 6 || boss)) useAbility('panic')
   // hold the grenade back early so the hint can teach it; after that (or from stage 6) it throws itself at clumps of 3+
   if (A.nade && G.nadeCd <= 0 && (G.nadeTaught || G.stage > 5) && bestClump() >= 3) throwGrenade()
+}
+
+// ================= Meta: achievements, season pass, lucky spin, unlocks =================
+export function grant(r: Reward) { if (r.gems) G.gems += r.gems; if (r.coins) G.coins += r.coins; if (r.gold) G.gold += r.gold; if (r.chest !== undefined) addChest(r.chest) }
+export const unlocked = (id: string) => G.best >= (UNLOCK_STAGE[id] ?? 0)
+export const unlockStage = (id: string) => UNLOCK_STAGE[id] ?? 0
+export function statValue(stat: string) { return stat === 'best' ? G.best : stat === 'dogs' ? G.owned.length + 2 : stat === 'clan' ? (G.clan ? 1 : 0) : (G.life[stat] ?? 0) }
+export const achDone = (a: typeof ACHIEVEMENTS[number]) => statValue(a.stat) >= a.target
+export const achReady = () => ACHIEVEMENTS.filter(a => achDone(a) && !G.achClaimed.includes(a.id)).length
+export function claimAch(id: string): boolean {
+  const a = ACHIEVEMENTS.find(x => x.id === id); if (!a || !achDone(a) || G.achClaimed.includes(id)) return false
+  G.achClaimed.push(id); G.gems += a.gems; addPassXp(ACH_XP); save(); return true
+}
+export function ensurePass() { const s = seasonIndex(); if (G.pass.s !== s) G.pass = { s, xp: 0, claimed: 0 } }
+export function addPassXp(n: number) { ensurePass(); G.pass.xp += n }
+export const passLevel = () => { ensurePass(); return Math.min(PASS_TIERS, Math.floor(G.pass.xp / PASS_XP)) }
+export const passReady = () => { const lv = passLevel(); let c = 0; for (let t = 1; t <= lv; t++) if (!(G.pass.claimed & (1 << t))) c++; return c }
+export function claimPassTier(t: number): boolean { if (t > passLevel() || (G.pass.claimed & (1 << t))) return false; G.pass.claimed |= 1 << t; grant(passReward(t)); save(); return true }
+export function spinsLeft() { const d = dayKey(); if (G.spin.day !== d) G.spin = { day: d, free: 0, ad: 0 }; return { free: G.spin.free < 1, ad: G.spin.ad < 1 } }
+/** Pick a segment (weighted), pay it out now, and return its index so the screen can animate to it. */
+export function doSpin(viaAd: boolean): number {
+  spinsLeft(); if (viaAd) G.spin.ad++; else G.spin.free++
+  let tot = 0; for (const s of SPIN_SEGS) tot += s.w
+  let x = Math.random() * tot, idx = 0; for (let i = 0; i < SPIN_SEGS.length; i++) { x -= SPIN_SEGS[i].w; if (x <= 0) { idx = i; break } }
+  const sg = SPIN_SEGS[idx]; grant(sg.r === 'gold' ? { gold: Math.ceil(killGold(G.stage) * (sg.label === 'Big Gold' ? 90 : 40)) } : sg.r)
+  track('spins'); addPassXp(PASS_XP_GAIN.spin); save(); return idx
 }
