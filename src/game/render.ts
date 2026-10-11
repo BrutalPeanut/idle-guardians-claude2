@@ -108,6 +108,7 @@ export function updateFx(dt: number) {
 }
 
 // ---------- drawing helpers (shared chibi recipe: big head, bold outline, 2-tone cel shade) ----------
+const mix2 = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
 function blob(ctx: Ctx, x: number, y: number, rx: number, ry: number, fill: string, shade: string | null) {
   ctx.fillStyle = fill; ctx.strokeStyle = OUT; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.283); ctx.fill(); ctx.stroke();
@@ -129,21 +130,89 @@ function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing:
   const look = tgt ? Math.sign(tgt.x - x) : 0
   if (g.look === 'rudy') drawRudy(ctx, g, x, y, t, look)
   else if (g.look === 'cooper') drawCooper(ctx, g, x, y, t, look)
-  else drawPlainDog(ctx, g, x, y, look)
+  else drawPlainDog(ctx, g, x, y, look, t)
   if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill() }
 }
 function collar(ctx: Ctx, x: number, y: number, col: string, tag: boolean) {
   ctx.fillStyle = col; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 8, y + 3, 16, 3.5, 1.5); ctx.fill(); ctx.stroke()
   if (tag) { ctx.fillStyle = '#f0c24a'; ctx.beginPath(); ctx.arc(x, y + 8, 1.9, 0, 6.283); ctx.fill(); ctx.stroke() }
 }
-export function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number) {
-  blob(ctx, x, y + 6, 9, 8, g.fur, g.shade)
-  blob(ctx, x - 6, y + 14, 3.5, 3, g.fur, g.shade); blob(ctx, x + 6, y + 14, 3.5, 3, g.fur, g.shade)
-  blob(ctx, x - 10, y - 8, 4.5, 8, g.ear, null); blob(ctx, x + 10, y - 8, 4.5, 8, g.ear, null)
-  blob(ctx, x, y - 4, 12, 11, g.fur, g.shade)
-  eyes(ctx, x, y - 5, 1, look)
-  ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.9, 0, 0, 6.283); ctx.fill()
-  collar(ctx, x, y, '#d63a3a', false)
+/** Support dogs: one shared chibi body with breed-specific ears, face markings, muzzle and tail so each of the ten reads as its own character. */
+export function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number, t = 0) {
+  const b = g.breed, wag = Math.sin(t * 9 + x) * 2.5
+  const dark = b === 'Black Lab', pale = (c: string) => mix2(c, '#ffffff', 0.45)
+  const stroke = (w = 1.2) => { ctx.strokeStyle = OUT; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round' }
+  // ---- tail ----
+  ctx.save(); stroke(4); ctx.beginPath()
+  if (b === 'Husky' || b === 'Shiba Inu') { ctx.moveTo(x + 7, y + 7); ctx.bezierCurveTo(x + 17, y + 5, x + 17 + wag * 0.3, y - 6, x + 9, y - 2) }      // curled over the back
+  else if (b === 'Beagle') { ctx.moveTo(x + 7, y + 8); ctx.quadraticCurveTo(x + 15, y + 5 + wag, x + 14, y - 5 + wag) }                                  // up like a flag
+  else if (b === 'Dachshund' || b === 'Dalmatian') { ctx.moveTo(x + 7, y + 9); ctx.quadraticCurveTo(x + 17, y + 9 + wag, x + 19, y + 3 + wag) }          // long saber
+  else if (b === 'Corgi') { ctx.moveTo(x + 7, y + 9); ctx.quadraticCurveTo(x + 10, y + 9, x + 9, y + 6) }                                                // stubby
+  else { ctx.moveTo(x + 7, y + 9); ctx.quadraticCurveTo(x + 14, y + 10 + wag, x + 14, y + 3 + wag) }
+  ctx.stroke(); ctx.strokeStyle = b === 'Corgi' ? g.fur : g.shade; ctx.lineWidth = 2.2; ctx.stroke()
+  if (b === 'Beagle') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(x + 14.2, y - 1 + wag); ctx.lineTo(x + 14, y - 5 + wag); ctx.stroke() } // white tip
+  ctx.restore()
+  // ---- body + legs ----
+  blob(ctx, x, y + 6, b === 'Dachshund' ? 12.5 : 9, b === 'Dachshund' ? 6.8 : 8, g.fur, g.shade)
+  if (b === 'Dalmatian') { ctx.fillStyle = '#2a2a2e'; for (const [dx, dy, r] of [[-4, 4, 1.6], [3, 7, 1.9], [5, 2, 1.2], [-1, 10, 1.3]]) { ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, 6.283); ctx.fill() } }
+  if (b === 'Husky' || b === 'Beagle' || b === 'Corgi' || b === 'Shiba Inu' || b === 'Bulldog') blob(ctx, x, y + 9.5, 4.2, 5, '#f7f1e6', null)           // white chest
+  const legCol = b === 'Beagle' || b === 'Husky' ? '#f7f1e6' : g.fur
+  blob(ctx, x - 6, y + 14, b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade); blob(ctx, x + 6, y + 14, b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade)
+  ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.9; for (const sx of [-1, 1]) for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 6 + k * 1.2, y + 14.4); ctx.lineTo(x + sx * 6 + k * 1.2, y + 16.2); ctx.stroke() } // toe lines
+  // ---- back ears (drop ears sit behind the head) ----
+  const earFloppy = b === 'Beagle' || b === 'Dalmatian' || b === 'Black Lab' || b === 'Dachshund'
+  if (earFloppy) {
+    const len = b === 'Dachshund' ? 17 : b === 'Beagle' ? 12 : 9
+    for (const sx of [-1, 1]) { ctx.fillStyle = g.ear; stroke(1.8); ctx.beginPath(); ctx.moveTo(x + sx * 7, y - 12); ctx.quadraticCurveTo(x + sx * 16, y - 10, x + sx * 14.5, y - 11 + len); ctx.quadraticCurveTo(x + sx * 9, y - 6 + len * 0.6, x + sx * 8, y - 3); ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(x + sx * 12.2, y - 4, 1.8, 4.6, sx * -0.2, 0, 6.283); ctx.fill() }
+  }
+  // ---- head ----
+  const wide = b === 'Bulldog' ? 13.2 : 12
+  blob(ctx, x, y - 4, wide, 11, g.fur, g.shade)
+  // erect / folded ears sit on top of the head
+  if (b === 'Husky' || b === 'Shiba Inu' || b === 'Corgi') {
+    const big = b === 'Corgi' ? 1.25 : 1, tipDark = b === 'Husky'
+    for (const sx of [-1, 1]) { ctx.fillStyle = tipDark ? g.ear : g.fur; stroke(1.8); ctx.beginPath(); ctx.moveTo(x + sx * 4, y - 12); ctx.lineTo(x + sx * 7.5 * big, y - 22 * (b === 'Shiba Inu' ? 0.88 : big * 0.93)); ctx.lineTo(x + sx * 12, y - 9); ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = b === 'Husky' ? '#e8b4b4' : '#f2a9a0'; ctx.beginPath(); ctx.moveTo(x + sx * 6, y - 12); ctx.lineTo(x + sx * 7.8 * big, y - 18 * (b === 'Shiba Inu' ? 0.9 : big * 0.93)); ctx.lineTo(x + sx * 10, y - 10.5); ctx.closePath(); ctx.fill() }
+  } else if (b === 'Bulldog') {
+    for (const sx of [-1, 1]) { ctx.fillStyle = g.ear; stroke(1.8); ctx.beginPath(); ctx.moveTo(x + sx * 5, y - 13); ctx.quadraticCurveTo(x + sx * 12, y - 18, x + sx * 14, y - 9); ctx.quadraticCurveTo(x + sx * 10, y - 9, x + sx * 5, y - 10); ctx.closePath(); ctx.fill(); ctx.stroke() }   // small rose ears
+  }
+  // ---- face markings ----
+  if (b === 'Husky') { ctx.save(); ctx.beginPath(); ctx.ellipse(x, y - 4, 12, 11, 0, 0, 6.283); ctx.clip(); ctx.fillStyle = g.ear; ctx.beginPath(); ctx.ellipse(x, y - 11, 13, 6.5, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x - 3, y - 4); ctx.lineTo(x - 7.5, y + 8); ctx.lineTo(x + 7.5, y + 8); ctx.lineTo(x + 3, y - 4); ctx.closePath(); ctx.fill(); ctx.restore() }  // dark cap, white face
+  if (b === 'Beagle') { ctx.save(); ctx.beginPath(); ctx.ellipse(x, y - 4, 12, 11, 0, 0, 6.283); ctx.clip(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 2, y - 15); ctx.lineTo(x + 2, y - 15); ctx.lineTo(x + 4.5, y + 8); ctx.lineTo(x - 4.5, y + 8); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#9a6a38'; ctx.beginPath(); ctx.ellipse(x, y - 10.5, 8, 4, 0, 0, 6.283); ctx.fill(); ctx.restore() }
+  if (b === 'Corgi') { ctx.save(); ctx.beginPath(); ctx.ellipse(x, y - 4, 12, 11, 0, 0, 6.283); ctx.clip(); ctx.fillStyle = '#fff6e6'; ctx.beginPath(); ctx.moveTo(x - 1.5, y - 13); ctx.lineTo(x + 1.5, y - 13); ctx.lineTo(x + 8, y + 8); ctx.lineTo(x - 8, y + 8); ctx.closePath(); ctx.fill(); ctx.restore() }
+  if (b === 'Shiba Inu') { ctx.save(); ctx.beginPath(); ctx.ellipse(x, y - 4, 12, 11, 0, 0, 6.283); ctx.clip(); ctx.fillStyle = '#fff3dc'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 7, y + 2, 5.5, 5, 0, 0, 6.283); ctx.fill() } ctx.beginPath(); ctx.ellipse(x, y + 3, 5, 4, 0, 0, 6.283); ctx.fill(); ctx.restore() }   // cream cheeks
+  if (b === 'Dalmatian') { ctx.fillStyle = '#2a2a2e'; for (const [dx, dy, r] of [[-7, -7, 2.2], [6.5, -9, 1.7], [8, -2, 1.3]]) { ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, 6.283); ctx.fill() } }
+  if (b === 'Bulldog') { ctx.strokeStyle = g.shade; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 2, y - 12); ctx.quadraticCurveTo(x + sx * 3.4, y - 10.5, x + sx * 2.4, y - 9); ctx.stroke() } ctx.beginPath(); ctx.moveTo(x - 6.2, y - 11); ctx.quadraticCurveTo(x, y - 8.6, x + 6.2, y - 11); ctx.stroke() }   // forehead wrinkles
+  // ---- muzzle ----
+  const mz = b === 'Bulldog' ? { rx: 8.4, ry: 5.2, y: 2.4 } : b === 'Dachshund' ? { rx: 6.2, ry: 5.4, y: 3.2 } : { rx: 6.6, ry: 4.6, y: 2.6 }
+  const mzCol = dark ? '#57525f' : b === 'Husky' || b === 'Beagle' ? '#fffaf0' : b === 'Dalmatian' ? '#fbf9f5' : b === 'Shiba Inu' ? '#fff3dc' : b === 'Corgi' ? '#fff6e6' : mix2(g.fur, '#ffffff', 0.55)
+  blob(ctx, x, y + mz.y, mz.rx, mz.ry, mzCol, null)
+  ctx.fillStyle = '#1a1210'; ctx.beginPath(); ctx.ellipse(x, y + mz.y - 2.1, b === 'Bulldog' ? 3.4 : 2.7, 1.9, 0, 0, 6.283); ctx.fill()                              // nose
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - 0.9, y + mz.y - 2.8, 0.9, 0.5, 0, 0, 6.283); ctx.fill()                              // nose shine
+  stroke(1.1); ctx.beginPath(); ctx.moveTo(x, y + mz.y - 0.4); ctx.lineTo(x, y + mz.y + 1.4); ctx.moveTo(x - 3, y + mz.y + 2.6); ctx.quadraticCurveTo(x - 1.5, y + mz.y + 3.4, x, y + mz.y + 1.4); ctx.quadraticCurveTo(x + 1.5, y + mz.y + 3.4, x + 3, y + mz.y + 2.6); ctx.stroke()  // mouth
+  if (b === 'Bulldog') { ctx.fillStyle = '#fff'; stroke(0.9); for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 3.4, y + 4.4); ctx.lineTo(x + sx * 4.6, y + 1.8); ctx.lineTo(x + sx * 5.6, y + 4.6); ctx.closePath(); ctx.fill(); ctx.stroke() } }   // underbite tusks
+  else if (b === 'Husky' || b === 'Corgi' || b === 'Shiba Inu' || b === 'Black Lab') { ctx.fillStyle = '#ff8fa8'; stroke(1); ctx.beginPath(); ctx.ellipse(x + 0.6, y + mz.y + 4.7, 1.8, 2.4, 0, 0, Math.PI); ctx.fill(); ctx.stroke() }          // tongue
+  ctx.fillStyle = 'rgba(255,130,120,.45)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 8.8, y - 0.8, 2.4, 1.6, 0, 0, 6.283); ctx.fill() }       // cheeks
+  // ---- eyes ----
+  const blue = b === 'Husky', eyeY = y - 5.4
+  for (const sx of [-1, 1]) {
+    const ex = x + sx * 4.8
+    ctx.fillStyle = '#fff'; stroke(1.2); ctx.beginPath(); ctx.ellipse(ex, eyeY, 3.3, 3.8, 0, 0, 6.283); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = blue ? '#5ab4ec' : '#3a2214'; ctx.beginPath(); ctx.arc(ex + look * 0.8, eyeY + 0.5, 2.3, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#120a06'; ctx.beginPath(); ctx.arc(ex + look * 0.8, eyeY + 0.5, 1.1, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + look * 0.8 + 0.8, eyeY - 0.6, 0.85, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = b === 'Dalmatian' || b === 'Husky' ? OUT : g.shade; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + sx * 2, eyeY - 4.8 - (sx < 0 ? 0.4 : 0)); ctx.lineTo(x + sx * 7.6, eyeY - 5 + (sx < 0 ? 0.4 : 0)); ctx.stroke()  // brows
+  }
+  if (b === 'Shiba Inu') { ctx.fillStyle = '#fff3dc'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 4.8, eyeY - 6, 1.1, 0, 6.283); ctx.fill() } }       // shiba eyebrow dots
+  // ---- tuft + shine ----
+  ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.ellipse(x - 5.5, y - 11, 3.2, 1.4, -0.5, 0, 6.283); ctx.fill()
+  // ---- collar + role accent ----
+  const col = g.role === 'Medic' ? '#ffffff' : g.role === 'Tank' ? '#5a8a3e' : g.role === 'Striker' ? '#c0392b' : '#d63a3a'
+  collar(ctx, x, y, col, true)
+  if (g.role === 'Medic') { ctx.fillStyle = '#e03a3a'; ctx.fillRect(x - 1, y + 7.2, 2, 4); ctx.fillRect(x - 2, y + 8.2, 4, 2) }          // red cross
+  if (g.role === 'Tank') { ctx.fillStyle = '#6a9a3e'; stroke(1.4); ctx.beginPath(); ctx.moveTo(x - 9, y - 11.5); ctx.bezierCurveTo(x - 9, y - 20, x + 9, y - 20, x + 9, y - 11.5); ctx.quadraticCurveTo(x, y - 9.5, x - 9, y - 11.5); ctx.closePath(); ctx.fill(); ctx.stroke() }    // helmet
+  void pale
 }
 /** Small fur spike: a triangle poking out of an outline at (x,y) pointing along `ang`. Used for scruffiness. */
 /** Green army-style helmet sitting on top of a head centred at (x,y). strap = chin strap fastened; otherwise loose straps dangle. */
@@ -249,12 +318,28 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
     blob(ctx, x, y + 5 * s, 9 * s, 7 * s, fl ? '#fff' : e.kind === 'mortar' ? '#7a6a9a' : '#8fa3b8', fl ? null : e.kind === 'mortar' ? '#574a76' : '#6a7d92')
     ctx.fillStyle = fl ? '#fff' : '#a9bbcf'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 11 * s, y - 13 * s, 22 * s, 17 * s, 5 * s); ctx.fill(); ctx.stroke()
     ctx.fillStyle = hot ? '#fff36a' : '#ff5a4a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s, y - 6 * s, 3 * s, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (!fl) {
+      ctx.fillStyle = e.kind === 'mortar' ? '#5a4a7a' : '#5b6b7c'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(x - 11.5 * s, y - 12 * s); ctx.quadraticCurveTo(x, y - 21 * s, x + 11.5 * s, y - 12 * s); ctx.lineTo(x + 9 * s, y - 10 * s); ctx.lineTo(x - 9 * s, y - 10 * s); ctx.closePath(); ctx.fill(); ctx.stroke()   // helmet
+      ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.ellipse(x - 4 * s, y - 16 * s, 3.4 * s, 1.1 * s, -0.3, 0, 6.283); ctx.fill()
+      ctx.fillStyle = '#7a8a9a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 9 * s, y + 0 * s, 0.9 * s, 0, 6.283); ctx.fill() }                                          // rivets
+      ctx.fillStyle = '#4a5663'; ctx.beginPath(); ctx.roundRect(x - 6 * s, y - 0.5 * s, 12 * s, 3 * s, 1 * s); ctx.fill()                                                                // mouth guard
+      ctx.fillStyle = '#c9a63a'; ctx.strokeStyle = OUT; ctx.lineWidth = 0.9; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.roundRect(x + k * 3.6 * s - 1.2 * s, y + 6 * s, 2.4 * s, 4 * s, 0.6 * s); ctx.fill(); ctx.stroke() }   // ammo belt
+    }
     if (e.kind === 'gunner') { ctx.fillStyle = '#3a414b'; ctx.beginPath(); ctx.roundRect(x - 3, y + 2 * s, 6, 14 * s, 2); ctx.fill(); ctx.stroke(); if (hot) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x, y + 16 * s, 3.5, 0, 6.283); ctx.fill() } }
   } else if (e.kind === 'robot') {
     blob(ctx, x, y + 5 * s, 9 * s, 7 * s, fl ? '#fff' : '#8fa3b8', fl ? null : '#6a7d92');
     ctx.fillStyle = fl ? '#fff' : '#a9bbcf'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 11 * s, y - 14 * s, 22 * s, 18 * s, 5 * s); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ff5a4a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s, y - 6 * s, 3 * s, 0, 6.283); ctx.fill(); ctx.stroke(); }
     ctx.beginPath(); ctx.moveTo(x, y - 14 * s); ctx.lineTo(x, y - 19 * s); ctx.stroke(); ctx.fillStyle = '#ffd04a'; ctx.beginPath(); ctx.arc(x, y - 20 * s, 2 * s, 0, 6.283); ctx.fill(); ctx.stroke();
+    if (!fl) {
+      ctx.fillStyle = 'rgba(255,208,74,' + (0.25 + 0.2 * Math.sin(t * 9 + e.wob)) + ')'; ctx.beginPath(); ctx.arc(x, y - 20 * s, 4.6 * s, 0, 6.283); ctx.fill()                                                // antenna glow
+      ctx.fillStyle = '#ffe0dc'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s - 0.8, y - 7 * s, 1 * s, 0, 6.283); ctx.fill() }                                                    // eye glint
+      ctx.fillStyle = '#4a5663'; ctx.beginPath(); ctx.roundRect(x - 5 * s, y - 1.2 * s, 10 * s, 3.4 * s, 1 * s); ctx.fill(); ctx.strokeStyle = '#2a323b'; ctx.lineWidth = 0.9; for (let k = -3; k <= 3; k++) { ctx.beginPath(); ctx.moveTo(x + k * 1.3 * s, y - 1 * s); ctx.lineTo(x + k * 1.3 * s, y + 1.8 * s); ctx.stroke() }   // grille mouth
+      ctx.fillStyle = '#7a8a9a'; for (const [rx, ry] of [[-9, -12], [9, -12], [-9, 2], [9, 2]]) { ctx.beginPath(); ctx.arc(x + rx * s, y + ry * s, 0.9 * s, 0, 6.283); ctx.fill() }                          // rivets
+      ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 11 * s, y - 9 * s); ctx.lineTo(x + 11 * s, y - 9 * s); ctx.stroke()                                         // panel seam
+      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.ellipse(x - 5 * s, y - 12 * s, 3.6 * s, 1.1 * s, -0.2, 0, 6.283); ctx.fill()                                                         // metal sheen
+      ctx.fillStyle = '#5b6b7c'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.6; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.roundRect(x + sx * 12.4 * s - 2 * s, y - 3 * s, 4 * s, 8 * s, 1.6 * s); ctx.fill(); ctx.stroke() }       // shoulder pistons
+    }
   } else {
     const skin = e.kind === 'boss' ? '#8f6bbf' : '#8ccf6e', sh = e.kind === 'boss' ? '#6f4f9a' : '#64a84c';
     blob(ctx, x, y + 5 * s, 8 * s, 7 * s, fl ? '#fff' : '#5a6f9a', null);
@@ -265,6 +350,22 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
     ctx.beginPath(); ctx.arc(x + 4.5 * s, y - 5 * s, 2.6 * s, 0, 6.283); ctx.fill(); ctx.stroke();
     ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(x - 4 * s, y - 4.5 * s, 1.4 * s, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(x + 4.5 * s, y - 4.5 * s, 1.2 * s, 0, 6.283); ctx.fill();
     ctx.beginPath(); ctx.moveTo(x - 4 * s, y + 1 * s); ctx.lineTo(x + 4 * s, y + 1.5 * s); ctx.stroke();
+    if (!fl) {
+      const bossK = e.kind === 'boss'
+      ctx.fillStyle = '#e8e2c0'; for (const k of [-2.6, -0.9, 0.9, 2.6]) { ctx.beginPath(); ctx.moveTo(x + (k - 0.7) * s, y + 1.2 * s); ctx.lineTo(x + k * s, y + 2.8 * s); ctx.lineTo(x + (k + 0.7) * s, y + 1.4 * s); ctx.fill() }   // jagged teeth
+      ctx.strokeStyle = '#b02a2a'; ctx.lineWidth = 0.8; for (const [ex, ey] of [[-4, -5], [4.5, -5]]) for (const a of [0.6, 2.2, 3.9]) { ctx.beginPath(); ctx.moveTo(x + ex * s + Math.cos(a) * 1.5 * s, y + ey * s + Math.sin(a) * 1.5 * s); ctx.lineTo(x + ex * s + Math.cos(a) * 3 * s, y + ey * s + Math.sin(a) * 3 * s); ctx.stroke() }   // bloodshot veins
+      ctx.strokeStyle = sh; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 9 * s, y - 9 * s); ctx.lineTo(x - 6 * s, y - 7 * s); ctx.moveTo(x - 8 * s, y - 7 * s); ctx.lineTo(x - 7 * s, y - 9.2 * s); ctx.stroke()                     // stitched scar
+      ctx.fillStyle = bossK ? '#3a2250' : '#3d5a2a'; for (const hx of [-5, -1.5, 2, 5.5]) { ctx.beginPath(); ctx.moveTo(x + (hx - 1.3) * s, y - 13 * s); ctx.lineTo(x + (hx + 0.3) * s, y - 17.4 * s + Math.sin(t * 6 + hx) * 0.6); ctx.lineTo(x + (hx + 1.6) * s, y - 13 * s); ctx.fill() }          // wispy hair tufts
+      ctx.fillStyle = '#44557a'; ctx.beginPath(); ctx.moveTo(x - 8 * s, y + 9 * s); for (let k = 0; k <= 4; k++) ctx.lineTo(x - 8 * s + k * 4 * s, y + (k % 2 ? 12.4 : 10.4) * s); ctx.lineTo(x + 8 * s, y + 9 * s); ctx.closePath(); ctx.fill()               // torn shirt hem
+      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 3 * s, y + 4 * s); ctx.lineTo(x - 1 * s, y + 7 * s); ctx.moveTo(x + 3 * s, y + 5 * s); ctx.lineTo(x + 2 * s, y + 8.5 * s); ctx.stroke()                                      // rips
+      ctx.fillStyle = 'rgba(160,30,30,.55)'; ctx.beginPath(); ctx.ellipse(x + 5 * s, y + 7 * s, 2 * s, 1.4 * s, 0.4, 0, 6.283); ctx.fill()                                                                                     // stain
+      if (bossK) {
+        ctx.fillStyle = '#d9cfa0'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.6
+        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 6 * s, y - 12 * s); ctx.quadraticCurveTo(x + sx * 12 * s, y - 15 * s, x + sx * 11 * s, y - 22 * s); ctx.quadraticCurveTo(x + sx * 8 * s, y - 16 * s, x + sx * 3.5 * s, y - 13 * s); ctx.closePath(); ctx.fill(); ctx.stroke() }             // horns
+        ctx.fillStyle = 'rgba(255,60,60,' + (0.45 + 0.25 * Math.sin(t * 8)) + ')'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + (sx < 0 ? -4 : 4.5) * s, y - 5 * s, 4.6 * s, 0, 6.283); ctx.fill() }   // glowing eyes
+        ctx.fillStyle = '#c9a63a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 6 * s, y - 13.4 * s); for (let k = 0; k < 4; k++) { ctx.lineTo(x + (-6 + k * 4 + 2) * s, y - 18.4 * s); ctx.lineTo(x + (-6 + (k + 1) * 4) * s, y - 13.4 * s) } ctx.closePath(); ctx.fill(); ctx.stroke()  // crown
+      }
+    }
   }
   if (e.hp < e.max || e.kind === 'boss') {
     const bw = e.r * 2.2; ctx.fillStyle = OUT; ctx.fillRect(x - bw / 2 - 1, y - e.r - 15, bw + 2, 5);

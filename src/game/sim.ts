@@ -337,7 +337,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * (1 + resolve()) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUN_MUL * (1 + resolve()) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -377,6 +377,9 @@ export function toggleHold(): 'on' | 'off' | 'locked' {
 
 /** Active ability: lob a grenade at the densest clump of enemies (nearest to the pack wins ties). Arcs over cover. */
 export const NADE = { cd: 12, r: 64, dur: 0.75 }
+/** Grenade hit as a multiple of a same-stage enemy's HP, and the global gun damage multiplier. Tuned so guns do ~70% of damage and the grenade is a strong assist, not the main weapon. */
+export const NADE_DMG = 0.5
+export const GUN_MUL = 3
 /** Size of the biggest bunch of enemies a grenade would catch. */
 export function bestClump() {
   const live = G.enemies.filter(e => e.hp > 0); let bc = 0
@@ -395,7 +398,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 * starMul() * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * NADE_DMG * starMul() * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
   G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
