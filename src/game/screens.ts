@@ -61,6 +61,7 @@ export function drawStats(ctx: Ctx) {
 registerTile({ id: 'quests', label: 'Daily Quests', sub: () => questReady() ? questReady() + ' ready to claim' : '3 objectives', icon: 'gem', col: '#6fd6ff', badge: () => questReady() > 0 })
 registerTile({ id: 'stats', label: 'Damage Stats', sub: () => 'Who is carrying?', icon: 'sword', col: '#ff6a5a' })
 registerTile({ id: 'rebirth', label: 'Rebirth', sub: () => 'Stardust ' + G.stardust, icon: 'star', col: '#c9a6ff' })
+registerTile({ id: 'tour', label: 'Quick Tour', sub: () => 'One-minute walkthrough', icon: 'plus', col: '#52d273' })
 registerTile({ id: 'help', label: 'How to Play', sub: () => 'Rules and tips', icon: 'shield', col: '#5ab8ff' })
 
 export function drawScreen(ctx: Ctx, t: number) {
