@@ -3,6 +3,7 @@ import type { Guardian } from './data'
 import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons } from './sim'
 import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
+import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
 interface Floater { x: number; y: number; v: number | string; crit?: boolean; kill?: boolean; blast?: boolean; gold?: boolean; hurt?: boolean; big?: boolean; t: number }
@@ -87,6 +88,18 @@ function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing:
   ctx.fillStyle = '#d63a3a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 8, y + 3, 16, 3.5, 1.5); ctx.fill(); ctx.stroke();
   if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill(); }
 }
+/** Weapon held in both paws across the body, aimed at the current target, with recoil kick on fire. */
+function drawHeld(ctx: Ctx, lvl: number, gx: number, gy: number, tgt: Enemy | undefined, firing: boolean, t: number, g: Guardian) {
+  const bob = Math.sin(t * 6 + gx) * 1.2, cy = gy + 7 + bob
+  const dx = tgt ? tgt.x - gx : 1, dy = tgt ? tgt.y - cy : 0, flip = dx < 0
+  const ang = Math.max(-1, Math.min(1, Math.atan2(dy, Math.abs(dx))))
+  ctx.save(); ctx.translate(gx + (flip ? -3 : 3), cy); ctx.scale(flip ? -1 : 1, 1); ctx.rotate(ang)
+  ctx.translate(firing ? 3 : 7, 0)
+  drawWeaponIcon(ctx, lvl, 0, 0, 0.66)
+  for (const px of [-5, 5]) { ctx.fillStyle = g.fur; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, 2.6, 3.2, 0, 6.283); ctx.fill(); ctx.stroke() }
+  ctx.restore()
+}
+
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
   const s = e.r / 11, wob = Math.sin(t * 7 + e.wob) * 1.5, x = e.x, y = e.y + wob;
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 11 * s, 10 * s, 3.5 * s, 0, 0, 6.283); ctx.fill();
@@ -188,7 +201,7 @@ export function render(ctx: Ctx, t: number) {
   const ents: { y: number; d: () => void }[] = [];
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
-  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); if (ws[i] !== undefined) { ctx.fillStyle = WEAPONS[ws[i]].col; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(gp.x + 6, gp.y + 5, 10, 5, 2); ctx.fill(); ctx.stroke(); } } }); }
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]) } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
   for (const p of R.parts) {
@@ -274,8 +287,8 @@ function drawCard(ctx: Ctx, x: number, y: number, w: number, h: number, lvl: num
   ctx.fillStyle = g; rr(ctx, 0, 0, w, h, 11); ctx.fill()
   ctx.fillStyle = 'rgba(255,255,255,.13)'; rr(ctx, 2, 2, w - 4, h * 0.42, 9); ctx.fill()
   ctx.strokeStyle = armedBy !== undefined ? 'rgba(255,226,120,.95)' : 'rgba(255,255,255,.28)'; ctx.lineWidth = armedBy !== undefined ? 2 : 1; rr(ctx, 0.5, 0.5, w - 1, h - 1, 11); ctx.stroke()
-  // weapon glyph
-  ctx.fillStyle = wd.col; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.2; rr(ctx, w / 2 - 17, 7, 34, 12, 4); ctx.fill(); ctx.stroke(); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(w / 2 - 15, 11, 9, 3.5)
+  ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(w / 2, 20, 22, 3, 0, 0, 6.283); ctx.fill()
+  drawWeaponIcon(ctx, lvl, w / 2, 13.5, 0.82)
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 9.5px system-ui,sans-serif'
   ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
   ctx.fillText(wd.n.length > 15 ? 'Mk 19 Launcher' : wd.n, w / 2, 29); ctx.fillStyle = '#fff2c2'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText('Lv ' + (lvl + 1), w / 2, 41)
