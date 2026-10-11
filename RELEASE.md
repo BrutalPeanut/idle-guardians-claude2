@@ -6,6 +6,14 @@
 - `src/game/ads.ts` is still a MOCK (fake 3 s TEST AD). A browser game cannot run AdMob. To ship real ads: wrap the build with Capacitor (iOS + Android), add an AdMob rewarded plugin, replace `startMockAd` with the SDK call, and call `finishAd()` from its reward callback. Do not grant a reward if the ad fails to load.
 - `purchase('no_ads')` is a client-side flag in localStorage. Real billing needs Play Billing / StoreKit (or RevenueCat) with receipt validation.
 
+## Testing without risking an AdMob ban
+- Real ad units are only ever used by a build made with `VITE_ADS_LIVE=1`. Every other build (dev, web, public site, artifact, and any phone build you test with) is forced onto Google's official sample ad units and `isTesting: true`. Test ads are Google's own and cannot get the account banned.
+- Real unit IDs go in `ADMOB_LIVE` in `src/game/config.ts`. If they're empty, even a live build falls back to test units.
+- On the web the game uses the fake "TEST AD" screen and never talks to an ad network.
+- Before shipping, also add your phone's test-device ID to `ADMOB_TEST_DEVICES` (the Android log prints it the first time an ad loads), so even your release build shows test ads on your own devices.
+- Never tap real ads on your own phone, and never test with your live unit on a non-test build.
+- The native path (Capacitor plugin calls) is covered by a mocked test only; it has not run against the real AdMob plugin yet.
+
 ## Must do before launch
 1. AdMob account, app IDs and rewarded ad unit IDs; Capacitor wrapper; test on real devices with test ads first.
 2. Privacy policy URL (required by both stores and AdMob), including the leaderboard (player id + chosen name) and ad data.

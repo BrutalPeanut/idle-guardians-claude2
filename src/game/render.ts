@@ -833,6 +833,7 @@ export function drawAd(ctx: Ctx, t: number) {
   R.btns = {}
   ctx.fillStyle = 'rgba(2,4,6,.94)'; ctx.fillRect(0, 0, W, H)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  if (a.native) { ctx.fillStyle = '#c9d8d0'; ctx.font = '400 16px ' + FONT; ctx.fillText('Loading ad...', W / 2, H / 2); return }
   ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('TEST AD  -  no real ad network connected', W / 2, 40)
   const g = ctx.createLinearGradient(40, 120, 320, 400); g.addColorStop(0, '#3a2f66'); g.addColorStop(1, '#1d6a7a')
   ctx.fillStyle = g; rr(ctx, 40, 120, W - 80, 280, 20); ctx.fill()
