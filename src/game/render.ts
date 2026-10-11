@@ -114,22 +114,35 @@ function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number)
   ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.9, 0, 0, 6.283); ctx.fill()
   collar(ctx, x, y, '#d63a3a', false)
 }
-/** Rudy: English cream golden. Near-white fluffy coat, long floppy ears, brown nose, big open-mouth smile, dark collar with tag. */
+/** Rudy: cute golden retriever. Warm cream-gold coat, darker golden floppy ears, big sparkly eyes, rosy cheeks, feathered tail and chest, tongue out. */
 function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
   const wag = Math.sin(t * 9 + x) * 3
-  blob(ctx, x + 11 + wag * 0.4, y + 5 + wag * 0.2, 7, 4.6, g.fur, g.shade)                          // plume tail
+  blob(ctx, x + 12 + wag * 0.4, y + 3 + wag * 0.3, 7.5, 4.4, g.shade, g.ear)                         // feathered tail plume
   blob(ctx, x, y + 6, 10.5, 8.8, g.fur, g.shade)                                                    // body
-  for (const dx of [-6, -2, 2, 6]) blob(ctx, x + dx, y + 10, 3.7, 3.2, g.fur, null)                 // chest feathering
-  blob(ctx, x - 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade) // fluffy paws
-  blob(ctx, x - 11.5, y - 1, 4.8, 9.6, g.ear, g.shade); blob(ctx, x + 11.5, y - 1, 4.8, 9.6, g.ear, g.shade)       // long floppy ears
-  blob(ctx, x, y - 4, 12.6, 11.6, g.fur, g.shade)                                                   // head
-  blob(ctx, x, y + 0.8, 7, 4.8, '#fdf8ea', null)                                                    // light muzzle
-  eyes(ctx, x, y - 6.5, 1, look)
-  ctx.fillStyle = '#6a3f2e'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.ellipse(x, y - 1.2, 3.3, 2.3, 0, 0, 6.283); ctx.fill(); ctx.stroke() // brown nose
-  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.ellipse(x - 1, y - 2, 1, 0.6, 0, 0, 6.283); ctx.fill()
-  ctx.fillStyle = '#7a2d3a'; ctx.beginPath(); ctx.ellipse(x, y + 2.4, 4.6, 3.4, 0, 0, Math.PI); ctx.fill(); ctx.stroke() // open mouth
-  ctx.fillStyle = '#ff90a8'; ctx.beginPath(); ctx.ellipse(x + 0.4, y + 4.8, 2.6, 2.2, 0, 0, Math.PI); ctx.fill()           // tongue
-  collar(ctx, x, y + 1, '#3a3f46', true)
+  blob(ctx, x, y + 9.5, 7, 5.2, '#fbeccb', null)                                                    // fluffy chest ruff
+  for (const dx of [-5, 0, 5]) blob(ctx, x + dx, y + 12, 2.6, 2.2, '#fbeccb', null)                 // feathering tufts
+  blob(ctx, x - 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade) // paws
+  for (const sx of [-1, 1]) {                                                                       // soft droopy golden ears
+    ctx.fillStyle = g.ear; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
+    ctx.beginPath(); ctx.moveTo(x + sx * 8, y - 12); ctx.quadraticCurveTo(x + sx * 18, y - 11, x + sx * 15.5, y + 3); ctx.quadraticCurveTo(x + sx * 12, y + 5, x + sx * 9.5, y - 1); ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
+  blob(ctx, x, y - 4, 13.4, 12, g.fur, g.shade)                                                     // big round head
+  for (const dx of [-5, 0, 5]) { ctx.fillStyle = '#f9e6b8'; ctx.beginPath(); ctx.ellipse(x + dx, y - 15, 3.4, 2.4, 0, Math.PI, 0); ctx.fill() } // fluffy forehead tufts
+  blob(ctx, x, y + 1.6, 6.8, 4.8, '#fdf3da', null)                                                  // light muzzle
+  ctx.fillStyle = 'rgba(255,140,120,.45)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9, y - 0.5, 2.8, 1.8, 0, 0, 6.283); ctx.fill() } // rosy cheeks
+  for (const sx of [-1, 1]) {                                                                       // big shiny eyes
+    const ex = x + sx * 5.2, ey = y - 5.8
+    ctx.fillStyle = '#2a1608'; ctx.beginPath(); ctx.ellipse(ex, ey, 3.1, 3.7, 0, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.ellipse(ex + look * 0.5, ey + 1.3, 2.2, 1.8, 0, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + look * 0.4 + 0.9, ey - 1.2, 1.25, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(ex - 0.9 + look * 0.4, ey + 1.6, 0.6, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = g.shade; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(ex - 2.6, ey - 5.4); ctx.quadraticCurveTo(ex, ey - 6.6 - (sx < 0 ? 0 : 0.6), ex + 2.6, ey - 5.2); ctx.stroke() // happy brows
+  }
+  ctx.fillStyle = '#3a2418'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.ellipse(x, y - 0.6, 3, 2.2, 0, 0, 6.283); ctx.fill(); ctx.stroke() // nose
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - 1, y - 1.4, 0.9, 0.55, 0, 0, 6.283); ctx.fill()
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y + 1.4); ctx.lineTo(x, y + 3); ctx.moveTo(x - 4.2, y + 2.2); ctx.quadraticCurveTo(x - 2, y + 5, x, y + 3); ctx.quadraticCurveTo(x + 2, y + 5, x + 4.2, y + 2.2); ctx.stroke() // smile
+  ctx.fillStyle = '#ff8fa8'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(x + 0.5, y + 5.6, 2.3, 2.9, 0, 0, Math.PI); ctx.fill(); ctx.stroke() // tongue
+  ctx.strokeStyle = 'rgba(160,70,90,.6)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x + 0.5, y + 4.2); ctx.lineTo(x + 0.5, y + 7); ctx.stroke()
+  collar(ctx, x, y + 2, '#c0392b', true)
 }
 /** Cooper: short-coated tan mix. Dark muzzle, one perked ear + one folded, white chest patch, head tilt, wide worried eyes. */
 function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
