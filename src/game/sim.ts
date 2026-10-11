@@ -13,6 +13,7 @@ import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazar
 import type { Cover, Hazard, HazardKind } from './cover'
 
 export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number }
+export interface AutoCfg { on: boolean; shield: boolean; frenzy: boolean; nade: boolean; tank: boolean; panic: boolean }
 export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string; gi: number }
 export interface EBullet { x: number; y: number; vx: number; vy: number; dmg: number; life: number; pass: number }
 export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
@@ -83,6 +84,8 @@ interface State {
   owned: number[]; squad: number[]; coins: number
   /** Boss Raid: live run (null when not raiding) and the per-day attempt ledger + all-time best score. */
   clan: PlayerClan | null
+  /** Auto-abilities: master switch plus per-ability switches (all on by default). nadeTaught = the player has thrown a grenade by hand. */
+  auto: AutoCfg; autoT: number; nadeTaught: boolean
   raid: RaidState | null; raidInfo: { day: string; used: number; extra: number; best: number }
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
 }
@@ -97,7 +100,7 @@ export const G: State = {
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
-  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
+  stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
  * Idle income. Tuned against measured active play (~40 kills/min): idle pays IDLE.factor of active income, and the stash
@@ -215,13 +218,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -323,6 +326,12 @@ export function toggleHold(): 'on' | 'off' | 'locked' {
 
 /** Active ability: lob a grenade at the densest clump of enemies (nearest to the pack wins ties). Arcs over cover. */
 export const NADE = { cd: 12, r: 64, dur: 0.75 }
+/** Size of the biggest bunch of enemies a grenade would catch. */
+export function bestClump() {
+  const live = G.enemies.filter(e => e.hp > 0); let bc = 0
+  for (const e of live) { let c = 0; for (const o of live) if (Math.hypot(o.x - e.x, o.y - e.y) < NADE.r) c++; if (c > bc) bc = c }
+  return bc
+}
 export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   if (G.nadeCd > 0) return 'cooldown'
   const live = G.enemies.filter(e => e.hp > 0)
@@ -519,6 +528,7 @@ export function update(dtReal: number) {
   let anyAlive = false; for (let i = 0; i < n; i++) if (alive(i)) anyAlive = true
   if (!anyAlive && G.raid) { endRaid(); return }
   if (G.raid) raidTick(dt)
+  if (G.auto.on && (G.autoT -= dt) <= 0) { G.autoT = 0.3; autoAbilities() }
   if (G.raid?.result) return
   if (!anyAlive) { G.banner = { text: 'REGROUP!', t: 1.4 }; startStage(); return }
   if (!G.raid && G.spawned >= G.toSpawn && G.enemies.length === 0) {
@@ -660,3 +670,18 @@ export function claimMilestone(k: number): boolean {
 export const canClanGift = () => !!G.clan && G.clan.gift !== dayKey()
 export function claimClanGift(): number { if (!canClanGift()) return 0; const c = 3 + Math.floor(clanLevel(G.clan) / 2); G.clan!.gift = dayKey(); G.coins += c; clanContribute(15); save(); return c }
 void XP_PER_LEVEL
+
+// ================= Auto abilities =================
+/** Fires ready abilities when they are worth it. Same cooldowns as pressing the buttons by hand. */
+function autoAbilities() {
+  const A = G.auto, n = unlockedGuardians(G.stage), live = G.enemies.filter(e => e.hp > 0).length
+  if (!live) return
+  const boss = G.enemies.some(e => e.kind === 'boss' && e.hp > 0)
+  let hurtCount = 0; for (let i = 0; i < n; i++) if (!alive(i) || G.hp[i] / G.mhp[i] < 0.45) hurtCount++
+  if (A.shield && G.shieldCd <= 0 && G.shieldT <= 0 && hurtCount > 0) useAbility('shield')
+  if (A.frenzy && G.frenzyCd <= 0 && G.frenzyT <= 0 && (live >= 4 || boss)) useAbility('frenzy')
+  if (A.tank && G.tankCd <= 0 && G.tankT <= 0 && alive(0) && (live >= 4 || boss)) useAbility('tank')
+  if (A.panic && G.panicCd <= 0 && G.panicT <= 0 && alive(1) && n > 1 && G.hp[1] / G.mhp[1] > 0.7 && (live >= 6 || boss)) useAbility('panic')
+  // hold the grenade back early so the hint can teach it; after that (or from stage 6) it throws itself at clumps of 3+
+  if (A.nade && G.nadeCd <= 0 && (G.nadeTaught || G.stage > 5) && bestClump() >= 3) throwGrenade()
+}

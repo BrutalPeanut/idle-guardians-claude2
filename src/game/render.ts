@@ -476,11 +476,18 @@ export function render(ctx: Ctx, t: number) {
       else if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.55)'; rr(ctx, x, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(x, ny, ns, ns * (cd / cdMax)); ctx.restore()
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1) }
     }
+    button(ctx, 'auto', 70, ARENA.y1 - 44, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 10 })
+    ctx.fillStyle = '#fff'; ctx.font = '800 8px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ARENA.y1 - 8)
     abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
     abil('panic', 165, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
     abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
     abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
     abil('nade', 306, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1)
+  }
+  if (G.stage <= 5 && !G.nadeTaught && G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1) { // grenade teaching hint: pulsing ring + bubble over the button
+    const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 326, cy = ARENA.y1 - 24
+    ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 25 + 3 * k, 0, 6.283); ctx.stroke()
+    const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '700 11px system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
   }
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
