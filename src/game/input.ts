@@ -1,7 +1,7 @@
 import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
-import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
+import { BOOST, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
@@ -61,6 +61,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'help') R.help = true
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
     else if (k === 'ad_done') finishAd()
+    else if (k === 'boost_ad') { if (R.screen === 'boost' && G.boostT < BOOST.cap) adGate(showRewardedAd('boost', () => { startBoost(); G.banner = { text: 'PACK BOOST', sub: '+50% gold, +25% damage', t: 1.6 } })) }
     else if (k === 'raid_ad') { if (R.screen === 'raid') adGate(showRewardedAd('raid', () => { G.raidInfo.extra++; G.banner = { text: '+1 Raid attempt', t: 1.4 } })) }
     else if (k === 'spin_ad') { if (R.screen === 'spin' && !R.spinAnim) adGate(showRewardedAd('spin', () => { if (spinsLeft().ad) startSpin(true) })) }
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }

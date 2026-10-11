@@ -536,6 +536,7 @@ export function render(ctx: Ctx, t: number) {
   // gold chip
   const gtxt = fmt(G.gold); ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const gw = ctx.measureText(gtxt).width + 34
   glass(ctx, 14, 47, gw - 4, 20, 10); ctx.save(); ctx.translate(18, 57); ctx.scale(1.55, 1.55); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore(); ctx.textAlign = 'left'; ctx.font = '400 ' + (15 + Math.round(R.goldBump * 30)) + 'px ' + FONT; outText(ctx, gtxt, 34, 57.5, R.goldBump > 0 ? '#fff' : '#fff0b0', 3)
+  if (G.boostT > 0) { const bt = Math.ceil(G.boostT), txt = 'BOOST ' + Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0'); ctx.font = '400 10px ' + FONT; const bw = ctx.measureText(txt).width + 22; glass(ctx, 14, 70, bw, 17, 8); ctx.save(); ctx.translate(23, 78.5); ctx.scale(1.1, 1.1); icons.bolt(ctx, 0, 0, '#d9b8ff'); ctx.restore(); ctx.textAlign = 'left'; outText(ctx, txt, 32, 78.5, '#e8d4ff', 2.5) }
   // idle stash chip (tap to collect)
   { const cx0 = 10 + gw + 6, cw = 208 - cx0, cap = idleCap(G.stage), f = Math.min(1, G.stash / cap), full = f >= 0.999, ready = f >= 0.15
     R.btns.collect = { x: cx0, y: 45, w: cw, h: 24 }
