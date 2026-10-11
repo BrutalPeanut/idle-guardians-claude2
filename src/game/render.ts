@@ -58,10 +58,10 @@ export function drainEvents() {
     else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
     else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
     else if (e.type === 'ability') {
-      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', t: 0.8 } }
-      else if (e.kind === 'tank') { Audio_.merge(2); burst(e.x, e.y, '#9fd6a0', 16, 110); G.banner = { text: 'TANK MODE', t: 0.8 } }
-      else if (e.kind === 'panic') { Audio_.zap(); burst(e.x, e.y, '#ff6a5a', 16, 110); G.banner = { text: 'PANIC MODE!', t: 0.8 } }
-      else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + frenzyDur() + 's', t: 1.2 } }
+      if (e.kind === 'shield') { Audio_.merge(3); }
+      else if (e.kind === 'tank') { Audio_.merge(2); burst(e.x, e.y, '#9fd6a0', 16, 110); }
+      else if (e.kind === 'panic') { Audio_.zap(); burst(e.x, e.y, '#ff6a5a', 16, 110); }
+      else { Audio_.zap(); }
       R.flash = 0.15
     }
     else if (e.type === 'blessing') { Audio_.fanfare(); const b = BLESSINGS.find(x => x.id === e.id)!; G.banner = { text: b.name.toUpperCase() + ' x' + bl(e.id), sub: b.desc, t: 1.8, big: true }; R.flash = 0.25 }
