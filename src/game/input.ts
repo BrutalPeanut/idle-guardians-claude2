@@ -1,6 +1,6 @@
 import { W, H, ARENA } from './data'
-import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold } from './sim'
-import { R, benchRect, drainEvents, updateFx, render, drawHelp } from './render'
+import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, accrueAway, collectStash } from './sim'
+import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome } from './render'
 import { Audio_ } from './audio'
 
 /** Boots the game on a canvas; returns a disposer. */
@@ -8,10 +8,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const ctx = cv.getContext('2d')!
   ctx.scale(cv.width / W, cv.height / H)
   load(); startStage()
-  try {
-    const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
-    if (s && s.t) { const mins = Math.min(120, (Date.now() - s.t) / 60000); if (mins > 1) { const g = Math.floor(mins * (3 + G.stage * 2) * 0.5); G.gold += g; G.banner = { text: 'Welcome back! +' + g + ' gold', t: 2.5 } } }
-  } catch { /* no save */ }
+  accrueAway() // time since the last visit fills the stash (capped); opens the welcome-back card
 
   const pt = (ev: PointerEvent) => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H } }
   const inR = (p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h
@@ -30,6 +27,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
+    if (G.away) { const r = R.btns.welcome; if (r && inR(p, r)) { R.pressed = 'welcome'; mode = 'btn'; Audio_.ui() } return }
     if (R.help) { R.help = false; Audio_.ui(); return }
     for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
     for (let i = 0; i < 8; i++) if (G.bench[i] !== null && inR(p, benchRect(i))) { R.drag = { from: i, x: p.x, y: p.y }; mode = 'bench'; return }
@@ -46,6 +44,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'buy') { if (!buyWeapon()) G.banner = { text: G.bench.includes(null) ? 'Not enough gold' : 'Armory full — merge!', t: 1 } }
     else if (k === 'merge') mergeAll()
     else if (k === 'help') R.help = true
+    else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
     else if (k === 'hold') { if (toggleHold() === 'locked') G.banner = { text: 'HOLD unlocks at stage 5', sub: 'Needs a support guardian (Bruno)', t: 1.6 } }
   }
   const up = (ev: PointerEvent) => {
@@ -66,7 +65,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     mode = null
   }
   const noMenu = (e: Event) => e.preventDefault()
-  const vis = () => { if (document.hidden) save() }
+  const vis = () => { if (document.hidden) save(); else accrueAway() }
+  const autosave = setInterval(() => { if (!document.hidden) save() }, 15000)
   cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move)
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.addEventListener('contextmenu', noMenu)
   document.addEventListener('visibilitychange', vis)
@@ -75,14 +75,14 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
-    while (acc >= 1 / 60) { if (!R.help) update(1 / 60); acc -= 1 / 60 }
+    while (acc >= 1 / 60) { if (!R.help && !G.away) update(1 / 60); acc -= 1 / 60 }
     drainEvents(); updateFx(dt); render(ctx, T)
-    if (R.help) drawHelp(ctx)
+    if (G.away) drawWelcome(ctx, T); else if (R.help) drawHelp(ctx)
     raf = requestAnimationFrame(frame)
   }
   raf = requestAnimationFrame(frame)
   return () => {
-    cancelAnimationFrame(raf); save()
+    cancelAnimationFrame(raf); clearInterval(autosave); save()
     cv.removeEventListener('pointerdown', down); cv.removeEventListener('pointermove', move)
     cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); cv.removeEventListener('contextmenu', noMenu)
     document.removeEventListener('visibilitychange', vis)

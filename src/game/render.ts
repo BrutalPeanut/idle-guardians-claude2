@@ -1,6 +1,6 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons } from './sim'
+import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -38,6 +38,11 @@ export function drainEvents() {
     else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
     else if (e.type === 'efire') Audio_.zap()
     else if (e.type === 'mortar_fire') Audio_.whump()
+    else if (e.type === 'idle_collect') {
+      Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
+      R.floats.push({ x: 90, y: 90, v: '+' + fmt(e.gold), gold: true, big: true, t: 0 })
+      G.banner = { text: 'COLLECTED', sub: '+' + fmt(e.gold) + ' gold', t: 1.8, big: true }
+    }
     else if (e.type === 'hold') { Audio_.ui(); G.banner = { text: e.on ? 'SUPPORT HELD' : 'REGROUP', sub: e.on ? 'Drag now steers Rudy & Cooper' : undefined, t: 1.6 } }
     else if (e.type === 'merge') {
       Audio_.merge(e.level); const rc = benchRect(e.slot);
@@ -295,10 +300,19 @@ export function render(ctx: Ctx, t: number) {
   ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 66)
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left'
   ctx.fillStyle = '#fff'; ctx.font = '800 18px system-ui,-apple-system,sans-serif'; ctx.fillText('Stage ' + G.stage, 12, 18)
-  ctx.font = '600 11px system-ui,sans-serif'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#9fb5aa'; ctx.fillText(biome.n + (isBoss(G.stage) ? ' · BOSS' : ''), 12, 37)
+  ctx.font = '600 11px system-ui,sans-serif'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#9fb5aa'; ctx.fillText(biome.n, 12, 37)
   // gold chip
   const gtxt = fmt(G.gold); ctx.font = '800 14px system-ui,sans-serif'; const gw = ctx.measureText(gtxt).width + 34
   glass(ctx, 10, 45, gw, 24, 10); icons.coin(ctx, 23, 45 + 24 / 2, '#ffd84a'); ctx.fillStyle = '#ffe9a0'; ctx.textAlign = 'left'; ctx.fillText(gtxt, 34, 45 + 24 / 2 + 0.5)
+  // idle stash chip (tap to collect)
+  { const cx0 = 10 + gw + 6, cw = 208 - cx0, cap = idleCap(G.stage), f = Math.min(1, G.stash / cap), full = f >= 0.999, ready = f >= 0.15
+    R.btns.collect = { x: cx0, y: 45, w: cw, h: 24 }
+    const pulse = ready ? 0.5 + 0.5 * Math.sin(t * 5) : 0
+    glass(ctx, cx0, 45, cw, 24, 10)
+    ctx.save(); rr(ctx, cx0, 45, cw, 24, 10); ctx.clip(); ctx.fillStyle = full ? 'rgba(255,170,60,.55)' : 'rgba(255,216,74,.32)'; ctx.fillRect(cx0, 45, cw * f, 24); ctx.restore()
+    ctx.strokeStyle = ready ? 'rgba(255,216,74,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = ready ? 1.6 : 1; rr(ctx, cx0 + 0.5, 45.5, cw - 1, 23, 10); ctx.stroke()
+    icons.coin(ctx, cx0 + 13, 57, '#ffd84a'); ctx.textAlign = 'left'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillStyle = full ? '#ffcf8a' : '#fff2c2'
+    ctx.fillText(full ? 'FULL ' + fmt(G.stash) : fmt(G.stash), cx0 + 24, 57.5) }
   // pack HP
   const hx = 118, hw = 92, hy = 14, hh = 12
   ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('PACK', hx, 8)
@@ -306,7 +320,7 @@ export function render(ctx: Ctx, t: number) {
   const frac = Math.max(0, G.pack.hp / G.pack.max)
   if (frac > 0) { const hgR = ctx.createLinearGradient(0, hy, 0, hy + hh); hgR.addColorStop(0, frac > 0.35 ? '#7af09a' : '#ff8a7a'); hgR.addColorStop(1, frac > 0.35 ? '#2fb85a' : '#d63a3a'); ctx.fillStyle = hgR; rr(ctx, hx + 1, hy + 1, Math.max(8, (hw - 2) * frac), hh - 2, 5); ctx.fill() }
   ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, hx + 0.5, hy + 0.5, hw - 1, hh - 1, 6); ctx.stroke()
-  ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Enemies left  ' + (G.toSpawn - G.spawned + G.enemies.length), hx, 44)
+  ctx.textAlign = 'right'; ctx.fillStyle = isBoss(G.stage) ? '#ff9ad8' : '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText((isBoss(G.stage) ? 'BOSS · ' : '') + (G.toSpawn - G.spawned + G.enemies.length) + ' left', hx + hw, 37); ctx.textAlign = 'left'
   button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 310, 8, 42, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
@@ -384,6 +398,7 @@ export function drawHelp(ctx: Ctx) {
     ['ring', 'Mortar ring', 'Shells arc OVER cover. Move or spread out before the ring fills.'],
     ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
     ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
+    ['coin', 'Idle stash', 'Your pack keeps earning gold while you are away (up to ' + IDLE.capHours + 'h). Tap the stash chip under the gold counter to collect it.'],
     ['hold', 'HOLD', 'Plants Bruno, Luna and pups. Your drag then steers only Rudy & Cooper: send them round the barricades. RECALL regroups.'],
   ]
   let y = 92
@@ -394,6 +409,7 @@ export function drawHelp(ctx: Ctx) {
     else if (icon === 'ring') { ctx.strokeStyle = '#ff5a46'; ctx.lineWidth = 2.5; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.ellipse(0, 0, 13, 8, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,110,90,.5)'; ctx.beginPath(); ctx.ellipse(0, 0, 7, 4, 0, 0, 6.283); ctx.fill() }
     else if (icon === 'zombie') { ctx.fillStyle = '#8ccf6e'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3.5, -2, 3, 0, 6.283); ctx.arc(4, -2, 2.4, 0, 6.283); ctx.fill() }
     else if (icon === 'boom') { ctx.fillStyle = '#ff9a3a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283, r = i % 2 ? 6 : 12; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) } ctx.closePath(); ctx.fill(); ctx.stroke() }
+    else if (icon === 'coin') { ctx.scale(1.8, 1.8); icons.coin(ctx, 0, 0, '#ffd84a') }
     else { ctx.strokeStyle = '#ffc34a'; ctx.lineWidth = 2.2; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.ellipse(0, 6, 13, 6, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.strokeStyle = '#d8d0c0'; ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -10); ctx.stroke(); ctx.fillStyle = '#ffc34a'; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -6); ctx.lineTo(0, -2); ctx.closePath(); ctx.fill() }
     ctx.restore()
     ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(title, 62, y + 5)
@@ -403,4 +419,26 @@ export function drawHelp(ctx: Ctx) {
     ctx.fillText(line, 62, ly); y = ly + 26
   }
   ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText('Tap anywhere to resume', W / 2, H - 22)
+}
+
+/** "Welcome back" modal shown after time away; only the COLLECT button is live. */
+export function drawWelcome(ctx: Ctx, t: number) {
+  const a = G.away; if (!a) return
+  R.btns = {}
+  ctx.fillStyle = 'rgba(4,8,10,.82)'; ctx.fillRect(0, 0, W, H)
+  const cw = 296, ch = 270, cx = (W - cw) / 2, cy = 150
+  const g = ctx.createLinearGradient(0, cy, 0, cy + ch); g.addColorStop(0, '#2a3a42'); g.addColorStop(1, '#16222a')
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24; ctx.fillStyle = g; rr(ctx, cx, cy, cw, ch, 22); ctx.fill(); ctx.restore()
+  ctx.strokeStyle = 'rgba(255,216,74,.55)'; ctx.lineWidth = 1.5; rr(ctx, cx + 0.75, cy + 0.75, cw - 1.5, ch - 1.5, 22); ctx.stroke()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#fff'; ctx.font = '800 24px system-ui,sans-serif'; ctx.fillText('Welcome back!', W / 2, cy + 34)
+  const h = Math.floor(a.minutes / 60), m = Math.floor(a.minutes % 60)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText('Your pack guarded the base for ' + (h ? h + 'h ' : '') + m + 'm', W / 2, cy + 62)
+  const bob = Math.sin(t * 4) * 2
+  ctx.save(); ctx.translate(W / 2 - 62, cy + 112 + bob); ctx.scale(3.2, 3.2); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore()
+  ctx.fillStyle = '#ffd84a'; ctx.font = '800 38px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('+' + fmt(a.gold), W / 2 - 46, cy + 112 + bob)
+  ctx.textAlign = 'center'; ctx.font = '600 12px system-ui,sans-serif'
+  if (a.capped) { ctx.fillStyle = '#ffb27a'; ctx.fillText('Stash was full after ' + IDLE.capHours + 'h. Come back sooner to earn more!', W / 2, cy + 160) }
+  else { ctx.fillStyle = '#7f929a'; ctx.fillText('Stash fills for up to ' + IDLE.capHours + 'h while you are away.', W / 2, cy + 160) }
+  button(ctx, 'welcome', cx + 40, cy + 190, cw - 80, 54, { top: '#52d273', bot: '#25994a', label: 'COLLECT', icon: 'coin', size: 18 })
 }
