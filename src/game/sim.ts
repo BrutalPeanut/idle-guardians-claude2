@@ -24,6 +24,7 @@ export type GEvent =
   | { type: 'efire'; x: number; y: number }
   | { type: 'mortar_fire'; x: number; y: number }
   | { type: 'hold'; on: boolean }
+  | { type: 'idle_collect'; gold: number }
 
 interface State {
   gold: number; stage: number; bought: number; bench: (number | null)[]; maxLevel: number
@@ -33,6 +34,8 @@ interface State {
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
   banner: Banner | null; kills: number; combo: number; comboT: number
+  /** Idle income: gold waiting in the kennel stash (must be collected), last time we saw the player, and the welcome-back summary. */
+  stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
 }
 
 export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 + 40, y1: ARENA.y1 - 50 }
@@ -43,20 +46,30 @@ export const G: State = {
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), banner: null, kills: 0, combo: 0, comboT: 0,
+  stash: 0, lastSeen: Date.now(), away: null,
 }
+/**
+ * Idle income. Tuned against measured active play (~40 kills/min): idle pays IDLE.factor of active income, and the stash
+ * stops filling after IDLE.capHours, so logging in a few times a day matters but never replaces playing.
+ * Monetization levers (later): capHours, factor, a collect multiplier.
+ */
+export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
+export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
+export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
+export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1)
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, t: Date.now() })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -100,7 +113,7 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil((2 + G.stage * 0.9) * Math.pow(1.1, G.stage - 1) * mul)
+  const gold = Math.ceil(killGold(G.stage) * mul)
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
@@ -135,6 +148,7 @@ export function toggleHold(): 'on' | 'off' | 'locked' {
 
 export function update(dtReal: number) {
   const dt = dtReal * G.speed; G.t += dt
+  G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)
   const p = G.pack, n = unlockedGuardians(G.stage), rules = rulesFor(G.stage)
 
   // ---- pack movement: eases toward the drag target; hazards change the feel ----
@@ -278,6 +292,24 @@ export function update(dtReal: number) {
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     G.stage++; save(); startStage()
   }
+}
+
+// ---- idle income ----
+/** Credit time spent away (page closed or tab hidden) into the stash, up to the cap. Opens the welcome-back summary if it was meaningful. */
+export function accrueAway(now = Date.now()) {
+  const mins = Math.max(0, (now - G.lastSeen) / 60000); G.lastSeen = now
+  if (mins < IDLE.minAwayMin) return
+  const earned = idleRate(G.stage) * mins, before = G.stash
+  G.stash = Math.min(idleCap(G.stage), G.stash + earned)
+  const gained = G.stash - before
+  if (gained >= 1) G.away = { minutes: mins, gold: gained, capped: gained < earned * 0.98 }
+}
+/** Move the whole stash into gold. Returns how much was collected. */
+export function collectStash() {
+  const gold = Math.floor(G.stash); G.away = null
+  if (gold < 1) return 0
+  G.gold += gold; G.stash -= gold
+  G.events.push({ type: 'idle_collect', gold }); save(); return gold
 }
 
 // ---- bench actions ----
