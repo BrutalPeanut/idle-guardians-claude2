@@ -323,6 +323,8 @@ export function buyWeapon() {
 export function tryMerge(a: number, b: number) {
   const va = G.bench[a], vb = G.bench[b]
   if (a === b || va === null || va !== vb || va >= WEAPONS.length - 1) return false
+  // every guardian keeps its own gun: only surplus weapons (beyond one per dog) can be merged away
+  if (G.bench.filter(v => v !== null).length - 1 < unlockedGuardians(G.stage)) { G.banner = { text: 'EACH DOG NEEDS A GUN', sub: 'Buy a spare weapon, then merge the extra', t: 1.6 }; return false }
   const lvl = va + 1; G.bench[b] = lvl; G.bench[a] = null
   G.events.push({ type: 'merge', slot: b, level: lvl })
   if (lvl > G.maxLevel) { G.maxLevel = lvl; G.events.push({ type: 'unlock', level: lvl, newEra: WEAPONS[lvl].era !== WEAPONS[lvl - 1].era }) }
