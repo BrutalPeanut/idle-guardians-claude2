@@ -7,6 +7,7 @@ import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
 import { BLESSINGS } from './blessings'
 import { QUEST_POOL, questDef } from './quests'
+import { adState, adsLeft, adCooldown, ADS } from './ads'
 import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
@@ -507,7 +508,7 @@ export function drawWelcome(ctx: Ctx, t: number) {
   const a = G.away; if (!a) return
   R.btns = {}
   ctx.fillStyle = 'rgba(4,8,10,.82)'; ctx.fillRect(0, 0, W, H)
-  const cw = 296, ch = 270, cx = (W - cw) / 2, cy = 150
+  const cw = 296, ch = 306, cx = (W - cw) / 2, cy = 130
   const g = ctx.createLinearGradient(0, cy, 0, cy + ch); g.addColorStop(0, '#2a3a42'); g.addColorStop(1, '#16222a')
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24; ctx.fillStyle = g; rr(ctx, cx, cy, cw, ch, 22); ctx.fill(); ctx.restore()
   ctx.strokeStyle = 'rgba(255,216,74,.55)'; ctx.lineWidth = 1.5; rr(ctx, cx + 0.75, cy + 0.75, cw - 1.5, ch - 1.5, 22); ctx.stroke()
@@ -521,7 +522,10 @@ export function drawWelcome(ctx: Ctx, t: number) {
   ctx.textAlign = 'center'; ctx.font = '600 12px system-ui,sans-serif'
   if (a.capped) { ctx.fillStyle = '#ffb27a'; ctx.fillText('Stash was full after ' + IDLE.capHours + 'h. Come back sooner to earn more!', W / 2, cy + 160) }
   else { ctx.fillStyle = '#7f929a'; ctx.fillText('Stash fills for up to ' + IDLE.capHours + 'h while you are away.', W / 2, cy + 160) }
-  button(ctx, 'welcome', cx + 40, cy + 190, cw - 80, 54, { top: '#52d273', bot: '#25994a', label: 'COLLECT', icon: 'coin', size: 18 })
+  button(ctx, 'welcome', cx + 40, cy + 184, cw - 80, 54, { top: '#52d273', bot: '#25994a', label: 'COLLECT', icon: 'coin', size: 18 })
+  if (a.gold >= 1) { const left = adsLeft(), ok = left > 0
+    button(ctx, 'welcome_ad', cx + 40, cy + 246, cw - 80, 40, { top: ok ? '#b58cf0' : '#5a666d', bot: ok ? '#6a3fb8' : '#39434a', label: 'Watch ad: collect 2x', size: 13, disabled: !ok })
+    ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 10px system-ui,sans-serif'; ctx.fillText(ok ? 'Optional. ' + left + ' ads left today' : 'No ads left today', W / 2, cy + 297) }
 }
 
 /** Blessing pick: three cards, the game is paused until one is chosen. */
@@ -532,7 +536,8 @@ export function drawPick(ctx: Ctx, t: number) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.fillStyle = '#ffd84a'; ctx.font = '800 26px system-ui,sans-serif'; ctx.fillText('Choose a Blessing', W / 2, 70)
   ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText('Stacks until your next Rebirth', W / 2, 98)
-  button(ctx, 'reroll', W / 2 - 80, H - 86, 160, 40, { top: G.gems >= REROLL_COST ? '#5ab8ff' : '#5a666d', bot: G.gems >= REROLL_COST ? '#2b6fd0' : '#39434a', icon: 'gem', label: 'Reroll  ' + REROLL_COST, size: 14, disabled: G.gems < REROLL_COST })
+  { const ok = adsLeft() > 0; button(ctx, 'reroll_ad', W / 2 + 6, H - 86, 150, 40, { top: ok ? '#b58cf0' : '#5a666d', bot: ok ? '#6a3fb8' : '#39434a', label: 'Free reroll (ad)', size: 12, disabled: !ok }) }
+  button(ctx, 'reroll', W / 2 - 156, H - 86, 150, 40, { top: G.gems >= REROLL_COST ? '#5ab8ff' : '#5a666d', bot: G.gems >= REROLL_COST ? '#2b6fd0' : '#39434a', icon: 'gem', label: 'Reroll  ' + REROLL_COST, size: 13, disabled: G.gems < REROLL_COST })
   ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('You have ' + G.gems + ' gems', W / 2, H - 32)
   G.pick.forEach((id, i) => {
     const b = BLESSINGS.find(x => x.id === id)!, x = 24, y = 130 + i * 130, w = W - 48, h = 112, own = bl(id)
@@ -594,8 +599,26 @@ export function drawQuests(ctx: Ctx, t: number) {
     ctx.fillStyle = '#c9d8d0'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(q.prog + ' / ' + d.target, x + 14, y + 70)
     ctx.fillStyle = '#6fd6ff'; ctx.fillText('+' + d.gems + ' gems  + gold', x + 14, y + 86)
     if (q.claimed) { ctx.textAlign = 'right'; ctx.fillStyle = '#7f929a'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText('CLAIMED', x + w - 14, y + 74) }
-    else button(ctx, 'qc' + i, x + w - 104, y + 56, 92, 34, { top: done ? '#52d273' : '#5a666d', bot: done ? '#25994a' : '#39434a', label: done ? 'CLAIM' : 'In progress', size: done ? 14 : 11, disabled: !done })
+    else { if (done && adsLeft() > 0) button(ctx, 'qa' + i, x + w - 168, y + 56, 56, 34, { top: '#b58cf0', bot: '#6a3fb8', label: 'Ad 2x', size: 11 })
+      button(ctx, 'qc' + i, x + w - 104, y + 56, 92, 34, { top: done ? '#52d273' : '#5a666d', bot: done ? '#25994a' : '#39434a', label: done ? 'CLAIM' : 'In progress', size: done ? 14 : 11, disabled: !done }) }
   })
   void QUEST_POOL; void t
   button(ctx, 'q_close', W / 2 - 70, H - 70, 140, 40, { top: '#5b6c75', bot: '#3a4850', label: 'Close', size: 14 })
+}
+
+/** MOCK ad screen (no real network). Shows a fake 3s TEST AD, then a CLAIM button. */
+export function drawAd(ctx: Ctx, t: number) {
+  const a = adState.play; if (!a) return
+  R.btns = {}
+  ctx.fillStyle = 'rgba(2,4,6,.94)'; ctx.fillRect(0, 0, W, H)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#7f929a'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText('TEST AD  -  no real ad network connected', W / 2, 40)
+  const g = ctx.createLinearGradient(40, 120, 320, 400); g.addColorStop(0, '#3a2f66'); g.addColorStop(1, '#1d6a7a')
+  ctx.fillStyle = g; rr(ctx, 40, 120, W - 80, 280, 20); ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 26px system-ui,sans-serif'; ctx.fillText('Your ad here', W / 2, 250 + Math.sin(t * 3) * 4)
+  const f = Math.min(1, a.t / a.dur)
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, 60, 430, W - 120, 10, 5); ctx.fill(); ctx.fillStyle = '#ffd84a'; rr(ctx, 60, 430, Math.max(6, (W - 120) * f), 10, 5); ctx.fill()
+  if (!a.done) { ctx.fillStyle = '#c9d8d0'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText('Reward in ' + Math.ceil(a.dur - a.t) + 's', W / 2, 466) }
+  else button(ctx, 'ad_done', W / 2 - 90, 460, 180, 48, { top: '#52d273', bot: '#25994a', label: 'CLAIM REWARD', size: 15 })
+  void adCooldown; void ADS
 }
