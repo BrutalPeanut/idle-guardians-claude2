@@ -1,5 +1,6 @@
 import { ARENA, WEAPONS, GUARDIANS, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
+import { BLESSINGS, BLESSING_EVERY } from './blessings'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
@@ -29,6 +30,7 @@ export type GEvent =
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
   | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
+  | { type: 'blessing'; id: string }
   | { type: 'nade_throw'; x: number; y: number }
 
 interface State {
@@ -41,6 +43,8 @@ interface State {
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
   nades: Nade[]; nadeCd: number
+  /** Blessing stacks (id -> count) and a pending 3-way pick (ids) that pauses the game until chosen. */
+  blessings: Record<string, number>; pick: string[] | null
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -56,7 +60,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -68,19 +72,23 @@ export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
 export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
 export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
 export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60
+export const bl = (id: string) => G.blessings[id] ?? 0
+export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast'))
+export const shieldDur = () => ABIL.shield.dur + bl('aegis')
+export const frenzyDur = () => ABIL.frenzy.dur + 1.5 * bl('fury')
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1)
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -96,7 +104,7 @@ export function startStage() {
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul)
-  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
+  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * (1 + 0.15 * bl('vital'))); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
@@ -124,7 +132,7 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil(killGold(G.stage) * mul)
+  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')))
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
@@ -135,12 +143,12 @@ function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
 }
 function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   const gp = guardianPos(i), wd = WEAPONS[w]
-  const crit = Math.random() < 0.1, mult = (crit ? 2 : 1) * (flank === 2 ? 1.55 : flank === 1 ? 1.35 : 1)
+  const crit = Math.random() < 0.1 + 0.06 * bl('crit'), mult = (crit ? 2 : 1) * (flank === 2 ? 1.55 : flank === 1 ? 1.35 : 1)
   const n = wd.pellets || 1
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
   }
   G.events.push({ type: 'fire', kind: wd.kind, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -183,14 +191,14 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
   G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 })
-  G.nadeCd = NADE.cd; G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
+  G.nadeCd = nadeCdMax(); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
 /** Frenzy: every gun fires at double rate. Shield: the whole pack takes no damage. Both are tap-to-use with a cooldown. */
 export const ABIL = { frenzy: { dur: 6, cd: 18, mul: 2 }, shield: { dur: 5, cd: 22 } }
 export function useAbility(kind: 'frenzy' | 'shield'): 'ok' | 'cooldown' {
-  if (kind === 'frenzy') { if (G.frenzyCd > 0) return 'cooldown'; G.frenzyT = ABIL.frenzy.dur; G.frenzyCd = ABIL.frenzy.cd }
-  else { if (G.shieldCd > 0) return 'cooldown'; G.shieldT = ABIL.shield.dur; G.shieldCd = ABIL.shield.cd }
+  if (kind === 'frenzy') { if (G.frenzyCd > 0) return 'cooldown'; G.frenzyT = frenzyDur(); G.frenzyCd = ABIL.frenzy.cd }
+  else { if (G.shieldCd > 0) return 'cooldown'; G.shieldT = shieldDur(); G.shieldCd = ABIL.shield.cd }
   G.events.push({ type: 'ability', kind, x: G.pack.x, y: G.pack.y }); return 'ok'
 }
 
@@ -251,7 +259,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1)
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid'))
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }
@@ -357,8 +365,24 @@ export function update(dtReal: number) {
   if (G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
-    G.stage++; save(); startStage()
+    const cleared = G.stage
+    G.stage++; startStage()
+    if (cleared % BLESSING_EVERY === 0) offerBlessings()
+    save()
   }
+}
+
+// ---- blessings ----
+function offerBlessings() {
+  const pool = BLESSINGS.filter(b => bl(b.id) < b.max).map(b => b.id)
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]] }
+  if (pool.length) G.pick = pool.slice(0, 3)
+}
+export function chooseBlessing(i: number) {
+  const id = G.pick?.[i]; if (!id) return false
+  const c = bl(id); G.blessings[id] = c + 1; G.pick = null
+  if (id === 'vital') { const r = (1 + 0.15 * (c + 1)) / (1 + 0.15 * c); for (let k = 0; k < 4; k++) { G.mhp[k] = Math.round(G.mhp[k] * r); G.hp[k] = Math.round(G.hp[k] * r) } }
+  G.events.push({ type: 'blessing', id }); save(); return true
 }
 
 // ---- idle income ----
