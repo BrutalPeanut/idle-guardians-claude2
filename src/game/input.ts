@@ -72,6 +72,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'rb_go') { R.rebirth = false; if (!rebirthGain(G.stage)) G.banner = { text: 'Rebirth unlocks at stage 20', t: 1.4 }; else doRebirth() }
     else if (k.startsWith('pick')) chooseBlessing(+k.slice(4))
     else if (k === 'frenzy' || k === 'shield') useAbility(k)
+    else if (k === 'tank' || k === 'panic') { if (useAbility(k) === 'down') G.banner = { text: (k === 'tank' ? 'Rudy' : 'Cooper') + ' is down', t: 1.0 } }
     else if (k === 'nade') { const r = throwGrenade(); if (r === 'none') G.banner = { text: 'No targets', t: 0.9 } }
     else if (k === 'hold') { if (toggleHold() === 'locked') G.banner = { text: 'HOLD unlocks at stage 5', sub: 'Needs a support guardian (Bruno)', t: 1.6 } }
   }

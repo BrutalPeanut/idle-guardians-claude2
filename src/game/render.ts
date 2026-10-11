@@ -1,6 +1,6 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl } from './sim'
+import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -48,6 +48,8 @@ export function drainEvents() {
     else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
     else if (e.type === 'ability') {
       if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', sub: 'No damage for ' + shieldDur() + 's', t: 1.2 } }
+      else if (e.kind === 'tank') { Audio_.merge(2); burst(e.x, e.y, '#9fd6a0', 16, 110); G.banner = { text: 'TANK MODE', sub: 'Rudy: ' + Math.round((1 - MODES.tank.armor) * 100) + '% less damage taken, +' + Math.round((MODES.tank.power - 1) * 100) + '% damage for ' + MODES.tank.dur + 's', t: 1.4 } }
+      else if (e.kind === 'panic') { Audio_.zap(); burst(e.x, e.y, '#ff6a5a', 16, 110); G.banner = { text: 'PANIC MODE!', sub: 'Cooper: ' + MODES.panic.power + 'x damage, but takes ' + MODES.panic.armor + 'x for ' + MODES.panic.dur + 's', t: 1.4 } }
       else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + frenzyDur() + 's', t: 1.2 } }
       R.flash = 0.15
     }
@@ -198,10 +200,11 @@ function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look
   blob(ctx, 0, 4.2, 6.8, 5, '#4a3329', null)                                                        // dark boxy muzzle
   ctx.fillStyle = '#16100d'; ctx.beginPath(); ctx.ellipse(0, 2.4, 3, 2.1, 0, 0, 6.283); ctx.fill()  // nose
   ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, 4.4); ctx.lineTo(0, 6); ctx.moveTo(-3, 7); ctx.quadraticCurveTo(0, 8.4, 3, 7); ctx.stroke()
+  const pk = G.panicT > 0 ? 1.55 : 1 // Panic mode: eyes bulge, pupils shrink and shake
   for (const sx of [-1, 1]) {                                                                       // wide, slightly worried eyes
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(sx * 4.6, -1.8, 3.6, 4.2, 0, 0, 6.283); ctx.fill(); ctx.stroke()
-    ctx.fillStyle = '#2a1a10'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9, -1.4, 2, 0, 6.283); ctx.fill()
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9 + 0.7, -2.2, 0.8, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(sx * 4.6 * (1 + 0.1 * (pk - 1)), -1.8 + (pk - 1) * 1.2, 3.6 * pk, 4.2 * pk, 0, 0, 6.283); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#2a1a10'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9 + (pk > 1 ? Math.sin(t * 50 + sx) * 0.5 : 0), -1.4 + (pk - 1) * 1.2, pk > 1 ? 1.5 : 2, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx * 4.6 + look * 0.9 + 0.7, -2.2 + (pk - 1) * 1.2, 0.8, 0, 6.283); ctx.fill()
     ctx.strokeStyle = g.shade; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(sx * 2.2, -7.2 + (sx < 0 ? 0.6 : 0)); ctx.lineTo(sx * 7.2, -7.4 - (sx < 0 ? 0.6 : 0)); ctx.stroke() // brow
   }
   helmet(ctx, 0, -7.4, 10.8, true, t)                                                               // green helmet, strap fastened
@@ -293,6 +296,8 @@ export const icons: Record<string, Icon> = {
   merge: (c, x, y, col) => { c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2.2; c.lineCap = 'round'; c.lineJoin = 'round'
     c.beginPath(); c.moveTo(x - 9, y - 6); c.lineTo(x - 2, y); c.lineTo(x - 9, y + 6); c.stroke(); c.beginPath(); c.moveTo(x + 9, y - 6); c.lineTo(x + 2, y); c.lineTo(x + 9, y + 6); c.stroke() },
   coin: (c, x, y, col) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, 6, 0, 6.283); c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1.2; c.stroke(); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x - 1, y - 3, 2, 6) },
+  tank: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 9, y - 7); c.lineTo(x + 9, y - 7); c.lineTo(x + 9, y + 3); c.lineTo(x, y + 10); c.lineTo(x - 9, y + 3); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x - 6, y - 4, 12, 2.5); c.fillRect(x - 6, y, 12, 2.5) },
+  panic: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 4, y - 10); c.lineTo(x + 4, y - 10); c.lineTo(x + 2, y + 2); c.lineTo(x - 2, y + 2); c.closePath(); c.fill(); c.stroke(); c.beginPath(); c.arc(x, y + 7, 2.8, 0, 6.283); c.fill(); c.stroke() },
   nade: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.arc(x, y + 2, 8, 0, 6.283); c.fill(); c.stroke(); c.fillRect(x - 3, y - 8, 6, 4); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 3, y - 7); c.lineTo(x + 8, y - 9); c.stroke() },
   shield: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 8, y - 8); c.lineTo(x + 8, y - 8); c.lineTo(x + 8, y + 1); c.quadraticCurveTo(x + 8, y + 8, x, y + 10); c.quadraticCurveTo(x - 8, y + 8, x - 8, y + 1); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x, y - 6); c.lineTo(x, y + 7); c.stroke() },
   frenzy: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; for (const dx of [-5, 3]) { c.beginPath(); c.moveTo(x + dx - 4, y - 8); c.lineTo(x + dx + 5, y); c.lineTo(x + dx - 4, y + 8); c.lineTo(x + dx - 1, y); c.closePath(); c.fill(); c.stroke() } },
@@ -346,6 +351,8 @@ export function render(ctx: Ctx, t: number) {
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1
     if (G.hp[i] > 0 && G.shieldT > 0) { const k = G.shieldT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, rr0 = 22 * dogScale(i); ctx.fillStyle = 'rgba(110,190,255,' + 0.18 * k + ')'; ctx.strokeStyle = 'rgba(170,225,255,' + 0.9 * k + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, rr0, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (G.hp[i] > 0 && i === 0 && G.tankT > 0) { const k = G.tankT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1; ctx.strokeStyle = 'rgba(150,235,160,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(90,200,110,' + 0.16 * k + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, 26 * dogScale(i), 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (G.hp[i] > 0 && i === 1 && G.panicT > 0) { const k = G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, p = 1 + 0.08 * Math.sin(t * 22); ctx.strokeStyle = 'rgba(255,90,80,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(255,60,50,' + 0.2 * k + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(gp.x + Math.sin(t * 40) * 0.8, gp.y + 2, 24 * dogScale(i) * p, 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
@@ -466,6 +473,8 @@ export function render(ctx: Ctx, t: number) {
       else if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.55)'; rr(ctx, x, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(x, ny, ns, ns * (cd / cdMax)); ctx.restore()
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1) }
     }
+    abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
+    abil('panic', 165, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
     abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
     abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
     abil('nade', 306, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1)
@@ -516,7 +525,7 @@ export function drawHelp(ctx: Ctx) {
     ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
     ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
     ['coin', 'Idle stash', 'Your pack keeps earning gold while you are away (up to ' + IDLE.capHours + 'h). Tap the stash chip under the gold counter to collect it.'],
-    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + shieldDur() + 's. Frenzy (yellow): double fire rate for ' + frenzyDur() + 's. Grenade (orange): blasts the biggest clump.'],
+    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + shieldDur() + 's. Frenzy (yellow): double fire rate for ' + frenzyDur() + 's. Grenade (orange): blasts the biggest clump. Green: Rudy\'s Tank mode. Red: Cooper\'s Panic mode (huge damage, but he takes 2.5x).'],
     ['hold', 'HOLD', 'Plants Bruno and Luna. Drag then steers only Rudy & Cooper round the barricades. RECALL regroups.'],
   ]
   let y = 92
