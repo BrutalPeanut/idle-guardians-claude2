@@ -1,5 +1,6 @@
 import { W, H, ARENA } from './data'
 import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
+import { drawScreen } from './screens'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests, drawAd } from './render'
 import { Audio_ } from './audio'
@@ -31,6 +32,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     if (adState.play) { const r = R.btns.ad_done; if (r && adState.play.done && inR(p, r)) { R.pressed = 'ad_done'; mode = 'btn'; Audio_.ui() } return }
     if (G.away) { for (const k of ['welcome', 'welcome_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (G.pick) { for (const k of ['pick0', 'pick1', 'pick2', 'reroll', 'reroll_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
+    if (R.screen) { for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui() } return }
     if (R.quests) { for (const k of ['qc0', 'qc1', 'qc2', 'qa0', 'qa1', 'qa2', 'q_close']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.rebirth) { for (const k of ['rb_go', 'rb_close']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.help) { R.help = false; Audio_.ui(); return }
@@ -55,7 +57,9 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }
     else if (k === 'reroll_ad') { if (G.pick) adGate(showRewardedAd('reroll', () => { rerollBlessings(true) })) }
     else if (k.startsWith('qa')) { const qi = +k.slice(2); if (R.quests) adGate(showRewardedAd('quest2x', () => { if (claimQuest(qi, 2)) Audio_.coins() })) }
-    else if (k === 'quests') { ensureDaily(); R.quests = true }
+    else if (k === 'menu') R.screen = 'hub'
+    else if (k === 'scr_close') R.screen = R.screen === 'hub' ? null : 'hub'
+    else if (k.startsWith('nav_')) { const id = k.slice(4); if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
     else if (k === 'q_close') R.quests = false
     else if (k.startsWith('qc')) { if (claimQuest(+k.slice(2))) Audio_.coins() }
     else if (k === 'reroll') { if (!rerollBlessings()) G.banner = { text: 'Need ' + REROLL_COST + ' gems', sub: 'Earn gems from daily quests', t: 1.4 } }
@@ -95,9 +99,9 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
-    while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
+    while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
     drainEvents(); updateFx(dt); render(ctx, T)
-    if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
+    if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
     raf = requestAnimationFrame(frame)
   }
   raf = requestAnimationFrame(frame)
