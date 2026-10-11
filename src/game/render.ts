@@ -1,5 +1,6 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
+import { PERKS } from './clan'
 import { G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
@@ -19,7 +20,7 @@ interface Rect { x: number; y: number; w: number; h: number }
 export type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 export const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -42,6 +43,7 @@ export function drainEvents() {
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
     else if (e.type === 'cover_hit') { Audio_.hit(); burst(e.x, e.y, coverDust(e.kind), 4, 70); if (!(G.t - (R.coverT[e.id] ?? -9) < 0.35)) { R.coverT[e.id] = G.t; R.floats.push({ x: e.x, y: e.y - 6, v: Math.ceil(e.v), cover: true, t: 0 }) } }
     else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
+    else if (e.type === 'clan_level') { Audio_.fanfare(); G.banner = { text: 'CLAN LEVEL ' + e.lv, sub: PERKS[e.lv - 1].text, t: 2, big: true } }
     else if (e.type === 'raid_end') { Audio_.fanfare(); R.screen = 'raid' }
     else if (e.type === 'efire') Audio_.zap()
     else if (e.type === 'mortar_fire') Audio_.whump()
