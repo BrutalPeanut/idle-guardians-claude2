@@ -8,6 +8,8 @@ import { Audio_ } from './audio'
 import { BLESSINGS } from './blessings'
 import { CHEST_NAMES } from './gear'
 import { QUEST_POOL, questDef } from './quests'
+import { weekMod } from './weekly'
+import { canClaimLogin } from './sim'
 import { adState, adsLeft, adCooldown, ADS } from './ads'
 import { drawWeaponIcon } from './weaponIcons'
 
@@ -53,6 +55,7 @@ export function drainEvents() {
     else if (e.type === 'rebirth') { Audio_.fanfare(); G.banner = { text: 'REBORN', sub: '+' + e.gain + ' Stardust', t: 2.4, big: true }; R.flash = 0.8 }
     else if (e.type === 'quest_claim') { Audio_.coins(); G.banner = { text: 'QUEST DONE', sub: '+' + e.gems + ' gems  +' + fmt(e.gold) + ' gold', t: 1.6 } }
     else if (e.type === 'chest_get') { Audio_.fanfare(); G.banner = { text: 'CHEST EARNED', sub: CHEST_NAMES[e.tier] + (e.n > 1 ? ' x' + e.n : '') + ' (Menu, Gear)', t: 2.2, big: true } }
+    else if (e.type === 'login_claim') { Audio_.coins(); G.banner = { text: 'DAY ' + (e.day + 1) + ' REWARD', sub: e.label, t: 1.8 } }
     else if (e.type === 'nade_throw') Audio_.whump()
     else if (e.type === 'idle_collect') {
       Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
@@ -395,6 +398,8 @@ export function render(ctx: Ctx, t: number) {
     for (const b of BLESSINGS) { const c = bl(b.id); if (!c) continue
       glass(ctx, bx, 70, 30, 16, 8); ctx.save(); ctx.translate(bx + 8, 78); ctx.scale(0.7, 0.7); icons[b.icon](ctx, 0, 0, b.col); ctx.restore()
       ctx.fillStyle = '#fff'; ctx.font = '800 9px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText('' + c, bx + 17, 78.5); bx += 33 } }
+  { const wmod = weekMod(); ctx.font = '700 9px system-ui,sans-serif'; const tw = ctx.measureText(wmod.name.toUpperCase()).width + 16
+    glass(ctx, W - 10 - tw, 70, tw, 16, 8); ctx.fillStyle = wmod.col; ctx.textAlign = 'center'; ctx.fillText(wmod.name.toUpperCase(), W - 10 - tw / 2, 78.5) }
   // drag anchor: faint ring where the touch began, dot + tether at the finger
   if (R.dragAnchor) { const a = R.dragAnchor; ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2
     ctx.beginPath(); ctx.arc(a.sx, a.sy, 22, 0, 6.283); ctx.fill(); ctx.stroke()
@@ -410,7 +415,7 @@ export function render(ctx: Ctx, t: number) {
     glass(ctx, 206, gy, 62, 18, 9); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
     ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
     button(ctx, 'menu', 274, gy - 1, 76, 20, { top: '#5b6c75', bot: '#3a4850', label: 'MENU', size: 11 })
-    if (rdy) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
+    if (rdy || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
   order.slice(0, n).forEach((o, k) => armed.set(o.i, k))
   for (let i = 0; i < 8; i++) {
