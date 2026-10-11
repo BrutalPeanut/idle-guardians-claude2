@@ -68,6 +68,8 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'hub': drawHub(ctx, t); break
     case 'stats': drawStats(ctx); break
     case 'gear': drawGear(ctx, t); break
+    case 'login': drawLogin(ctx, t); break
+    case 'weekly': drawWeekly(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -154,6 +156,7 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  if (k === 'login_claim') { claimLogin(); return true }
   if (k.startsWith('chest_')) {
     const r = openChest(+k.slice(6)); if (r) { R.reveal = { id: r.sold ? -1 : r.item.id, tier: +k.slice(6), sold: r.sold, phase: 0, t: 0 }; if (r.item.rar >= 2) R.reveal.t = 0; Audio_.ui() } else G.banner = { text: 'No chests', sub: 'Chests drop from bosses, login streaks and raids', t: 1.4 }
     return true
@@ -169,3 +172,45 @@ export function screenButton(k: string): boolean {
   return false
 }
 registerTile({ id: 'gear', label: 'Gear', sub: () => { const c = G.chests[0] + G.chests[1] + G.chests[2]; return c ? c + ' chest' + (c > 1 ? 's' : '') + ' to open' : 'Collars, vests, charms' }, icon: 'collar', col: '#ffb347', badge: () => G.chests[0] + G.chests[1] + G.chests[2] > 0 })
+
+// ================= Login streak + weekly modifier =================
+import { LOGIN_REWARDS, LOGIN_DAYS, canClaimLogin, nextLoginDay, claimLogin } from './sim'
+import { weekMod, nextMod, daysLeft } from './weekly'
+
+export function drawLogin(ctx: Ctx, t: number) {
+  panel(ctx, 'Login Streak')
+  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'
+  ctx.fillText(G.login.streak ? 'Current streak: ' + G.login.streak + (G.login.streak === 1 ? ' day' : ' days') : 'Claim every day to build a streak', W / 2, 64)
+  const next = nextLoginDay(), can = canClaimLogin(), tw = 76, th = 96
+  LOGIN_REWARDS.forEach((r, i) => {
+    const col = i % 4, row = Math.floor(i / 4), x = 16 + col * 84 + (row ? 42 : 0), y = 90 + row * (th + 12)
+    const wide = i === 6, w = wide ? tw : tw, claimed = can ? i < next : i <= next, isNext = can && i === next
+    ctx.fillStyle = claimed ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.08)'; rr(ctx, x, y, w, th, 13); ctx.fill()
+    ctx.strokeStyle = isNext ? '#ffd84a' : wide ? '#ffb347' : 'rgba(255,255,255,.14)'; ctx.lineWidth = isNext ? 2.5 : 1.2; ctx.globalAlpha = isNext ? 0.6 + 0.4 * Math.sin(t * 5) : 1; rr(ctx, x + 1, y + 1, w - 2, th - 2, 13); ctx.stroke(); ctx.globalAlpha = 1
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText('DAY ' + (i + 1), x + w / 2, y + 14)
+    ctx.save(); ctx.translate(x + w / 2, y + 44); ctx.globalAlpha = claimed ? 0.35 : 1
+    if (r.chest !== undefined) { ctx.scale(1.5, 1.5); icons.collar(ctx, 0, 0, '#ffb347') } else if (r.gems) { ctx.scale(2, 2); icons.gem(ctx, 0, 0, '#6fd6ff') } else { ctx.scale(2, 2); icons.coin(ctx, 0, 0, '#ffd84a') }
+    ctx.restore()
+    ctx.fillStyle = claimed ? '#7f929a' : '#fff'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText(r.label, x + w / 2, y + 76)
+    if (r.chest !== undefined && r.gems) ctx.fillText('+' + r.gems + ' gems', x + w / 2, y + 88)
+    if (claimed) { ctx.strokeStyle = '#5be07f'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + w - 22, y + 14); ctx.lineTo(x + w - 17, y + 19); ctx.lineTo(x + w - 9, y + 9); ctx.stroke() }
+  })
+  void LOGIN_DAYS
+  if (can) button(ctx, 'login_claim', W / 2 - 100, 330, 200, 48, { top: '#52d273', bot: '#25994a', label: 'CLAIM DAY ' + (next + 1), size: 16 })
+  else { ctx.fillStyle = '#9fb5aa'; ctx.font = '700 14px system-ui,sans-serif'; ctx.fillText('Come back tomorrow for day ' + (((nextLoginDay() + 1) % LOGIN_DAYS) + 1), W / 2, 354) }
+  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Miss a day and the streak starts over at day 1.', W / 2, 410)
+}
+
+export function drawWeekly(ctx: Ctx) {
+  panel(ctx, 'This Week')
+  const m = weekMod(), nx = nextMod()
+  ctx.textAlign = 'center'; ctx.fillStyle = m.col; ctx.font = '800 30px system-ui,sans-serif'; ctx.fillText(m.name, W / 2, 130)
+  ctx.fillStyle = '#e8f1ec'; ctx.font = '600 15px system-ui,sans-serif'; ctx.fillText(m.desc, W / 2, 168)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText(daysLeft() + (daysLeft() === 1 ? ' day' : ' days') + ' left', W / 2, 204)
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; rr(ctx, 30, 250, W - 60, 90, 16); ctx.fill()
+  ctx.fillStyle = '#7f929a'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText('NEXT WEEK', W / 2, 272)
+  ctx.fillStyle = nx.col; ctx.font = '800 18px system-ui,sans-serif'; ctx.fillText(nx.name, W / 2, 298); ctx.fillStyle = '#c9d8d0'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText(nx.desc, W / 2, 322)
+}
+
+registerTile({ id: 'login', label: 'Login Streak', sub: () => canClaimLogin() ? 'Reward ready!' : 'Day ' + G.login.streak, icon: 'gem', col: '#52d273', badge: () => canClaimLogin() })
+registerTile({ id: 'weekly', label: 'This Week', sub: () => weekMod().name, icon: 'star', col: '#ffd84a' })
