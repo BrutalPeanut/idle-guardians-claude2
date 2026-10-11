@@ -62,6 +62,7 @@ export const Audio_ = (() => {
     merge(level: number) { const f = 330 * Math.pow(1.0595, level * 2); tone('triangle', f, f * 2, 0.18, 0.3); tone('sine', f * 1.5, f * 3, 0.25, 0.2); },
     zap() { tone('sawtooth', 520, 180, 0.09, 0.09) },
     whump() { tone('sine', 220, 55, 0.3, 0.3); burst(0.12, 0.15, 'lowpass', 700, 150) },
+    coins() { [0, 4, 7, 12, 16].forEach((st, i) => setTimeout(() => tone('triangle', 660 * Math.pow(1.0595, st), 660 * Math.pow(1.0595, st) * 1.5, 0.14, 0.2), i * 70)) },
     ui() { tone('sine', 600, 800, 0.06, 0.15); },
     fanfare() { [0, 4, 7, 12].forEach((s, i) => setTimeout(() => tone('square', 262 * Math.pow(1.0595, s), 262 * Math.pow(1.0595, s), 0.25, 0.15), i * 110)); },
     toggleMute() { muted = !muted; try { localStorage.setItem('ig_mute', muted ? '1' : '0'); } catch { /* storage unavailable */ } if (master) master.gain.value = muted ? 0 : 0.5; return muted; },
