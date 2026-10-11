@@ -2,6 +2,7 @@ import { ARENA, WEAPONS, GUARDIANS, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
 import { weekMod } from './weekly'
+import { pointsEarned, RESPEC_GEMS, SKILLS } from './skills'
 import { rollItem, INV_MAX } from './gear'
 import type { Item, Stat } from './gear'
 import { dayKey, rollDaily, questDef } from './quests'
@@ -55,6 +56,8 @@ interface State {
   gear: Item[]; chests: number[]; nextItem: number
   /** Login streak: date of the last claim and the current streak length. */
   login: { last: string; streak: number }
+  /** Skill ranks (id -> rank) and the best stage ever reached (feeds Paw Points). */
+  skills: Record<string, number>; best: number
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
@@ -77,10 +80,11 @@ interface State {
 
 export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 + 40, y1: ARENA.y1 - 50 }
 const REVIVE_T = 12
+const reviveTime = () => Math.max(5, REVIVE_T - sk('recov'))
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, login: { last: '', streak: 0 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
@@ -94,7 +98,7 @@ export const G: State = {
 export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
 export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
 export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
-export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60
+export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper'))
 /** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
 export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
 export const starMul = () => 1 + STAR_BONUS * G.stardust
@@ -165,11 +169,22 @@ export function equipItem(id: number, dog: number) {
 }
 export function unequipItem(id: number) { const it = G.gear.find(x => x.id === id); if (!it || invCount() >= INV_MAX) return false; it.on = -1; save(); return true }
 export function sellItem(id: number) { const k = G.gear.findIndex(x => x.id === id); if (k < 0) return 0; const g = sellValue(G.gear[k]); G.gold += g; G.gear.splice(k, 1); save(); return g }
-export const skillLuck = () => 0 // replaced by the Skill tree
+export const skillLuck = () => 0.03 * sk('hunter')
+
+// ---- skills ----
+export const sk = (id: string) => G.skills[id] ?? 0
+export const pointsSpent = () => Object.values(G.skills).reduce((a, b) => a + b, 0)
+export const pointsLeft = () => pointsEarned(G.best, G.rebirths) - pointsSpent()
+export function buySkill(id: string) {
+  const d = SKILLS.find(s => s.id === id); if (!d || sk(id) >= d.max || pointsLeft() < 1) return false
+  G.skills[id] = sk(id) + 1; save(); return true
+}
+export function respec() { if (G.gems < RESPEC_GEMS || pointsSpent() === 0) return false; G.gems -= RESPEC_GEMS; G.skills = {}; save(); return true }
+const flankMul = () => (weekMod().id === 'flank' ? 1.5 : 1) * (1 + 0.08 * sk('flanker'))
 
 export const bl = (id: string) => G.blessings[id] ?? 0
-export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast')) * (wm('bomb') ? 0.6 : 1)
-export const shieldDur = () => ABIL.shield.dur + bl('aegis')
+export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast')) * (wm('bomb') ? 0.6 : 1) * (1 - 0.03 * sk('boomS'))
+export const shieldDur = () => ABIL.shield.dur + bl('aegis') + 0.4 * sk('aegisS')
 export const frenzyDur = () => ABIL.frenzy.dur + 1.5 * bl('fury')
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1)
@@ -177,13 +192,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, skills: s.sk ?? {}, best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -192,6 +207,7 @@ export function startStage() {
   const s = G.stage, rules = rulesFor(s), L = buildLayout(s, hpScale)
   G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
+  for (const c of G.cover) if (c.side === 'player') { c.hp *= 1 + 0.08 * sk('bunker'); c.max *= 1 + 0.08 * sk('bunker') }
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
   for (const u of L.units) G.enemies.push({
@@ -199,7 +215,7 @@ export function startStage() {
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul)
-  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * (1 + 0.15 * bl('vital') + gb(i, 'hp') + (wm('iron') ? 0.3 : 0))); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
+  for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * (1 + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + (wm('iron') ? 0.3 : 0))); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
@@ -227,25 +243,25 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + goldGear() + (wm('gold') ? 0.3 : 0)) * starMul())
+  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + goldGear() + 0.04 * sk('gold') + (wm('gold') ? 0.3 : 0)) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
   e.hp -= dmg; e.flash = 0.1
   if (gi >= 0) G.stats.dealt[gi] += dmg
-  if (flank) { track('flank'); const fk = wm('flank') ? 1.5 : 1, m = fl === 2 ? 1 + 0.55 * fk : 1 + 0.35 * fk; G.stats.flank += dmg * (1 - 1 / m) }
+  if (flank) { track('flank'); const fk = flankMul(), m = fl === 2 ? 1 + 0.55 * fk : 1 + 0.35 * fk; G.stats.flank += dmg * (1 - 1 / m) }
   const kill = e.hp <= 0
   G.events.push({ type: 'dmg', x: e.x, y: e.y - e.r, v: dmg, crit, kill, flank })
   if (kill) killReward(e)
 }
 function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   const gp = guardianPos(i), wd = WEAPONS[w]
-  const crit = Math.random() < 0.1 + 0.06 * bl('crit') + gb(i, 'crit'), fk = wm('flank') ? 1.5 : 1, mult = (crit ? 2 : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
+  const crit = Math.random() < 0.1 + 0.06 * bl('crit') + gb(i, 'crit') + 0.02 * sk('keen'), fk = flankMul(), mult = (crit ? 2 : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
   const n = wd.pellets || 1
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (wm('power') ? 1.2 : 1) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (wm('power') ? 1.2 : 1) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -254,7 +270,7 @@ function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
   G.stats.taken[i] += Math.min(dmg, G.hp[i]); G.hp[i] -= dmg
-  if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = REVIVE_T; const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
+  if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = reviveTime(); const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
 function nearestAlive(x: number, y: number, n: number) {
   let b = -1, bd = 1e9
@@ -288,7 +304,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 * starMul() * (wm('bomb') ? 1.25 : 1) })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 * starMul() * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
   G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
@@ -358,7 +374,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + gb(i, 'rate') + (wm('quick') ? 0.2 : 0))
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + gb(i, 'rate') + 0.02 * sk('quick') + (wm('quick') ? 0.2 : 0))
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }
@@ -467,7 +483,7 @@ export function update(dtReal: number) {
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages')
     if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0) }
-    G.stage++; startStage()
+    G.stage++; G.best = Math.max(G.best, G.stage); startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()
   }

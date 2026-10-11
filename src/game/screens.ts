@@ -19,13 +19,13 @@ export function panel(ctx: Ctx, title: string, back = true) {
 
 export function drawHub(ctx: Ctx, t: number) {
   panel(ctx, 'Menu', false)
-  const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 86
+  const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 72
   TILES.forEach((tl, i) => {
-    const x = 16 + (i % cols) * (tw + 12), y = 64 + Math.floor(i / cols) * (th + 12)
+    const x = 16 + (i % cols) * (tw + 12), y = 60 + Math.floor(i / cols) * (th + 10)
     button(ctx, 'nav_' + tl.id, x, y, tw, th, { top: '#2e3e48', bot: '#1a2830' })
-    ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(2, 2); icons[tl.icon]?.(ctx, 0, 0, tl.col); ctx.restore()
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 15px system-ui,sans-serif'; ctx.fillText(tl.label, x + 58, y + 32)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 54)
+    ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(1.8, 1.8); icons[tl.icon]?.(ctx, 0, 0, tl.col); ctx.restore()
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 15px system-ui,sans-serif'; ctx.fillText(tl.label, x + 58, y + 27)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 47)
     if (tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 12, y + 12 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
 }
@@ -70,6 +70,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'stats': drawStats(ctx); break
     case 'gear': drawGear(ctx, t); break
     case 'login': drawLogin(ctx, t); break
+    case 'skills': drawSkills(ctx); break
     case 'weekly': drawWeekly(ctx); break
     default: drawHub(ctx, t)
   }
@@ -158,6 +159,9 @@ function drawReveal(ctx: Ctx, t: number) {
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
   if (k === 'login_claim') { claimLogin(); return true }
+  if (k.startsWith('sb_')) { R.skillTab = +k.slice(3); return true }
+  if (k.startsWith('sk_')) { if (!buySkill(k.slice(3))) G.banner = { text: pointsLeft() < 1 ? 'No Paw Points left' : 'Maxed', sub: pointsLeft() < 1 ? 'Reach new stages or Rebirth to earn more' : undefined, t: 1.2 }; else Audio_.ui(); return true }
+  if (k === 'respec') { if (respec()) G.banner = { text: 'Skills reset', t: 1.2 }; else G.banner = { text: 'Need ' + RESPEC_GEMS + ' gems', t: 1.2 }; return true }
   if (k.startsWith('chest_')) {
     const r = openChest(+k.slice(6)); if (r) { R.reveal = { id: r.sold ? -1 : r.item.id, tier: +k.slice(6), sold: r.sold, phase: 0, t: 0 }; if (r.item.rar >= 2) R.reveal.t = 0; Audio_.ui() } else G.banner = { text: 'No chests', sub: 'Chests drop from bosses, login streaks and raids', t: 1.4 }
     return true
@@ -215,3 +219,26 @@ export function drawWeekly(ctx: Ctx) {
 
 registerTile({ id: 'login', label: 'Login Streak', sub: () => canClaimLogin() ? 'Reward ready!' : 'Day ' + G.login.streak, icon: 'gem', col: '#52d273', badge: () => canClaimLogin() })
 registerTile({ id: 'weekly', label: 'This Week', sub: () => weekMod().name, icon: 'star', col: '#ffd84a' })
+
+// ================= Skills =================
+import { BRANCHES, SKILLS, RESPEC_GEMS, pointsEarned } from './skills'
+import { sk, pointsLeft, pointsSpent, buySkill, respec } from './sim'
+
+export function drawSkills(ctx: Ctx) {
+  panel(ctx, 'Skill Tree')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffd84a'; ctx.font = '800 20px system-ui,sans-serif'; ctx.fillText('Paw Points: ' + pointsLeft(), W / 2, 66)
+  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Earned ' + pointsEarned(G.best, G.rebirths) + '  (1 per 2 stages of your best run, 3 per Rebirth)', W / 2, 88)
+  BRANCHES.forEach((b, i) => button(ctx, 'sb_' + i, 16 + i * 112, 104, 104, 32, { top: R.skillTab === i ? b.col : '#3a4850', bot: R.skillTab === i ? b.col + 'aa' : '#26323a', label: b.name, size: 13 }))
+  const br = BRANCHES[R.skillTab], list = SKILLS.filter(s => s.branch === br.id)
+  list.forEach((s, i) => {
+    const x = 16, y = 148 + i * 86, w = W - 32, h = 78, r = sk(s.id), can = pointsLeft() > 0 && r < s.max
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; rr(ctx, x, y, w, h, 14); ctx.fill(); ctx.strokeStyle = r ? br.col : 'rgba(255,255,255,.12)'; ctx.lineWidth = 1.5; rr(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 14); ctx.stroke()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(s.name, x + 14, y + 20)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(s.desc, x + 14, y + 40)
+    for (let p = 0; p < s.max; p++) { ctx.fillStyle = p < r ? br.col : 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(x + 20 + p * 18, y + 60, 6, 0, 6.283); ctx.fill() }
+    button(ctx, 'sk_' + s.id, x + w - 66, y + 20, 52, 38, { top: can ? '#52d273' : '#4a565d', bot: can ? '#25994a' : '#2f3a40', label: r >= s.max ? 'MAX' : '+', size: r >= s.max ? 11 : 20, disabled: !can })
+  })
+  button(ctx, 'respec', W / 2 - 90, 504, 180, 34, { top: '#b58cf0', bot: '#6a3fb8', label: 'Respec  (' + RESPEC_GEMS + ' gems)', size: 12, disabled: pointsSpent() === 0 })
+}
+registerTile({ id: 'skills', label: 'Skill Tree', sub: () => pointsLeft() > 0 ? pointsLeft() + ' points to spend' : 'Fang, Fur, Nose', icon: 'star', col: '#ff9ad8', badge: () => pointsLeft() > 0 })
