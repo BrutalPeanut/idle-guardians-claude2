@@ -37,7 +37,7 @@ export type GEvent =
   | { type: 'idle_collect'; gold: number }
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
-  | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
+  | { type: 'ability'; kind: 'frenzy' | 'shield' | 'tank' | 'panic'; x: number; y: number }
   | { type: 'login_claim'; day: number; label: string }
   | { type: 'chest_get'; tier: number; n: number }
   | { type: 'quest_claim'; gems: number; gold: number }
@@ -72,7 +72,7 @@ interface State {
   /** Rewarded-ad usage today (see ads.ts) and the No-Ads purchase flag. */
   ads: { day: string; used: number }; noAds: boolean
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
-  frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
+  frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number; tankT: number; tankCd: number; panicT: number; panicCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
   /** Idle income: gold waiting in the kennel stash (must be collected), last time we saw the player, and the welcome-back summary. */
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
@@ -87,7 +87,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -205,7 +205,7 @@ export function load() {
 
 export function startStage() {
   const s = G.stage, rules = rulesFor(s), L = buildLayout(s, hpScale)
-  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0
+  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0; G.tankT = 0; G.panicT = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
   for (const c of G.cover) if (c.side === 'player') { c.hp *= 1 + 0.08 * sk('bunker'); c.max *= 1 + 0.08 * sk('bunker') }
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
@@ -261,14 +261,19 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (wm('power') ? 1.2 : 1) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (wm('power') ? 1.2 : 1) * starMul() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
 const alive = (i: number) => G.hp[i] > 0
+/** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
+export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
+const dogPower = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.power : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.power : 1)
+const dogArmor = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
 function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
+  dmg *= dogArmor(i)
   G.stats.taken[i] += Math.min(dmg, G.hp[i]); G.hp[i] -= dmg
   if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = reviveTime(); const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
@@ -310,7 +315,14 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
 
 /** Frenzy: every gun fires at double rate. Shield: the whole pack takes no damage. Both are tap-to-use with a cooldown. */
 export const ABIL = { frenzy: { dur: 6, cd: 18, mul: 2 }, shield: { dur: 5, cd: 22 } }
-export function useAbility(kind: 'frenzy' | 'shield'): 'ok' | 'cooldown' {
+export function useAbility(kind: 'frenzy' | 'shield' | 'tank' | 'panic'): 'ok' | 'cooldown' | 'down' {
+  if (kind === 'tank' || kind === 'panic') {
+    const i = kind === 'tank' ? 0 : 1, m = MODES[kind]
+    if (!alive(i) || unlockedGuardians(G.stage) <= i) return 'down'
+    if (kind === 'tank' ? G.tankCd > 0 : G.panicCd > 0) return 'cooldown'
+    if (kind === 'tank') { G.tankT = m.dur; G.tankCd = m.cd } else { G.panicT = m.dur; G.panicCd = m.cd }
+    track('abil'); const gp = guardianPos(i); G.events.push({ type: 'ability', kind, x: gp.x, y: gp.y }); return 'ok'
+  }
   if (kind === 'frenzy') { if (G.frenzyCd > 0) return 'cooldown'; G.frenzyT = frenzyDur(); G.frenzyCd = ABIL.frenzy.cd }
   else { if (G.shieldCd > 0) return 'cooldown'; G.shieldT = shieldDur(); G.shieldCd = ABIL.shield.cd }
   track('abil'); G.events.push({ type: 'ability', kind, x: G.pack.x, y: G.pack.y }); return 'ok'
@@ -453,7 +465,7 @@ export function update(dtReal: number) {
 
   // ---- player grenades ----
   if (G.nadeCd > 0) G.nadeCd = Math.max(0, G.nadeCd - dt)
-  G.frenzyT = Math.max(0, G.frenzyT - dt); G.frenzyCd = Math.max(0, G.frenzyCd - dt); G.shieldT = Math.max(0, G.shieldT - dt); G.shieldCd = Math.max(0, G.shieldCd - dt)
+  G.frenzyT = Math.max(0, G.frenzyT - dt); G.frenzyCd = Math.max(0, G.frenzyCd - dt); G.shieldT = Math.max(0, G.shieldT - dt); G.shieldCd = Math.max(0, G.shieldCd - dt); G.tankT = Math.max(0, G.tankT - dt); G.tankCd = Math.max(0, G.tankCd - dt); G.panicT = Math.max(0, G.panicT - dt); G.panicCd = Math.max(0, G.panicCd - dt)
   for (const g of G.nades) {
     g.t += dt
     if (g.t < g.dur) continue
@@ -494,7 +506,7 @@ export function doRebirth() {
   const gain = rebirthGain(G.stage); if (!gain) return 0
   G.stardust += gain; G.rebirths++
   G.stats = newStats()
-  Object.assign(G, { gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0 })
+  Object.assign(G, { gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0, tankCd: 0, panicCd: 0 })
   G.bench[0] = 0; G.bench[1] = 0
   startStage(); G.events.push({ type: 'rebirth', gain }); save(); return gain
 }

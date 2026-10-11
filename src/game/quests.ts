@@ -6,7 +6,7 @@ export const QUEST_POOL: QuestDef[] = [
   { id: 'merges', text: 'Merge weapons',            target: 5,  gems: 5 },
   { id: 'buys',   text: 'Buy weapons',              target: 8,  gems: 4 },
   { id: 'nades',  text: 'Throw grenades',           target: 4,  gems: 5 },
-  { id: 'abil',   text: 'Use Shield or Frenzy',     target: 4,  gems: 5 },
+  { id: 'abil',   text: 'Use any ability',     target: 4,  gems: 5 },
   { id: 'flank',  text: 'Land flanking hits',       target: 30, gems: 6 },
 ]
 export interface QuestState { id: string; prog: number; claimed: boolean }
