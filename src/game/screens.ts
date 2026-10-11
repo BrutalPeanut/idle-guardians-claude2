@@ -8,6 +8,8 @@ import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGi
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
+import { BOOST } from './sim'
+import { adsLeft } from './ads'
 import { TRAIN, tl, trainCost, buyTrain, trainAffordable } from './sim'
 import { LB, refresh, chooseName, nameChosen, nameOptions, shuffleNames, playerName, playerId } from './leaderboard'
 
@@ -37,7 +39,7 @@ export function panel(ctx: Ctx, title: string, back = true) {
 export const HUB_SECTIONS: { id: string; label: string; col: string; tiles: string[] }[] = [
   { id: 'battle', label: 'Battle', col: '#ff6a5a', tiles: ['raid', 'auto', 'weekly', 'stats'] },
   { id: 'grow', label: 'Grow', col: '#ff9a3a', tiles: ['train', 'skills', 'gear', 'kennel', 'rebirth'] },
-  { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['quests', 'login', 'spin', 'pass', 'ach'] },
+  { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['boost', 'quests', 'login', 'spin', 'pass', 'ach'] },
   { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'tour', 'help'] },
 ]
 const tileLive = (id: string) => { const tl = TILES.find(x => x.id === id); return !!tl && unlocked(id) && !!tl.badge?.() }
@@ -121,6 +123,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'rank': drawRank(ctx); break
     case 'train': drawTrain(ctx); break
     case 'spin': drawSpin(ctx); break
+    case 'boost': drawBoost(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -618,3 +621,20 @@ export function drawTrain(ctx: Ctx) {
   ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; outText(ctx, 'You have ' + fmt(G.gold) + ' gold', W / 2, 482, '#ffd84a', 3)
 }
 registerTile({ id: 'train', label: 'Training', sub: () => trainAffordable() ? 'Upgrade ready!' : 'Spend your gold', icon: 'bolt', col: '#ff9a3a', badge: () => trainAffordable() })
+
+// ================= Pack Boost (rewarded ad buff) =================
+const mmss = (sec: number) => Math.floor(sec / 60) + ':' + String(Math.floor(sec % 60)).padStart(2, '0')
+function drawBoost(ctx: Ctx) {
+  panel(ctx, 'Pack Boost')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = '400 15px ' + FONT; ctx.fillStyle = '#ffd84a'; ctx.fillText(G.boostT > 0 ? 'ACTIVE  ' + mmss(G.boostT) : 'Not active', W / 2, 90)
+  const rows: [string, string, string][] = [['+' + Math.round(BOOST.gold * 100) + '% gold', 'from every kill', '#ffd84a'], ['+' + Math.round(BOOST.dmg * 100) + '% gun damage', 'for the whole pack', '#ff9a3a']]
+  rows.forEach(([a, b, c], i) => { const y = 130 + i * 64; plate(ctx, 24, y, W - 48, 54, 14, 'rgba(34,52,64,.7)', 'rgba(12,20,26,.7)'); ctx.textAlign = 'left'; ctx.font = '400 20px ' + FONT; ctx.fillStyle = c; ctx.fillText(a, 40, y + 22); ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#c9d8d0'; ctx.fillText(b, 40, y + 42) })
+  ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#9fb5aa'
+  ctx.fillText('Each ad adds ' + mmss(BOOST.dur) + ', up to ' + mmss(BOOST.cap) + ' stored.', W / 2, 282)
+  ctx.fillText('It counts down while you play.', W / 2, 300)
+  const ok = adsLeft() > 0 && G.boostT < BOOST.cap
+  button(ctx, 'boost_ad', W / 2 - 110, 330, 220, 48, { top: ok ? '#b58cf0' : '#5a666d', bot: ok ? '#6a3fb8' : '#39434a', label: G.boostT >= BOOST.cap ? 'Boost is full' : adsLeft() > 0 ? 'Watch an ad: +' + (BOOST.dur / 60) + ' min' : 'No ads left today', size: 14, disabled: !ok })
+  ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Optional. Ads only ever run when you tap this.', W / 2, 394)
+}
+registerTile({ id: 'boost', label: 'Pack Boost', sub: () => G.boostT > 0 ? mmss(G.boostT) + ' left' : '+50% gold, +25% damage', icon: 'bolt', col: '#b58cf0', badge: () => G.boostT <= 0 && adsLeft() > 0 })
