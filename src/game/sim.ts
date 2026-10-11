@@ -7,6 +7,7 @@ export interface Enemy { x: number; y: number; hp: number; max: number; spd: num
 export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string }
 export interface EBullet { x: number; y: number; vx: number; vy: number; dmg: number; life: number; pass: number }
 export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
+export interface Nade { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
 export interface Status { cover: boolean; flank: 0 | 1 | 2 } // flank: 1 = auto-flank, 2 = manual (player-placed)
 export interface Banner { text: string; sub?: string; t: number; big?: boolean }
 export type GEvent =
@@ -25,6 +26,7 @@ export type GEvent =
   | { type: 'mortar_fire'; x: number; y: number }
   | { type: 'hold'; on: boolean }
   | { type: 'idle_collect'; gold: number }
+  | { type: 'nade_throw'; x: number; y: number }
 
 interface State {
   gold: number; stage: number; bought: number; bench: (number | null)[]; maxLevel: number
@@ -33,6 +35,7 @@ interface State {
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
+  nades: Nade[]; nadeCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
   /** Idle income: gold waiting in the kennel stash (must be collected), last time we saw the player, and the welcome-back summary. */
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
@@ -45,7 +48,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425, hp: 220, max: 220 }, sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -76,7 +79,7 @@ export function load() {
 
 export function startStage() {
   const s = G.stage, rules = rulesFor(s), L = buildLayout(s, hpScale)
-  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0
+  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
@@ -144,6 +147,24 @@ export function toggleHold(): 'on' | 'off' | 'locked' {
   if (unlockedGuardians(G.stage) <= STRIKE) return 'locked'
   if (G.hold) { G.hold = null; G.events.push({ type: 'hold', on: false }); return 'off' }
   G.hold = { x: G.sup.x, y: G.sup.y }; G.events.push({ type: 'hold', on: true }); return 'on'
+}
+
+/** Active ability: lob a grenade at the densest clump of enemies (nearest to the pack wins ties). Arcs over cover. */
+export const NADE = { cd: 12, r: 64, dur: 0.75 }
+export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
+  if (G.nadeCd > 0) return 'cooldown'
+  const live = G.enemies.filter(e => e.hp > 0)
+  if (!live.length) return 'none'
+  let best = live[0], bc = -1, bd = 1e9
+  for (const e of live) {
+    let c = 0; for (const o of live) if (Math.hypot(o.x - e.x, o.y - e.y) < NADE.r) c++
+    const d = Math.hypot(e.x - G.pack.x, e.y - G.pack.y)
+    if (c > bc || (c === bc && d < bd)) { best = e; bc = c; bd = d }
+  }
+  let sx = 0, sy = 0, k = 0
+  for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 })
+  G.nadeCd = NADE.cd; G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
 export function update(dtReal: number) {
@@ -273,6 +294,18 @@ export function update(dtReal: number) {
     for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (Math.hypot(b.x - gp.x, b.y - gp.y) < 12) { b.life = 0; p.hp -= b.dmg * aura; G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(b.dmg * aura) }); break } }
   }
   G.ebullets = G.ebullets.filter(b => b.life > 0)
+
+  // ---- player grenades ----
+  if (G.nadeCd > 0) G.nadeCd = Math.max(0, G.nadeCd - dt)
+  for (const g of G.nades) {
+    g.t += dt
+    if (g.t < g.dur) continue
+    G.events.push({ type: 'boom', x: g.tx, y: g.ty, r: g.r }); let total = 0
+    for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = o.kind === 'boss' ? g.dmg * 0.6 : g.dmg; total += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
+    for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && Math.hypot(c.x - g.tx, c.y - g.ty) < g.r + c.w / 2) hitCover(c, g.dmg * 0.5, c.x, c.y)
+    G.events.push({ type: 'dmg', x: g.tx, y: g.ty - 14, v: total, crit: false, kill: false, blast: true })
+  }
+  G.nades = G.nades.filter(g => g.t < g.dur)
 
   // ---- mortar shells: telegraphed, arc OVER cover; spread out or move to dodge ----
   for (const s of G.shells) {
