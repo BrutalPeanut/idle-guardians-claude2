@@ -7,10 +7,12 @@ import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazar
 import type { Cover, Hazard, HazardKind } from './cover'
 
 export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number }
-export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string }
+export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string; gi: number }
 export interface EBullet { x: number; y: number; vx: number; vy: number; dmg: number; life: number; pass: number }
 export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
 export interface Nade { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
+export interface Stats { dealt: number[]; nade: number; flank: number; taken: number[]; shield: number; cover: number }
+export const newStats = (): Stats => ({ dealt: [0, 0, 0, 0], nade: 0, flank: 0, taken: [0, 0, 0, 0], shield: 0, cover: 0 })
 export interface Status { cover: boolean; flank: 0 | 1 | 2 } // flank: 1 = auto-flank, 2 = manual (player-placed)
 export interface Banner { text: string; sub?: string; t: number; big?: boolean }
 export type GEvent =
@@ -42,6 +44,8 @@ interface State {
   pack: { x: number; y: number; tx: number; ty: number }
   /** Per-guardian health. A downed guardian (hp 0) stops firing and revives after REVIVE_T seconds. */
   hp: number[]; mhp: number[]; reviveT: number[]
+  /** Damage breakdown for the Stats screen (this run; reset on Rebirth and on reload). */
+  stats: Stats
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
@@ -67,7 +71,7 @@ const REVIVE_T = 12
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
@@ -168,9 +172,10 @@ function killReward(e: Enemy) {
   const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
-function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
+function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
   e.hp -= dmg; e.flash = 0.1
-  if (flank) track('flank')
+  if (gi >= 0) G.stats.dealt[gi] += dmg
+  if (flank) { track('flank'); const m = fl === 2 ? 1.55 : 1.35; G.stats.flank += dmg * (1 - 1 / m) }
   const kill = e.hp <= 0
   G.events.push({ type: 'dmg', x: e.x, y: e.y - e.r, v: dmg, crit, kill, flank })
   if (kill) killReward(e)
@@ -182,14 +187,15 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
 const alive = (i: number) => G.hp[i] > 0
 function hurt(i: number, dmg: number) {
-  if (!alive(i) || G.shieldT > 0) return // Guardian Shield: all incoming damage is blocked
-  G.hp[i] -= dmg
+  if (!alive(i)) return
+  if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
+  G.stats.taken[i] += Math.min(dmg, G.hp[i]); G.hp[i] -= dmg
   if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = REVIVE_T; const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
 function nearestAlive(x: number, y: number, n: number) {
@@ -314,9 +320,9 @@ export function update(dtReal: number) {
       if (s.kind === 'grenade') {
         const sp = WEAPONS[s.w].splash ?? 60; let total = 0
         G.events.push({ type: 'boom', x: s.x, y: s.y, r: sp })
-        for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - s.x, o.y - s.y) < sp) { total += s.dmg; o.hp -= s.dmg; o.flash = 0.1; if (o.hp <= 0) killReward(o) }
+        for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - s.x, o.y - s.y) < sp) { total += s.dmg; G.stats.dealt[s.gi] += s.dmg; o.hp -= s.dmg; o.flash = 0.1; if (o.hp <= 0) killReward(o) }
         G.events.push({ type: 'dmg', x: s.x, y: s.y - 14, v: total, crit: s.crit, kill: false, blast: true })
-      } else { damageEnemy(e, s.dmg, s.crit, s.flank > 0); G.events.push({ type: 'hit', x: s.x, y: s.y, col: s.col }) }
+      } else { damageEnemy(e, s.dmg, s.crit, s.flank > 0, s.gi, s.flank); G.events.push({ type: 'hit', x: s.x, y: s.y, col: s.col }) }
       break
     }
   }
@@ -362,6 +368,7 @@ export function update(dtReal: number) {
     if (b.life <= 0) continue
     for (const c of G.cover) {
       if (c.side !== 'player' || c.hp <= 0 || c.id === b.pass || !segRect(px, py, b.x, b.y, c)) continue
+      G.stats.cover += b.dmg * (c.hp > c.max * 0.35 ? 1 : 0.5)
       if (c.hp > c.max * 0.35) { b.life = 0; hitCover(c, b.dmg, b.x, b.y) } else { hitCover(c, b.dmg, b.x, b.y); b.dmg *= 0.5; b.pass = c.id }
       break
     }
@@ -377,7 +384,7 @@ export function update(dtReal: number) {
     g.t += dt
     if (g.t < g.dur) continue
     G.events.push({ type: 'boom', x: g.tx, y: g.ty, r: g.r }); let total = 0
-    for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = o.kind === 'boss' ? g.dmg * 0.6 : g.dmg; total += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
+    for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = o.kind === 'boss' ? g.dmg * 0.6 : g.dmg; total += d; G.stats.nade += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
     for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && Math.hypot(c.x - g.tx, c.y - g.ty) < g.r + c.w / 2) hitCover(c, g.dmg * 0.5, c.x, c.y)
     G.events.push({ type: 'dmg', x: g.tx, y: g.ty - 14, v: total, crit: false, kill: false, blast: true })
   }
@@ -411,6 +418,7 @@ export function update(dtReal: number) {
 export function doRebirth() {
   const gain = rebirthGain(G.stage); if (!gain) return 0
   G.stardust += gain; G.rebirths++
+  G.stats = newStats()
   Object.assign(G, { gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0 })
   G.bench[0] = 0; G.bench[1] = 0
   startStage(); G.events.push({ type: 'rebirth', gain }); save(); return gain

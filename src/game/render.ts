@@ -13,10 +13,10 @@ import { drawWeaponIcon } from './weaponIcons'
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
 interface Floater { x: number; y: number; v: number | string; cover?: boolean; flank?: boolean; crit?: boolean; kill?: boolean; blast?: boolean; gold?: boolean; hurt?: boolean; big?: boolean; t: number }
 interface Rect { x: number; y: number; w: number; h: number }
-type Ctx = CanvasRenderingContext2D
+export type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
-const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const OUT = '#241810';
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, screen: null as string | null, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -253,8 +253,8 @@ function drawBackground(ctx: Ctx, t: number) {
 }
 
 type Icon = (ctx: Ctx, cx: number, cy: number, col: string) => void
-const rr = (ctx: Ctx, x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r) }
-const icons: Record<string, Icon> = {
+export const rr = (ctx: Ctx, x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r) }
+export const icons: Record<string, Icon> = {
   bolt: (c, x, y, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(x + 2, y - 8); c.lineTo(x - 6, y + 2); c.lineTo(x - 1, y + 2); c.lineTo(x - 3, y + 8); c.lineTo(x + 6, y - 3); c.lineTo(x + 1, y - 3); c.closePath(); c.fill() },
   speaker: (c, x, y, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x - 3, y - 3); c.lineTo(x + 2, y - 7); c.lineTo(x + 2, y + 7); c.lineTo(x - 3, y + 3); c.lineTo(x - 7, y + 3); c.closePath(); c.fill(); c.strokeStyle = col; c.lineWidth = 1.8; c.lineCap = 'round'
     if (!Audio_.muted) { c.beginPath(); c.arc(x + 2, y, 5, -0.9, 0.9); c.stroke(); c.beginPath(); c.arc(x + 2, y, 9, -0.8, 0.8); c.stroke() }
@@ -272,7 +272,7 @@ const icons: Record<string, Icon> = {
 }
 interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string }
 /** Modern pill button: vertical gradient, soft drop shadow, top gloss, press-down state. Registers its hit rect. */
-function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
+export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
   R.btns[key] = { x, y, w, h }
   const down = R.pressed === key, dy = down ? 1.5 : 0, rad = Math.min(14, h / 2.2)
   ctx.save()
@@ -292,11 +292,11 @@ function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: numbe
   if (o.label) { ctx.fillStyle = col; ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1; ctx.fillText(o.label, cx + tw / 2, cy + 0.5) }
   ctx.restore()
 }
-function glass(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
+export function glass(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
   ctx.fillStyle = 'rgba(14,22,26,.62)'; rr(ctx, x, y, w, h, r); ctx.fill()
   ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1; rr(ctx, x + 0.5, y + 0.5, w - 1, h - 1, r); ctx.stroke()
 }
-const fmt = (n: number) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : Math.floor(n).toString();
+export const fmt = (n: number) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : Math.floor(n).toString();
 
 export function render(ctx: Ctx, t: number) {
   R.btns = {} // rebuilt every frame: a button from a closed modal must never stay tappable
@@ -401,12 +401,11 @@ export function render(ctx: Ctx, t: number) {
   ctx.fillStyle = ag; ctx.fillRect(0, BENCH.y - 24, W, H - BENCH.y + 24)
   ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(0, BENCH.y - 24, W, 1)
   ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('ARMORY  ·  drag to merge', 10, BENCH.y - 11)
-  { const qx = 214, qy = BENCH.y - 21, qw = 136, qh = 18, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
-    R.btns.quests = { x: qx, y: qy, w: qw, h: qh }
-    glass(ctx, qx, qy, qw, qh, 9); ctx.strokeStyle = rdy ? 'rgba(120,220,255,' + (0.45 + 0.5 * pl) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = rdy ? 1.6 : 1; rr(ctx, qx + 0.5, qy + 0.5, qw - 1, qh - 1, 9); ctx.stroke()
-    ctx.save(); ctx.translate(qx + 12, qy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('' + G.gems, qx + 23, qy + 9.5)
-    ctx.textAlign = 'right'; ctx.fillStyle = rdy ? '#6fd6ff' : '#9fb5aa'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(rdy ? 'QUESTS  (' + rdy + ')' : 'DAILY QUESTS', qx + qw - 8, qy + 9.5) }
+  { const gy = BENCH.y - 21, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
+    glass(ctx, 206, gy, 62, 18, 9); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
+    button(ctx, 'menu', 274, gy - 1, 76, 20, { top: '#5b6c75', bot: '#3a4850', label: 'MENU', size: 11 })
+    if (rdy) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
   order.slice(0, n).forEach((o, k) => armed.set(o.i, k))
   for (let i = 0; i < 8; i++) {
