@@ -9,7 +9,7 @@ import { BLESSINGS } from './blessings'
 import { CHEST_NAMES } from './gear'
 import { QUEST_POOL, questDef } from './quests'
 import { weekMod } from './weekly'
-import { canClaimLogin } from './sim'
+import { canClaimLogin, pointsLeft } from './sim'
 import { adState, adsLeft, adCooldown, ADS } from './ads'
 import { drawWeaponIcon } from './weaponIcons'
 
@@ -19,7 +19,7 @@ interface Rect { x: number; y: number; w: number; h: number }
 export type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 export const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -448,7 +448,7 @@ export function render(ctx: Ctx, t: number) {
     glass(ctx, 206, gy, 62, 18, 9); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
     ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
     button(ctx, 'menu', 274, gy - 1, 76, 20, { top: '#5b6c75', bot: '#3a4850', label: 'MENU', size: 11 })
-    if (rdy || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
+    if (rdy || pointsLeft() > 0 || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
   order.slice(0, n).forEach((o, k) => armed.set(o.i, k))
   for (let i = 0; i < 8; i++) {
