@@ -168,10 +168,10 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
   blob(ctx, x, y + 1.8, 6, 4.2, '#fffaf0', null)                                                  // light muzzle
   ctx.fillStyle = 'rgba(255,130,120,.55)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9.6, y - 0.2, 3.2, 2.1, 0, 0, 6.283); ctx.fill() } // rosy cheeks
   for (const sx of [-1, 1]) {                                                                       // big shiny eyes
-    const ex = x + sx * 5.6, ey = y - 5.6
-    ctx.fillStyle = '#2a1608'; ctx.beginPath(); ctx.ellipse(ex, ey, 4.1, 4.9, 0, 0, 6.283); ctx.fill()
-    ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.ellipse(ex + look * 0.5, ey + 1.6, 2.8, 2.3, 0, 0, 6.283); ctx.fill()
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + look * 0.4 + 1.1, ey - 1.5, 1.6, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(ex - 1.1 + look * 0.4, ey + 2, 0.8, 0, 6.283); ctx.fill()
+    const ex = x + sx * 5.8, ey = y - 5.2
+    ctx.fillStyle = '#2a1608'; ctx.beginPath(); ctx.ellipse(ex, ey, 3, 3.5, 0, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.ellipse(ex + look * 0.5, ey + 1.1, 2, 1.7, 0, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + look * 0.4 + 0.8, ey - 1.1, 1.2, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(ex - 1.1 + look * 0.4, ey + 1.4, 0.6, 0, 6.283); ctx.fill()
   }
   ctx.fillStyle = '#3a2418'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.ellipse(x, y - 0.4, 2.5, 1.9, 0, 0, 6.283); ctx.fill(); ctx.stroke() // nose
   ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - 1, y - 1.4, 0.9, 0.55, 0, 0, 6.283); ctx.fill()
