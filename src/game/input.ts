@@ -15,28 +15,29 @@ export function startGame(cv: HTMLCanvasElement): () => void {
 
   const pt = (ev: PointerEvent) => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H } }
   const inR = (p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h
-  let mode: 'bench' | 'pack' | null = null
+  let mode: 'bench' | 'pack' | 'btn' | null = null
 
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
-    for (const k in R.btns) if (inR(p, R.btns[k])) {
-      Audio_.ui()
-      if (k === 'speed') G.speed = G.speed > 1 ? 1 : 2
-      else if (k === 'mute') Audio_.toggleMute()
-      else if (k === 'buy') { if (!buyWeapon()) G.banner = { text: G.bench.includes(null) ? 'Not enough gold' : 'Armory full — merge!', t: 1 } }
-      else if (k === 'merge') mergeAll()
-      return
-    }
+    for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui(); return }
     for (let i = 0; i < 8; i++) if (G.bench[i] !== null && inR(p, benchRect(i))) { R.drag = { from: i, x: p.x, y: p.y }; mode = 'bench'; return }
-    if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; G.pack.tx = p.x; G.pack.ty = p.y - 20 }
+    if (p.y > ARENA.y0 - 10 && p.y < ARENA.y1 + 10) { mode = 'pack'; R.dragTarget = true; G.pack.tx = p.x; G.pack.ty = p.y - 20 }
   }
   const move = (ev: PointerEvent) => {
     const p = pt(ev)
-    if (mode === 'bench' && R.drag) { R.drag.x = p.x; R.drag.y = p.y }
+    if (mode === 'bench' && R.drag) { R.drag.x = p.x; R.drag.y = p.y; R.dragOver = -1; for (let i = 0; i < 8; i++) if (inR(p, benchRect(i))) R.dragOver = i }
     else if (mode === 'pack') { G.pack.tx = p.x; G.pack.ty = p.y - 20 }
   }
+  const fireButton = (k: string) => {
+    if (k === 'speed') G.speed = G.speed > 1 ? 1 : 2
+    else if (k === 'mute') Audio_.toggleMute()
+    else if (k === 'buy') { if (!buyWeapon()) G.banner = { text: G.bench.includes(null) ? 'Not enough gold' : 'Armory full — merge!', t: 1 } }
+    else if (k === 'merge') mergeAll()
+  }
   const up = (ev: PointerEvent) => {
+    if (mode === 'btn' && R.pressed) { const r = R.btns[R.pressed]; if (r && inR(pt(ev), r)) fireButton(R.pressed); R.pressed = null }
+    R.dragOver = -1; R.dragTarget = false
     if (mode === 'bench' && R.drag) {
       const p = pt(ev), from = R.drag.from; let to = -1
       for (let i = 0; i < 8; i++) if (inR(p, benchRect(i))) to = i
