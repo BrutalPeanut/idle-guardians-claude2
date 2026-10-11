@@ -1,6 +1,6 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
-import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, NADE } from './sim'
+import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, NADE, ABIL } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -40,6 +40,11 @@ export function drainEvents() {
     else if (e.type === 'mortar_fire') Audio_.whump()
     else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
     else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
+    else if (e.type === 'ability') {
+      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', sub: 'No damage for ' + ABIL.shield.dur + 's', t: 1.2 } }
+      else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + ABIL.frenzy.dur + 's', t: 1.2 } }
+      R.flash = 0.15
+    }
     else if (e.type === 'nade_throw') Audio_.whump()
     else if (e.type === 'idle_collect') {
       Audio_.coins(); burst(60, 57, '#ffd84a', 30, 150); burst(60, 57, '#fff2b0', 12, 100)
@@ -252,6 +257,8 @@ const icons: Record<string, Icon> = {
     c.beginPath(); c.moveTo(x - 9, y - 6); c.lineTo(x - 2, y); c.lineTo(x - 9, y + 6); c.stroke(); c.beginPath(); c.moveTo(x + 9, y - 6); c.lineTo(x + 2, y); c.lineTo(x + 9, y + 6); c.stroke() },
   coin: (c, x, y, col) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, 6, 0, 6.283); c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1.2; c.stroke(); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x - 1, y - 3, 2, 6) },
   nade: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.arc(x, y + 2, 8, 0, 6.283); c.fill(); c.stroke(); c.fillRect(x - 3, y - 8, 6, 4); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 3, y - 7); c.lineTo(x + 8, y - 9); c.stroke() },
+  shield: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 8, y - 8); c.lineTo(x + 8, y - 8); c.lineTo(x + 8, y + 1); c.quadraticCurveTo(x + 8, y + 8, x, y + 10); c.quadraticCurveTo(x - 8, y + 8, x - 8, y + 1); c.closePath(); c.fill(); c.stroke(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x, y - 6); c.lineTo(x, y + 7); c.stroke() },
+  frenzy: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; for (const dx of [-5, 3]) { c.beginPath(); c.moveTo(x + dx - 4, y - 8); c.lineTo(x + dx + 5, y); c.lineTo(x + dx - 4, y + 8); c.lineTo(x + dx - 1, y); c.closePath(); c.fill(); c.stroke() } },
   plus: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x + 6, y); c.moveTo(x, y - 6); c.lineTo(x, y + 6); c.stroke() },
 }
 interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string }
@@ -293,7 +300,9 @@ export function render(ctx: Ctx, t: number) {
   for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
-  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1 } }); }
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1
+    if (G.hp[i] > 0 && G.shieldT > 0) { const k = G.shieldT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, rr0 = 22 * dogScale(i); ctx.fillStyle = 'rgba(110,190,255,' + 0.18 * k + ')'; ctx.strokeStyle = 'rgba(170,225,255,' + 0.9 * k + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, rr0, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
@@ -323,7 +332,7 @@ export function render(ctx: Ctx, t: number) {
     ctx.strokeText(txt, f.x, f.y); ctx.fillText(txt, f.x, f.y); ctx.globalAlpha = 1;
   }
   // combo
-  if (G.combo >= 3) { ctx.textAlign = 'center'; ctx.font = 'bold 18px system-ui'; ctx.lineWidth = 4; ctx.strokeStyle = OUT; ctx.fillStyle = '#ffb84a'; ctx.strokeText('COMBO x' + G.combo, W / 2, ARENA.y1 - 8); ctx.fillText('COMBO x' + G.combo, W / 2, ARENA.y1 - 8); }
+  if (G.combo >= 3) { ctx.textAlign = 'center'; ctx.font = 'bold 18px system-ui'; ctx.lineWidth = 4; ctx.strokeStyle = OUT; ctx.fillStyle = '#ffb84a'; ctx.strokeText('COMBO x' + G.combo, 90, ARENA.y1 - 8); ctx.fillText('COMBO x' + G.combo, 90, ARENA.y1 - 8); }
   ctx.restore();
 
   // ---------- HUD ----------
@@ -387,13 +396,20 @@ export function render(ctx: Ctx, t: number) {
   button(ctx, 'buy', 10, ACTION_BAR.y, 142, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
   button(ctx, 'merge', 158, ACTION_BAR.y, 96, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
   button(ctx, 'hold', 260, ACTION_BAR.y, 90, ACTION_BAR.h, { top: G.hold ? '#ffb347' : '#b58cf0', bot: G.hold ? '#e0731a' : '#7a4ec0', disabled: unlockedGuardians(G.stage) <= 2, label: G.hold ? 'RECALL' : 'HOLD', size: 13 })
-  { // grenade ability button (bottom-right of the arena) with cooldown sweep
-    const nx = 306, ny = ARENA.y1 - 46, ns = 42, ready = G.nadeCd <= 0
-    button(ctx, 'nade', nx, ny, ns, ns, { top: ready ? '#ff9a3a' : '#5a666d', bot: ready ? '#d4501a' : '#39434a', icon: 'nade', disabled: !ready })
-    if (!ready) { ctx.fillStyle = 'rgba(0,0,0,.55)'; const hh = ns * (G.nadeCd / NADE.cd); rr(ctx, nx, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(nx, ny, ns, hh); ctx.restore()
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(Math.ceil(G.nadeCd) + '', nx + ns / 2, ny + ns / 2 + 1) }
+  { // active ability row under the arena: shield, frenzy, grenade. Each shows its cooldown sweep, or a drain bar while active.
+    const ns = 40, ny = ARENA.y1 - 44
+    const abil = (key: string, x: number, icon: string, top: string, bot: string, cd: number, cdMax: number, act: number, actMax: number) => {
+      const ready = cd <= 0 && act <= 0
+      button(ctx, key, x, ny, ns, ns, { top: act > 0 ? top : ready ? top : '#5a666d', bot: act > 0 ? bot : ready ? bot : '#39434a', icon, disabled: !ready && act <= 0 })
+      if (act > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x + ns / 2, ny + ns / 2, ns / 2 + 2, -Math.PI / 2, -Math.PI / 2 + 6.283 * act / actMax); ctx.stroke() }
+      else if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.55)'; rr(ctx, x, ny, ns, ns, 14); ctx.save(); ctx.clip(); ctx.fillRect(x, ny, ns, ns * (cd / cdMax)); ctx.restore()
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText(Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1) }
+    }
+    abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, ABIL.shield.cd, G.shieldT, ABIL.shield.dur)
+    abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, ABIL.frenzy.cd, G.frenzyT, ABIL.frenzy.dur)
+    abil('nade', 306, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, NADE.cd, 0, 1)
   }
-  if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, W / 2 - tw / 2, ARENA.y1 - 38, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, W / 2, ARENA.y1 - 25) }
+  if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
   // banner
   if (G.banner) {
@@ -439,8 +455,8 @@ export function drawHelp(ctx: Ctx) {
     ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
     ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
     ['coin', 'Idle stash', 'Your pack keeps earning gold while you are away (up to ' + IDLE.capHours + 'h). Tap the stash chip under the gold counter to collect it.'],
-    ['boom', 'Grenade button', 'Bottom-right of the arena: lobs a grenade at the biggest clump of enemies. Arcs over cover. 12s cooldown.'],
-    ['hold', 'HOLD', 'Plants Bruno, Luna and pups. Your drag then steers only Rudy & Cooper: send them round the barricades. RECALL regroups.'],
+    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + ABIL.shield.dur + 's. Frenzy (yellow): double fire rate for ' + ABIL.frenzy.dur + 's. Grenade (orange): blasts the biggest clump.'],
+    ['hold', 'HOLD', 'Plants Bruno and Luna. Drag then steers only Rudy & Cooper round the barricades. RECALL regroups.'],
   ]
   let y = 92
   for (const [icon, title, body] of rows) {
@@ -457,7 +473,7 @@ export function drawHelp(ctx: Ctx) {
     ctx.fillStyle = '#c9d8d0'; ctx.font = '500 12px system-ui,sans-serif'
     const words = body.split(' '); let line = '', ly = y + 22
     for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > W - 80 && line) { ctx.fillText(line, 62, ly); line = w; ly += 15 } else line = test }
-    ctx.fillText(line, 62, ly); y = ly + 26
+    ctx.fillText(line, 62, ly); y = ly + 22
   }
   ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText('Tap anywhere to resume', W / 2, H - 22)
 }

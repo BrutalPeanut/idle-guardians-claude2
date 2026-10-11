@@ -28,6 +28,7 @@ export type GEvent =
   | { type: 'idle_collect'; gold: number }
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
+  | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
   | { type: 'nade_throw'; x: number; y: number }
 
 interface State {
@@ -40,6 +41,8 @@ interface State {
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
   nades: Nade[]; nadeCd: number
+  /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
+  frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
   /** Idle income: gold waiting in the kennel stash (must be collected), last time we saw the player, and the welcome-back summary. */
   stash: number; lastSeen: number; away: { minutes: number; gold: number; capped: boolean } | null
@@ -53,7 +56,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -84,7 +87,7 @@ export function load() {
 
 export function startStage() {
   const s = G.stage, rules = rulesFor(s), L = buildLayout(s, hpScale)
-  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0
+  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
@@ -143,7 +146,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
 }
 const alive = (i: number) => G.hp[i] > 0
 function hurt(i: number, dmg: number) {
-  if (!alive(i)) return
+  if (!alive(i) || G.shieldT > 0) return // Guardian Shield: all incoming damage is blocked
   G.hp[i] -= dmg
   if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = REVIVE_T; const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
@@ -181,6 +184,14 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
   G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 })
   G.nadeCd = NADE.cd; G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
+}
+
+/** Frenzy: every gun fires at double rate. Shield: the whole pack takes no damage. Both are tap-to-use with a cooldown. */
+export const ABIL = { frenzy: { dur: 6, cd: 18, mul: 2 }, shield: { dur: 5, cd: 22 } }
+export function useAbility(kind: 'frenzy' | 'shield'): 'ok' | 'cooldown' {
+  if (kind === 'frenzy') { if (G.frenzyCd > 0) return 'cooldown'; G.frenzyT = ABIL.frenzy.dur; G.frenzyCd = ABIL.frenzy.cd }
+  else { if (G.shieldCd > 0) return 'cooldown'; G.shieldT = ABIL.shield.dur; G.shieldCd = ABIL.shield.cd }
+  G.events.push({ type: 'ability', kind, x: G.pack.x, y: G.pack.y }); return 'ok'
 }
 
 export function update(dtReal: number) {
@@ -240,7 +251,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1)
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }
@@ -318,6 +329,7 @@ export function update(dtReal: number) {
 
   // ---- player grenades ----
   if (G.nadeCd > 0) G.nadeCd = Math.max(0, G.nadeCd - dt)
+  G.frenzyT = Math.max(0, G.frenzyT - dt); G.frenzyCd = Math.max(0, G.frenzyCd - dt); G.shieldT = Math.max(0, G.shieldT - dt); G.shieldCd = Math.max(0, G.shieldCd - dt)
   for (const g of G.nades) {
     g.t += dt
     if (g.t < g.dur) continue
