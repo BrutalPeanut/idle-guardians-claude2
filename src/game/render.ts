@@ -89,6 +89,8 @@ function eyes(ctx: Ctx, x: number, y: number, s: number, look: number) {
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + sx * 4.5 * s + 0.8, y - 0.8, 0.8 * s, 0, 6.283); ctx.fill();
   }
 }
+/** Rudy and Cooper are drawn larger so the strike team reads at a glance. Feet stay anchored. */
+const dogScale = (i: number) => i === 0 ? 1.45 : i === 1 ? 1.32 : 1
 function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing: boolean, tgt: Enemy | undefined) {
   const bob = Math.sin(t * 6 + x) * 1.2
   y += bob
@@ -278,7 +280,7 @@ export function render(ctx: Ctx, t: number) {
   for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
-  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.globalAlpha = 1 } }); }
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1 } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
@@ -289,11 +291,11 @@ export function render(ctx: Ctx, t: number) {
     ctx.fillStyle = '#ffd84a'; ctx.fillRect(x - 1.5, y - hgt - 8, 3, 3)
   }
   drawShells(ctx, G.shells, t); drawEBullets(ctx, G.ebullets);
-  for (let i = 0; i < n; i++) { const gp = guardianPos(i); drawStatus(ctx, gp.x, gp.y, G.status[i]) }
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); drawStatus(ctx, gp.x, gp.y - (dogScale(i) - 1) * 30, G.status[i]) }
   for (let i = 0; i < n; i++) { // floating health bar over each guardian
-    const gp = guardianPos(i), f = Math.max(0, G.hp[i] / G.mhp[i]), w = 26
-    ctx.fillStyle = 'rgba(0,0,0,.6)'; rr(ctx, gp.x - w / 2, gp.y - 28, w, 5, 2.5); ctx.fill()
-    if (f > 0) { ctx.fillStyle = f > 0.35 ? '#5be07f' : '#ff6a5a'; rr(ctx, gp.x - w / 2 + 0.5, gp.y - 27.5, Math.max(2, (w - 1) * f), 4, 2); ctx.fill() }
+    const gp = guardianPos(i), f = Math.max(0, G.hp[i] / G.mhp[i]), w = 26 + (dogScale(i) - 1) * 24, yo = 28 + (dogScale(i) - 1) * 30
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; rr(ctx, gp.x - w / 2, gp.y - yo, w, 5, 2.5); ctx.fill()
+    if (f > 0) { ctx.fillStyle = f > 0.35 ? '#5be07f' : '#ff6a5a'; rr(ctx, gp.x - w / 2 + 0.5, gp.y - yo + 0.5, Math.max(2, (w - 1) * f), 4, 2); ctx.fill() }
   }
   for (const p of R.parts) {
     if (p.ring) { ctx.strokeStyle = 'rgba(255,200,90,' + (1 - p.t / p.life) + ')'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, p.r! * (p.t / p.life), 0, 6.283); ctx.stroke(); }
