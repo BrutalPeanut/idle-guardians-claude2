@@ -444,9 +444,9 @@ export function render(ctx: Ctx, t: number) {
       ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, bx + 0.5, 14.5, bw - 1, 11, 5); ctx.stroke()
     } }
 
-  button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
-  button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
-  button(ctx, 'mute', 310, 8, 42, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
+  button(ctx, 'help', 214, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
+  button(ctx, 'speed', 252, 8, 62, 34, { label: '2x', size: 15, top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
+  button(ctx, 'mute', 318, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
   { // stardust chip: permanent currency; tap to open Rebirth (glows when a rebirth would pay out)
     const sx = 216, sw = 134, can = rebirthGain(G.stage) > 0, pulse = can ? 0.5 + 0.5 * Math.sin(t * 5) : 0
     R.btns.stardust = { x: sx, y: 45, w: sw, h: 24 }
