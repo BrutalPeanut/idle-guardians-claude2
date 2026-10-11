@@ -11,7 +11,7 @@ interface Rect { x: number; y: number; w: number; h: number }
 type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, dragOver: -1, dragTarget: false, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -242,8 +242,11 @@ export function render(ctx: Ctx, t: number) {
   ctx.textAlign = 'center'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillStyle = G.speed > 1 ? '#ffcf8a' : '#7f929a'; ctx.fillText(G.speed > 1 ? '2× ON' : 'SPEED 1×', 284, 54)
   ctx.fillStyle = '#7f929a'; ctx.fillText(Audio_.muted ? 'MUTED' : 'SOUND', 331, 54)
 
-  // drag target marker
-  if (R.dragTarget) { ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(G.pack.tx, G.pack.ty + 20, 14, 0, 6.283); ctx.stroke(); ctx.setLineDash([]) }
+  // drag anchor: faint ring where the touch began, dot + tether at the finger
+  if (R.dragAnchor) { const a = R.dragAnchor; ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2
+    ctx.beginPath(); ctx.arc(a.sx, a.sy, 22, 0, 6.283); ctx.fill(); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(a.cx, a.cy); ctx.stroke()
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.arc(a.cx, a.cy, 9, 0, 6.283); ctx.fill(); ctx.restore() }
 
   // ---------- armory ----------
   const ag = ctx.createLinearGradient(0, BENCH.y - 24, 0, H); ag.addColorStop(0, 'rgba(10,16,19,.86)'); ag.addColorStop(1, 'rgba(10,16,19,.97)')
