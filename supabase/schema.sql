@@ -1,4 +1,4 @@
--- Barkpocalypse global leaderboard. Run once in the Supabase SQL editor.
+-- Woof Wars global leaderboard. Run once in the Supabase SQL editor.
 create table if not exists public.players (
   id uuid primary key,
   name text not null check (char_length(name) between 3 and 24),
