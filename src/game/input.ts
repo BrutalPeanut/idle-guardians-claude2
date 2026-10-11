@@ -106,13 +106,23 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   document.addEventListener('visibilitychange', vis)
 
   let last = performance.now(), acc = 0, T = 0, raf = 0
+  let errs = 0
   const frame = (now: number) => {
+    raf = requestAnimationFrame(frame) // schedule first so one bad frame can never freeze the game
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
-    while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
-    drainEvents(); updateFx(dt); render(ctx, T)
-    if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
-    raf = requestAnimationFrame(frame)
+    try {
+      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
+      drainEvents(); updateFx(dt)
+    } catch (e) { acc = 0; if (errs++ < 5) console.error('sim error', e) }
+    try {
+      ctx.setTransform(ctx.canvas.width / 360, 0, 0, ctx.canvas.height / 640, 0, 0); ctx.globalAlpha = 1; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
+      render(ctx, T)
+      if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
+    } catch (e) {
+      if (errs++ < 5) console.error('render error', e)
+      R.screen = null; R.quests = false; R.rebirth = false; R.help = false; R.tour = null; R.tourAsk = false
+    }
   }
   raf = requestAnimationFrame(frame)
   return () => {
