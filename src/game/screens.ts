@@ -6,6 +6,7 @@ import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, r
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
 
+const mix = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
 export interface Tile { id: string; label: string; sub: () => string; icon: string; col: string; badge?: () => boolean }
 /** Hub tiles. Later features append here. */
 export const TILES: Tile[] = []
@@ -17,12 +18,14 @@ export function panel(ctx: Ctx, title: string, back = true) {
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
   ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 10; for (let x = -H; x < W + 40; x += 34) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke() } ctx.restore()
   const vg = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 460); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.45)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H)
+  plate(ctx, 8, 40, W - 16, 540, 20, 'rgba(34,52,64,.55)', 'rgba(12,20,26,.65)')
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.font = '800 22px ' + FONT; const tw = ctx.measureText(title).width + 56, tx = W / 2 - tw / 2
+  ctx.font = '400 22px ' + FONT; const tw = ctx.measureText(title).width + 56, tx = W / 2 - tw / 2
   const g = ctx.createLinearGradient(0, 10, 0, 46); g.addColorStop(0, '#ffd24a'); g.addColorStop(1, '#e8741a')
   ctx.fillStyle = g; rr(ctx, tx, 10, tw, 36, 12); ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 3; rr(ctx, tx, 10, tw, 36, 12); ctx.stroke()
   ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(ctx, tx + 4, 13, tw - 8, 12, 9); ctx.fill()
   outText(ctx, title, W / 2, 28.5, '#fff', 5)
+  button(ctx, 'scr_x', W - 44, 8, 34, 34, { top: '#ff7a6a', bot: '#c42f2f', label: 'X', size: 15, round: true })
   button(ctx, 'scr_close', W / 2 - 60, H - 52, 120, 38, { top: '#6f8794', bot: '#3f525d', label: back ? 'Back' : 'Close', size: 14 })
 }
 
@@ -31,10 +34,11 @@ export function drawHub(ctx: Ctx, t: number) {
   const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 64
   TILES.forEach((tl, i) => {
     const x = 16 + (i % cols) * (tw + 12), y = 58 + Math.floor(i / cols) * (th + 8)
-    button(ctx, 'nav_' + tl.id, x, y, tw, th, { top: '#2e3e48', bot: '#1a2830' })
-    ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(1.8, 1.8); icons[tl.icon]?.(ctx, 0, 0, tl.col); ctx.restore()
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '800 15px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; outText(ctx, tl.label, x + 58, y + 24, '#fff', 3.5)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 42)
+    button(ctx, 'nav_' + tl.id, x, y, tw, th, { top: mix(tl.col, '#101820', 0.38), bot: mix(tl.col, '#101820', 0.72) })
+    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + 30, y + th / 2 - 2, 22, 0, 6.283); ctx.fill()
+    ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(1.8, 1.8); icons[tl.icon]?.(ctx, 0, 0, mix(tl.col, '#ffffff', 0.35)); ctx.restore()
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, tl.label, x + 58, y + 24, '#fff', 3.5)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 42)
     if (tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 12, y + 12 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
 }
@@ -44,8 +48,8 @@ export function drawStats(ctx: Ctx) {
   panel(ctx, 'Damage Breakdown')
   const n = unlockedGuardians(G.stage), st = G.stats
   const total = st.dealt.slice(0, n).reduce((a, b) => a + b, 0) + st.nade
-  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('This run (resets on Rebirth)', W / 2, 60)
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 26px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(total) + ' total', W / 2, 90)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('This run (resets on Rebirth)', W / 2, 60)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 26px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(total) + ' total', W / 2, 90)
   const rows: { name: string; v: number; col: string; taken?: number }[] = []
   for (let i = 0; i < n; i++) rows.push({ name: GUARDIANS[i].n, v: st.dealt[i], col: i < 2 ? '#ffb347' : '#6fb8ff', taken: st.taken[i] })
   rows.push({ name: 'Grenade ability', v: st.nade, col: '#ff7a4a' })
@@ -53,17 +57,17 @@ export function drawStats(ctx: Ctx) {
   let y = 118
   ctx.textAlign = 'left'
   for (const r of rows) {
-    ctx.fillStyle = '#fff'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(r.name, 20, y)
-    ctx.textAlign = 'right'; ctx.fillStyle = '#d6e4dc'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(r.v) + (total ? '  ' + Math.round(r.v / total * 100) + '%' : ''), W - 20, y); ctx.textAlign = 'left'
+    ctx.fillStyle = '#fff'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(r.name, 20, y)
+    ctx.textAlign = 'right'; ctx.fillStyle = '#d6e4dc'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(r.v) + (total ? '  ' + Math.round(r.v / total * 100) + '%' : ''), W - 20, y); ctx.textAlign = 'left'
     ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, 20, y + 9, W - 40, 10, 5); ctx.fill()
     if (r.v > 0) { ctx.fillStyle = r.col; rr(ctx, 20, y + 9, Math.max(6, (W - 40) * r.v / mx), 10, 5); ctx.fill() }
     y += 40
   }
   y += 4
-  ctx.fillStyle = '#fff'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Bonuses and defense', 20, y); y += 24
+  ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Bonuses and defense', 20, y); y += 24
   const lines: [string, string][] = [['Flanking bonus damage', fmt(st.flank)], ['Absorbed by your cover', fmt(st.cover)], ['Blocked by Shield', fmt(st.shield)]]
   for (let i = 0; i < n; i++) lines.push(['Taken by ' + GUARDIANS[i].n, fmt(st.taken[i])])
-  for (const [k, v] of lines) { ctx.fillStyle = '#c9d8d0'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText(k, 20, y); ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(v, W - 20, y); y += 21 }
+  for (const [k, v] of lines) { ctx.fillStyle = '#c9d8d0'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText(k, 20, y); ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(v, W - 20, y); y += 21 }
   void OUT
 }
 
@@ -102,8 +106,8 @@ function itemCard(ctx: Ctx, x: number, y: number, w: number, h: number, it: Item
   ctx.fillStyle = it ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.03)'; rr(ctx, x, y, w, h, 11); ctx.fill()
   ctx.strokeStyle = col; ctx.lineWidth = sel ? 3 : 1.5; rr(ctx, x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmtStat(it).replace(/ (damage|max HP|crit chance|fire rate|kill gold)/, m => ({ ' damage': ' dmg', ' max HP': ' HP', ' crit chance': ' crit', ' fire rate': ' rate', ' kill gold': ' gold' } as Record<string, string>)[m]), x + w / 2, y + h - 11) }
-  else { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(label ?? 'empty', x + w / 2, y + h / 2) }
+  if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(it).replace(/ (damage|max HP|crit chance|fire rate|kill gold)/, m => ({ ' damage': ' dmg', ' max HP': ' HP', ' crit chance': ' crit', ' fire rate': ' rate', ' kill gold': ' gold' } as Record<string, string>)[m]), x + w / 2, y + h - 11) }
+  else { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(label ?? 'empty', x + w / 2, y + h / 2) }
 }
 function chestIcon(ctx: Ctx, x: number, y: number, s: number, tier: number, open = 0) {
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s); const col = CHEST_COLS[tier]
@@ -119,25 +123,25 @@ export function drawGear(ctx: Ctx, t: number) {
   for (let k = 0; k < 3; k++) {
     const x = 16 + k * 112, c = G.chests[k]
     button(ctx, 'chest_' + k, x, 52, 104, 44, { top: c ? '#34444e' : '#252f36', bot: c ? '#1d2a31' : '#1b2328' })
-    chestIcon(ctx, x + 24, 72, 0.75, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 46, 66); ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c + (c ? '  OPEN' : ''), x + 46, 82)
+    chestIcon(ctx, x + 24, 72, 0.75, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 46, 66); ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c + (c ? '  OPEN' : ''), x + 46, 82)
   }
   for (let i = 0; i < n; i++) button(ctx, 'gt_' + i, 16 + i * 84, 106, 78, 28, { top: i === R.gearDog ? '#ffb347' : '#3a4850', bot: i === R.gearDog ? '#e0731a' : '#26323a', label: GUARDIANS[i].n, size: 12 })
   const dog = dogId(R.gearDog)
   SLOTS.forEach((sl, k) => { const x = 16 + k * 112, it = G.gear.find(g => g.on === dog && g.slot === sl) ?? null; R.btns['slot_' + k] = { x, y: 142, w: 104, h: 74 }; itemCard(ctx, x, 142, 104, 74, it, false, sl.toUpperCase()) })
-  ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('INVENTORY  ' + invCount() + '/' + INV_MAX + '  (tap an item)', 16, 228)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('INVENTORY  ' + invCount() + '/' + INV_MAX + '  (tap an item)', 16, 228)
   const inv = G.gear.filter(g => g.on < 0)
   for (let k = 0; k < INV_MAX; k++) { const x = 16 + (k % 4) * 84, y = 238 + Math.floor(k / 4) * 62, it = inv[k] ?? null; R.btns['inv_' + k] = { x, y, w: 76, h: 56 }; itemCard(ctx, x, y, 76, 56, it, !!it && it.id === R.sel, '') }
   const sel = itemOf(R.sel)
   const py = 490
   ctx.fillStyle = 'rgba(255,255,255,.05)'; rr(ctx, 16, py, W - 32, 88, 14); ctx.fill()
   if (sel) {
-    ctx.textAlign = 'left'; ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(itemName(sel), 28, py + 20)
-    ctx.fillStyle = '#d6e4dc'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmtStat(sel) + '  (found at stage ' + sel.lvl + ')', 28, py + 40)
+    ctx.textAlign = 'left'; ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(itemName(sel), 28, py + 20)
+    ctx.fillStyle = '#d6e4dc'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(sel) + '  (found at stage ' + sel.lvl + ')', 28, py + 40)
     const cur = G.gear.find(g => g.on === dog && g.slot === sel.slot)
     if (cur && sel.on < 0) { const d = (sel.val - cur.val) * 100; ctx.fillStyle = d >= 0 ? '#5be07f' : '#ff8a7a'; ctx.fillText((cur.stat === sel.stat ? (d >= 0 ? '+' : '') + d.toFixed(1) + '% vs worn' : 'different stat than worn'), 28, py + 58) }
     if (sel.on < 0) button(ctx, 'rv_equipsel', 150, py + 48, 94, 34, { top: '#52d273', bot: '#25994a', label: 'Equip', size: 13 })
     button(ctx, 'sellsel', sel.on < 0 ? 250 : 150, py + 48, sel.on < 0 ? 94 : 194, 34, { top: '#e0b24a', bot: '#9a6a18', label: 'Sell ' + fmt(sellValue(sel)), size: 12 })
-  } else { ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Open chests for gear. Equip it on ' + GUARDIANS[dog].n + '.', W / 2, py + 44) }
+  } else { ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Open chests for gear. Equip it on ' + GUARDIANS[dog].n + '.', W / 2, py + 44) }
   if (R.reveal) drawReveal(ctx, t)
 }
 
@@ -149,8 +153,8 @@ function drawReveal(ctx: Ctx, t: number) {
   if (rv.phase === 0) {
     const sh = Math.sin(t * 30) * 3
     chestIcon(ctx, W / 2 + sh, 250, 4.2, rv.tier, 0)
-    ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = '800 20px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[rv.tier], W / 2, 150)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Tap to open', W / 2, 400)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = '400 20px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[rv.tier], W / 2, 150)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Tap to open', W / 2, 400)
     R.btns.rv_tap = { x: 0, y: 0, w: W, h: H }
   } else {
     const col = it ? RARITY[it.rar].col : '#ffd84a'
@@ -158,12 +162,12 @@ function drawReveal(ctx: Ctx, t: number) {
     chestIcon(ctx, W / 2, 120, 1.6, rv.tier, Math.min(1, rv.t * 3))
     if (it) {
       ctx.save(); ctx.translate(W / 2, 250); ctx.scale(5, 5); icons[it.slot](ctx, 0, 0, col); ctx.restore()
-      ctx.textAlign = 'center'; ctx.fillStyle = col; ctx.font = '800 22px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(RARITY[it.rar].n.toUpperCase(), W / 2, 330)
-      ctx.fillStyle = '#fff'; ctx.font = '800 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(itemName(it), W / 2, 362); ctx.fillStyle = '#d6e4dc'; ctx.font = '700 15px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmtStat(it), W / 2, 390)
+      ctx.textAlign = 'center'; ctx.fillStyle = col; ctx.font = '400 22px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(RARITY[it.rar].n.toUpperCase(), W / 2, 330)
+      ctx.fillStyle = '#fff'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(itemName(it), W / 2, 362); ctx.fillStyle = '#d6e4dc'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(it), W / 2, 390)
       button(ctx, 'rv_equip', 50, 440, 260, 46, { top: '#52d273', bot: '#25994a', label: 'Equip on ' + GUARDIANS[R.gearDog].n, size: 15 })
       button(ctx, 'rv_keep', 90, 498, 180, 38, { top: '#5b6c75', bot: '#3a4850', label: 'Keep', size: 13 })
     } else {
-      ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a'; ctx.font = '800 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Inventory full: sold for ' + fmt(rv.sold) + ' gold', W / 2, 300)
+      ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Inventory full: sold for ' + fmt(rv.sold) + ' gold', W / 2, 300)
       button(ctx, 'rv_keep', 90, 440, 180, 40, { top: '#5b6c75', bot: '#3a4850', label: 'OK', size: 14 })
     }
   }
@@ -213,7 +217,7 @@ import { weekMod, nextMod, daysLeft } from './weekly'
 
 export function drawLogin(ctx: Ctx, t: number) {
   panel(ctx, 'Login Streak')
-  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+  ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
   ctx.fillText(G.login.streak ? 'Current streak: ' + G.login.streak + (G.login.streak === 1 ? ' day' : ' days') : 'Claim every day to build a streak', W / 2, 64)
   const next = nextLoginDay(), can = canClaimLogin(), tw = 76, th = 96
   LOGIN_REWARDS.forEach((r, i) => {
@@ -221,29 +225,29 @@ export function drawLogin(ctx: Ctx, t: number) {
     const wide = i === 6, w = wide ? tw : tw, claimed = can ? i < next : i <= next, isNext = can && i === next
     ctx.fillStyle = claimed ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.08)'; rr(ctx, x, y, w, th, 13); ctx.fill()
     ctx.strokeStyle = isNext ? '#ffd84a' : wide ? '#ffb347' : 'rgba(255,255,255,.14)'; ctx.lineWidth = isNext ? 2.5 : 1.2; ctx.globalAlpha = isNext ? 0.6 + 0.4 * Math.sin(t * 5) : 1; rr(ctx, x + 1, y + 1, w - 2, th - 2, 13); ctx.stroke(); ctx.globalAlpha = 1
-    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('DAY ' + (i + 1), x + w / 2, y + 14)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('DAY ' + (i + 1), x + w / 2, y + 14)
     ctx.save(); ctx.translate(x + w / 2, y + 44); ctx.globalAlpha = claimed ? 0.35 : 1
     if (r.chest !== undefined) { ctx.scale(1.5, 1.5); icons.collar(ctx, 0, 0, '#ffb347') } else if (r.gems) { ctx.scale(2, 2); icons.gem(ctx, 0, 0, '#6fd6ff') } else { ctx.scale(2, 2); icons.coin(ctx, 0, 0, '#ffd84a') }
     ctx.restore()
-    ctx.fillStyle = claimed ? '#7f929a' : '#fff'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(r.label, x + w / 2, y + 76)
+    ctx.fillStyle = claimed ? '#7f929a' : '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(r.label, x + w / 2, y + 76)
     if (r.chest !== undefined && r.gems) ctx.fillText('+' + r.gems + ' gems', x + w / 2, y + 88)
     if (claimed) { ctx.strokeStyle = '#5be07f'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + w - 22, y + 14); ctx.lineTo(x + w - 17, y + 19); ctx.lineTo(x + w - 9, y + 9); ctx.stroke() }
   })
   void LOGIN_DAYS
   if (can) button(ctx, 'login_claim', W / 2 - 100, 330, 200, 48, { top: '#52d273', bot: '#25994a', label: 'CLAIM DAY ' + (next + 1), size: 16 })
-  else { ctx.fillStyle = '#9fb5aa'; ctx.font = '700 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Come back tomorrow for day ' + (((nextLoginDay() + 1) % LOGIN_DAYS) + 1), W / 2, 354) }
-  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Miss a day and the streak starts over at day 1.', W / 2, 410)
+  else { ctx.fillStyle = '#9fb5aa'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Come back tomorrow for day ' + (((nextLoginDay() + 1) % LOGIN_DAYS) + 1), W / 2, 354) }
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Miss a day and the streak starts over at day 1.', W / 2, 410)
 }
 
 export function drawWeekly(ctx: Ctx) {
   panel(ctx, 'This Week')
   const m = weekMod(), nx = nextMod()
-  ctx.textAlign = 'center'; ctx.fillStyle = m.col; ctx.font = '800 30px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(m.name, W / 2, 130)
-  ctx.fillStyle = '#e8f1ec'; ctx.font = '600 15px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(m.desc, W / 2, 168)
-  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(daysLeft() + (daysLeft() === 1 ? ' day' : ' days') + ' left', W / 2, 204)
+  ctx.textAlign = 'center'; ctx.fillStyle = m.col; ctx.font = '400 30px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(m.name, W / 2, 130)
+  ctx.fillStyle = '#e8f1ec'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(m.desc, W / 2, 168)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(daysLeft() + (daysLeft() === 1 ? ' day' : ' days') + ' left', W / 2, 204)
   plate(ctx, 30, 250, W - 60, 90, 16)
-  ctx.fillStyle = '#7f929a'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('NEXT WEEK', W / 2, 272)
-  ctx.fillStyle = nx.col; ctx.font = '800 18px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(nx.name, W / 2, 298); ctx.fillStyle = '#c9d8d0'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(nx.desc, W / 2, 322)
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('NEXT WEEK', W / 2, 272)
+  ctx.fillStyle = nx.col; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(nx.name, W / 2, 298); ctx.fillStyle = '#c9d8d0'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(nx.desc, W / 2, 322)
 }
 
 registerTile({ id: 'login', label: 'Login Streak', sub: () => canClaimLogin() ? 'Reward ready!' : 'Day ' + G.login.streak, icon: 'gem', col: '#52d273', badge: () => canClaimLogin() })
@@ -256,15 +260,15 @@ import { sk, pointsLeft, pointsSpent, buySkill, respec } from './sim'
 export function drawSkills(ctx: Ctx) {
   panel(ctx, 'Skill Tree')
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 20px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Paw Points: ' + pointsLeft(), W / 2, 66)
-  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Earned ' + pointsEarned(G.best, G.rebirths) + '  (1 per 2 stages of your best run, 3 per Rebirth)', W / 2, 88)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 20px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Paw Points: ' + pointsLeft(), W / 2, 66)
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Earned ' + pointsEarned(G.best, G.rebirths) + '  (1 per 2 stages of your best run, 3 per Rebirth)', W / 2, 88)
   BRANCHES.forEach((b, i) => button(ctx, 'sb_' + i, 16 + i * 112, 104, 104, 32, { top: R.skillTab === i ? b.col : '#3a4850', bot: R.skillTab === i ? b.col + 'aa' : '#26323a', label: b.name, size: 13 }))
   const br = BRANCHES[R.skillTab], list = SKILLS.filter(s => s.branch === br.id)
   list.forEach((s, i) => {
     const x = 16, y = 148 + i * 86, w = W - 32, h = 78, r = sk(s.id), can = pointsLeft() > 0 && r < s.max
     plate(ctx, x, y, w, h, 14); ctx.strokeStyle = r ? br.col : 'rgba(255,255,255,.12)'; ctx.lineWidth = 1.5; rr(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 14); ctx.stroke()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(s.name, x + 14, y + 20)
-    ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(s.desc, x + 14, y + 40)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(s.name, x + 14, y + 20)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(s.desc, x + 14, y + 40)
     for (let p = 0; p < s.max; p++) { ctx.fillStyle = p < r ? br.col : 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(x + 20 + p * 18, y + 60, 6, 0, 6.283); ctx.fill() }
     button(ctx, 'sk_' + s.id, x + w - 66, y + 20, 52, 38, { top: can ? '#52d273' : '#4a565d', bot: can ? '#25994a' : '#2f3a40', label: r >= s.max ? 'MAX' : '+', size: r >= s.max ? 11 : 20, disabled: !can })
   })
@@ -277,25 +281,25 @@ import { drawPlainDog } from './render'
 export function drawKennel(ctx: Ctx) {
   panel(ctx, 'Kennel')
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 16px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Dungeon Coins: ' + G.coins, W / 2, 62)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 16px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Dungeon Coins: ' + G.coins, W / 2, 62)
   const un = unlockedGuardians(G.stage)
   for (let k = 0; k < 2; k++) {
     const x = 16 + k * 170, y = 78, w = 158, h = 62, r = G.squad[k], d = ROSTER[r], sel = R.kSlot === k
     button(ctx, 'ks_' + k, x, y, w, h, { top: sel ? '#3d5a6a' : '#2a3841', bot: sel ? '#27404d' : '#1a262d' })
     if (sel) { ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 2; rr(ctx, x + 1, y + 1, w - 2, h - 2, 14); ctx.stroke() }
     ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y + 2, 46, h - 4); ctx.clip(); drawPlainDog(ctx, d, x + 28, y + 36, 0); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('SUPPORT SLOT ' + (k + 1), x + 54, y + 14)
-    ctx.fillStyle = '#fff'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.n, x + 54, y + 30)
-    ctx.fillStyle = un > 2 + k ? '#7af09a' : '#ff9a7a'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(un > 2 + k ? d.role : 'Unlocks stage ' + (5 + 5 * k), x + 54, y + 47)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('SUPPORT SLOT ' + (k + 1), x + 54, y + 14)
+    ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.n, x + 54, y + 30)
+    ctx.fillStyle = un > 2 + k ? '#7af09a' : '#ff9a7a'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(un > 2 + k ? d.role : 'Unlocks stage ' + (5 + 5 * k), x + 54, y + 47)
   }
-  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Rudy and Cooper always lead. Pick a slot, then tap a dog.', W / 2, 152)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Rudy and Cooper always lead. Pick a slot, then tap a dog.', W / 2, 152)
   for (let r = 2; r < ROSTER.length; r++) {
     const d = ROSTER[r], i = r - 2, x = 16, y = 164 + i * 51, w = W - 32, h = 46, owned = G.owned.includes(r), inSlot = G.squad.indexOf(r), can = G.coins >= (d.cost ?? 0)
     button(ctx, 'kd_' + r, x, y, w, h, { top: inSlot >= 0 ? '#34513f' : owned ? '#2e3e48' : '#252f36', bot: inSlot >= 0 ? '#22382b' : owned ? '#1a2830' : '#1b2328' })
     ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 1, 44, h - 2); ctx.clip(); ctx.globalAlpha = owned ? 1 : 0.55; drawPlainDog(ctx, d, x + 24, y + 29, 0); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = owned ? '#fff' : '#b8c6cc'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.n + '  \u00b7  ' + d.breed, x + 52, y + 15)
-    ctx.fillStyle = owned ? '#ffd84a' : '#8fa0a8'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.perkText ?? '', x + 52, y + 32)
-    ctx.textAlign = 'right'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+    ctx.textAlign = 'left'; ctx.fillStyle = owned ? '#fff' : '#b8c6cc'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.n + '  \u00b7  ' + d.breed, x + 52, y + 15)
+    ctx.fillStyle = owned ? '#ffd84a' : '#8fa0a8'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.perkText ?? '', x + 52, y + 32)
+    ctx.textAlign = 'right'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
     if (inSlot >= 0) { ctx.fillStyle = '#7af09a'; ctx.fillText('SLOT ' + (inSlot + 1), x + w - 10, y + 15) }
     else if (owned) { ctx.fillStyle = '#9fd0ff'; ctx.fillText('SELECT', x + w - 10, y + 15) }
     else { ctx.fillStyle = can ? '#ffd84a' : '#ff8a7a'; ctx.fillText((d.cost ?? 0) + ' coins', x + w - 10, y + 15) }
@@ -312,30 +316,30 @@ export function drawRaid(ctx: Ctx) {
   const base = raidBase()
   if (res) {
     const t = res.tier, col = t >= 0 ? RAID.cols[t] : '#7f929a'
-    ctx.fillStyle = col; ctx.font = '800 30px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(t >= 0 ? RAID.names[t].toUpperCase() : 'NO TIER', W / 2, 100)
-    ctx.fillStyle = '#fff'; ctx.font = '800 40px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(res.dmg), W / 2, 150)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(res.best ? 'NEW PERSONAL BEST!' : 'Total damage  \u00b7  Best ' + fmt(G.raidInfo.best), W / 2, 182)
-    ctx.fillStyle = '#ffd84a'; ctx.font = '800 22px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('+' + res.coins + ' Dungeon Coins', W / 2, 240)
+    ctx.fillStyle = col; ctx.font = '400 30px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(t >= 0 ? RAID.names[t].toUpperCase() : 'NO TIER', W / 2, 100)
+    ctx.fillStyle = '#fff'; ctx.font = '400 40px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(res.dmg), W / 2, 150)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(res.best ? 'NEW PERSONAL BEST!' : 'Total damage  \u00b7  Best ' + fmt(G.raidInfo.best), W / 2, 182)
+    ctx.fillStyle = '#ffd84a'; ctx.font = '400 22px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('+' + res.coins + ' Dungeon Coins', W / 2, 240)
     if (res.chest >= 0) { ctx.fillStyle = '#9fd0ff'; ctx.fillText('+1 ' + CHEST_NAMES[res.chest], W / 2, 276) }
     const nx = RAID.tiers.findIndex(m => res.dmg < base * m)
-    ctx.fillStyle = '#7f929a'; ctx.font = '600 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+    ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
     if (nx >= 0) ctx.fillText(fmt(base * RAID.tiers[nx] - res.dmg) + ' more damage for ' + RAID.names[nx], W / 2, 330); else ctx.fillText('Top tier cleared!', W / 2, 330)
     ctx.fillText('The stage restarts when you continue.', W / 2, 352)
     button(ctx, 'raid_done', W / 2 - 100, 400, 200, 48, { top: '#52d273', bot: '#25994a', label: 'CONTINUE', size: 16 })
     return
   }
-  ctx.fillStyle = '#ff9ad8'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Hit the boss as hard as you can for ' + RAID.dur + ' seconds', W / 2, 66)
-  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Adds and boss shells hit back. Use your abilities. Gold is off in raids.', W / 2, 86)
+  ctx.fillStyle = '#ff9ad8'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Hit the boss as hard as you can for ' + RAID.dur + ' seconds', W / 2, 66)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Adds and boss shells hit back. Use your abilities. Gold is off in raids.', W / 2, 86)
   // tier table
   RAID.names.forEach((n, k) => {
     const y = 112 + k * 50, hit = G.raidInfo.best >= base * RAID.tiers[k]
     plate(ctx, 16, y, W - 32, 44, 12); ctx.strokeStyle = hit ? RAID.cols[k] : 'rgba(255,255,255,.1)'; ctx.lineWidth = 1.5; rr(ctx, 16.75, y + 0.75, W - 33.5, 42.5, 12); ctx.stroke()
-    ctx.textAlign = 'left'; ctx.fillStyle = RAID.cols[k]; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(n, 30, y + 16)
-    ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(base * RAID.tiers[k]) + ' damage', 30, y + 32)
-    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd84a'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(RAID.coins[k] + ' coins' + (RAID.chest[k] >= 0 ? '  +  ' + CHEST_NAMES[RAID.chest[k]].split(' ')[0] + ' chest' : ''), W - 30, y + 24)
+    ctx.textAlign = 'left'; ctx.fillStyle = RAID.cols[k]; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(n, 30, y + 16)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(base * RAID.tiers[k]) + ' damage', 30, y + 32)
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd84a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(RAID.coins[k] + ' coins' + (RAID.chest[k] >= 0 ? '  +  ' + CHEST_NAMES[RAID.chest[k]].split(' ')[0] + ' chest' : ''), W - 30, y + 24)
   })
-  ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Best: ' + fmt(G.raidInfo.best) + (G.raidInfo.best ? '  (' + (raidTier(G.raidInfo.best) >= 0 ? RAID.names[raidTier(G.raidInfo.best)] : 'no tier') + ')' : ''), W / 2, 326)
-  ctx.fillStyle = '#7f929a'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Targets scale with your current stage (' + G.stage + ').', W / 2, 346)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Best: ' + fmt(G.raidInfo.best) + (G.raidInfo.best ? '  (' + (raidTier(G.raidInfo.best) >= 0 ? RAID.names[raidTier(G.raidInfo.best)] : 'no tier') + ')' : ''), W / 2, 326)
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Targets scale with your current stage (' + G.stage + ').', W / 2, 346)
   const left = raidLeft()
   button(ctx, 'raid_go', W / 2 - 110, 372, 220, 54, { top: left ? '#ff7a5a' : '#4a565d', bot: left ? '#c42f2f' : '#2f3a40', label: left ? 'START RAID  (' + left + ' left today)' : 'No attempts left', size: 15, disabled: !left })
   button(ctx, 'raid_ad', W / 2 - 110, 436, 220, 38, { top: '#b58cf0', bot: '#6a3fb8', label: 'Watch an ad: +1 attempt', size: 12 })
@@ -346,42 +350,42 @@ registerTile({ id: 'raid', label: 'Boss Raid', sub: () => raidLeft() + ' attempt
 export function drawClan(ctx: Ctx) {
   panel(ctx, 'Clan')
   ctx.textBaseline = 'middle'
-  const foot = (y: number) => { ctx.textAlign = 'center'; ctx.fillStyle = '#5f7078'; ctx.font = '600 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now (no online service yet).', W / 2, y) }
+  const foot = (y: number) => { ctx.textAlign = 'center'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now (no online service yet).', W / 2, y) }
   if (!G.clan) {
-    ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '700 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Join a clan: bigger clans give stronger perks.', W / 2, 62)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Join a clan: bigger clans give stronger perks.', W / 2, 62)
     CLANS.forEach((d, i) => {
       const y = 82 + i * 70, ok = G.best >= d.req, p = PERKS[Math.min(9, d.base) - 1]
       button(ctx, 'cj_' + i, 16, y, W - 32, 62, { top: ok ? '#2e3e48' : '#252f36', bot: ok ? '#1a2830' : '#1b2328' })
-      ctx.fillStyle = d.col; rr(ctx, 26, y + 12, 38, 38, 10); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 45, y + 31)
-      ctx.textAlign = 'left'; ctx.fillStyle = ok ? '#fff' : '#9fb0b8'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.name, 76, y + 18)
-      ctx.fillStyle = '#9fb5aa'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Level ' + d.base + '  \u00b7  12 members  \u00b7  ' + onlineCount(d) + ' online', 76, y + 35)
+      ctx.fillStyle = d.col; rr(ctx, 26, y + 12, 38, 38, 10); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 45, y + 31)
+      ctx.textAlign = 'left'; ctx.fillStyle = ok ? '#fff' : '#9fb0b8'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.name, 76, y + 18)
+      ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Level ' + d.base + '  \u00b7  12 members  \u00b7  ' + onlineCount(d) + ' online', 76, y + 35)
       ctx.fillStyle = '#ffd84a'; ctx.fillText('Starts with: ' + p.text, 76, y + 50)
-      ctx.textAlign = 'right'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = ok ? '#7af09a' : '#ff9a7a'; ctx.fillText(ok ? 'JOIN' : 'Stage ' + d.req, W - 28, y + 18)
+      ctx.textAlign = 'right'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = ok ? '#7af09a' : '#ff9a7a'; ctx.fillText(ok ? 'JOIN' : 'Stage ' + d.req, W - 28, y + 18)
     })
     foot(520); return
   }
   const d = clanById(G.clan.id), lv = clanLevel(G.clan), pool = clanPool()!
-  ctx.fillStyle = d.col; rr(ctx, 16, 54, 46, 46, 12); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 39, 77)
-  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 17px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(d.name, 72, 66)
-  ctx.fillStyle = '#ffd84a'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Clan level ' + lv + (lv >= 10 ? '  (MAX)' : ''), 72, 84)
+  ctx.fillStyle = d.col; rr(ctx, 16, 54, 46, 46, 12); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 39, 77)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 17px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.name, 72, 66)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clan level ' + lv + (lv >= 10 ? '  (MAX)' : ''), 72, 84)
   const into = lv >= 10 ? XP_PER_LEVEL : G.clan.xp % XP_PER_LEVEL
   ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, 160, 78, 184, 12, 6); ctx.fill(); ctx.fillStyle = '#ffd84a'; rr(ctx, 160, 78, Math.max(8, 184 * into / XP_PER_LEVEL), 12, 6); ctx.fill()
   ;['Overview', 'Members'].forEach((n, i) => button(ctx, 'ct_' + i, 16 + i * 170, 108, 158, 30, { top: R.clanTab === i ? '#ffb347' : '#3a4850', bot: R.clanTab === i ? '#e0731a' : '#26323a', label: n, size: 13 }))
   if (R.clanTab === 1) {
-    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('THIS WEEK: CLAN RAID DAMAGE', W / 2, 152)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('THIS WEEK: CLAN RAID DAMAGE', W / 2, 152)
     const on = onlineSet(d), ms = mates(d)
     pool.rows.forEach((r, i) => {
       const y = 164 + i * 33, on1 = r.you || on[ms.findIndex(m => m.name === r.name)]
       ctx.fillStyle = r.you ? 'rgba(255,216,74,.16)' : 'rgba(255,255,255,.05)'; rr(ctx, 16, y, W - 32, 29, 9); ctx.fill()
       ctx.fillStyle = on1 ? '#7af09a' : '#46545b'; ctx.beginPath(); ctx.arc(30, y + 14.5, 4, 0, 6.283); ctx.fill()
-      ctx.textAlign = 'left'; ctx.fillStyle = r.you ? '#ffd84a' : '#fff'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText((i + 1) + '.  ' + r.name, 42, y + 15)
+      ctx.textAlign = 'left'; ctx.fillStyle = r.you ? '#ffd84a' : '#fff'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText((i + 1) + '.  ' + r.name, 42, y + 15)
       ctx.textAlign = 'right'; ctx.fillStyle = '#c9d8d0'; ctx.fillText(fmt(r.dmg), W - 28, y + 15)
     })
     foot(574); return
   }
   // overview: weekly goal with 3 milestones
-  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 13px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Weekly Clan Raid Goal', 18, 156)
-  ctx.textAlign = 'right'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(fmt(pool.total) + ' / ' + fmt(pool.goal), W - 18, 156)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Weekly Clan Raid Goal', 18, 156)
+  ctx.textAlign = 'right'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmt(pool.total) + ' / ' + fmt(pool.goal), W - 18, 156)
   const f = Math.min(1, pool.total / pool.goal)
   ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, 18, 168, W - 36, 14, 7); ctx.fill(); const gr = ctx.createLinearGradient(18, 0, W - 18, 0); gr.addColorStop(0, '#ff9a3a'); gr.addColorStop(1, '#ff4a6a'); ctx.fillStyle = gr; rr(ctx, 18, 168, Math.max(8, (W - 36) * f), 14, 7); ctx.fill()
   MILESTONES.forEach((m, k) => {
@@ -389,21 +393,21 @@ export function drawClan(ctx: Ctx) {
     ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, 166, 2, 18)
     const bw = 104, bx = 16 + k * 110
     button(ctx, 'cm_' + k, bx, 190, bw, 40, { top: got ? '#2f3a40' : ready ? '#52d273' : '#34444e', bot: got ? '#232c31' : ready ? '#25994a' : '#1d2a31', disabled: !ready })
-    ctx.textAlign = 'center'; ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.font = '800 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(got ? 'CLAIMED' : ready ? 'CLAIM' : Math.round(m.at * 100) + '%', bx + bw / 2, 203); ctx.font = '600 8px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillStyle = got ? '#5f7078' : '#d8e4de'; ctx.fillText(m.text, bx + bw / 2, 219)
+    ctx.textAlign = 'center'; ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(got ? 'CLAIMED' : ready ? 'CLAIM' : Math.round(m.at * 100) + '%', bx + bw / 2, 203); ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = got ? '#5f7078' : '#d8e4de'; ctx.fillText(m.text, bx + bw / 2, 219)
   })
   const hunt = Math.round(clanHunt(G.clan) * 100), nOn = onlineCount(d)
-  ctx.textAlign = 'left'; ctx.fillStyle = '#7af09a'; ctx.font = '800 12px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Clan Hunt: ' + nOn + ' clanmates online  =  +' + hunt + '% damage', 18, 252)
-  ctx.fillStyle = '#7f929a'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(G.clan!.wk >= raidBase() * RAID.tiers[0] ? 'Your raids add to the pool. Stages and bosses earn clan XP.' : 'Do a Boss Raid (Bronze or better) this week to unlock rewards.', 18, 270)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#7af09a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clan Hunt: ' + nOn + ' clanmates online  =  +' + hunt + '% damage', 18, 252)
+  ctx.fillStyle = '#7f929a'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(G.clan!.wk >= raidBase() * RAID.tiers[0] ? 'Your raids add to the pool. Stages and bosses earn clan XP.' : 'Do a Boss Raid (Bronze or better) this week to unlock rewards.', 18, 270)
   const gift = canClanGift()
   button(ctx, 'cgift', 16, 284, W - 32, 40, { top: gift ? '#ffb347' : '#3a4850', bot: gift ? '#e0731a' : '#26323a', label: gift ? 'Daily clan treats: collect ' + (3 + Math.floor(lv / 2)) + ' coins' : 'Treats collected. Back tomorrow', size: 13, disabled: !gift })
-  ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('CLAN PERKS', 18, 346)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('CLAN PERKS', 18, 346)
   PERKS.forEach((p, i) => {
     const y = 358 + i * 19, on = p.lv <= lv
-    ctx.fillStyle = on ? '#7af09a' : '#46545b'; ctx.font = '800 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Lv ' + p.lv, 22, y + 9)
-    ctx.fillStyle = on ? '#fff' : '#6d7d85'; ctx.font = '700 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(p.text, 70, y + 9)
+    ctx.fillStyle = on ? '#7af09a' : '#46545b'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Lv ' + p.lv, 22, y + 9)
+    ctx.fillStyle = on ? '#fff' : '#6d7d85'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(p.text, 70, y + 9)
   })
   button(ctx, 'cleave', W - 134, 552, 118, 24, { top: R.leaveArm ? '#ff6a5a' : '#4a565d', bot: R.leaveArm ? '#c42f2f' : '#2f3a40', label: R.leaveArm ? 'Tap again to leave' : 'Leave clan', size: 10 })
-  ctx.textAlign = 'left'; ctx.fillStyle = '#5f7078'; ctx.font = '600 9px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now.', 18, 564)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now.', 18, 564)
 }
 registerTile({ id: 'clan', label: 'Clan', sub: () => G.clan ? clanById(G.clan.id).name + '  Lv' + clanLevel(G.clan) : 'Join a clan', icon: 'gem', col: '#9fd0ff', badge: () => !G.clan ? G.best >= 8 : clanClaimable() })
 void cp
@@ -419,14 +423,14 @@ const AUTO_ROWS: { key: 'shield' | 'frenzy' | 'nade' | 'tank' | 'panic'; name: s
 export function drawAuto(ctx: Ctx) {
   panel(ctx, 'Auto Abilities')
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText('Abilities fire themselves when they are worth it. Cooldowns still apply.', W / 2, 62)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Abilities fire themselves when they are worth it. Cooldowns still apply.', W / 2, 62)
   button(ctx, 'auto', 16, 78, W - 32, 44, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: G.auto.on ? 'AUTO IS ON' : 'AUTO IS OFF  (tap to enable)', size: 15 })
   AUTO_ROWS.forEach((r, i) => {
     const y = 134 + i * 68, on = G.auto[r.key] && G.auto.on
     plate(ctx, 16, y, W - 32, 60, 14)
     ctx.save(); ctx.translate(44, y + 30); ctx.scale(1.5, 1.5); icons[r.icon]?.(ctx, 0, 0, r.col); ctx.restore()
-    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 14px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'; ctx.fillText(r.name, 74, y + 20)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 10px "Arial Rounded MT Bold","Trebuchet MS","Segoe UI",system-ui,sans-serif'
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(r.name, 74, y + 20)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
     const words = r.when.split(' '); let line = '', ly = y + 38; for (const w of words) { if (ctx.measureText(line + w).width > 170) { ctx.fillText(line, 74, ly); line = ''; ly += 12 } line += w + ' ' } ctx.fillText(line, 74, ly)
     button(ctx, 'au_' + r.key, W - 86, y + 14, 60, 32, { top: on ? '#52d273' : '#5a666d', bot: on ? '#25994a' : '#39434a', label: G.auto[r.key] ? 'ON' : 'OFF', size: 13 })
   })
