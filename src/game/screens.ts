@@ -8,6 +8,7 @@ import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGi
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
+import { LB, refresh, rerollName, playerName, playerId } from './leaderboard'
 
 const mix = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
 export interface Tile { id: string; label: string; sub: () => string; icon: string; col: string; badge?: () => boolean }
@@ -96,6 +97,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'auto': drawAuto(ctx); break
     case 'pass': drawPass(ctx); break
     case 'ach': drawAch(ctx); break
+    case 'rank': drawRank(ctx); break
     case 'spin': drawSpin(ctx); break
     default: drawHub(ctx, t)
   }
@@ -193,6 +195,8 @@ export function screenButton(k: string): boolean {
   if (k.startsWith('pt_')) { if (claimPassTier(+k.slice(3))) { G.banner = { text: 'Season reward', sub: rewardText(passReward(+k.slice(3))), t: 1.4 }; Audio_.coins() } return true }
   if (k === 'pass_all') { let n = 0; for (let x = 1; x <= PASS_TIERS; x++) if (claimPassTier(x)) n++; if (n) { G.banner = { text: n + ' rewards claimed', t: 1.4 }; Audio_.coins() } return true }
   if (k.startsWith('ac_')) { const a = ACHIEVEMENTS.find(x => x.id === k.slice(3)); if (a && claimAch(a.id)) { G.banner = { text: 'Achievement!', sub: a.text + '  +' + a.gems + ' gems', t: 1.6 }; Audio_.fanfare() } return true }
+  if (k === 'lb_refresh') { void refresh(); return true }
+  if (k === 'lb_name') { rerollName(); return true }
   if (k === 'ach_prev') { R.achPage = Math.max(0, R.achPage - 1); return true }
   if (k === 'ach_next') { R.achPage = Math.min(Math.ceil(ACHIEVEMENTS.length / 7) - 1, R.achPage + 1); return true }
   if (k.startsWith('au_')) { const key = k.slice(3) as keyof typeof G.auto; G.auto[key] = !G.auto[key]; return true }
@@ -530,3 +534,36 @@ export function drawSpin(ctx: Ctx) {
 registerTile({ id: 'spin', label: 'Lucky Spin', sub: () => spinsLeft().free ? 'Free spin ready' : 'Daily', icon: 'star', col: '#ff6a8a', badge: () => spinsLeft().free })
 registerTile({ id: 'pass', label: 'Season Pass', sub: () => 'Tier ' + passLevel() + ' / ' + PASS_TIERS, icon: 'gem', col: '#ffb347', badge: () => passReady() > 0 })
 registerTile({ id: 'ach', label: 'Achievements', sub: () => achReady() ? achReady() + ' to claim' : 'Goals', icon: 'sword', col: '#c9a6ff', badge: () => achReady() > 0 })
+
+/** Global leaderboard: top players by best stage (rebirths break ties), with our own row pinned at the bottom. */
+export function drawRank(ctx: Ctx) {
+  panel(ctx, 'Leaderboard')
+  if (LB.status === 'idle' || (LB.status === 'ok' && Date.now() - LB.at > 60000)) void refresh()
+  const me = playerId()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  if (LB.status === 'off' || LB.status === 'err' || (LB.status === 'loading' && !LB.rows.length)) {
+    ctx.font = '400 15px ' + FONT
+    outText(ctx, LB.status === 'off' ? 'Leaderboard launching soon' : LB.status === 'err' ? "Can't reach the leaderboard" : 'Loading...', W / 2, 250, '#fff', 3)
+    ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#9fb5aa'
+    ctx.fillText(LB.status === 'off' ? 'Your best stage: ' + G.best : LB.status === 'err' ? 'Check your connection and try again' : '', W / 2, 276)
+    if (LB.status === 'err') button(ctx, 'lb_refresh', W / 2 - 60, 300, 120, 38, { top: '#52d273', bot: '#25994a', label: 'Retry', size: 14 })
+    return
+  }
+  const medal = ['#ffd84a', '#d5dde3', '#e0954a']
+  LB.rows.slice(0, 10).forEach((r, i) => {
+    const y = 56 + i * 42, mine = r.id === me
+    plate(ctx, 16, y, W - 32, 38, 12, mine ? '#4a6a3a' : '#2d4252', mine ? '#26421f' : '#17252f')
+    ctx.textAlign = 'center'; ctx.font = '400 15px ' + FONT; outText(ctx, '' + (i + 1), 38, y + 19.5, medal[i] ?? '#c9dcd2', 3)
+    ctx.textAlign = 'left'; ctx.font = '400 13px ' + FONT; outText(ctx, r.name, 60, y + 14, '#fff', 3)
+    ctx.font = '400 9px ' + FONT; ctx.fillStyle = '#9fb5aa'; ctx.fillText(r.rebirths ? r.rebirths + ' rebirth' + (r.rebirths > 1 ? 's' : '') : 'no rebirths', 60, y + 28)
+    ctx.textAlign = 'right'; ctx.font = '400 16px ' + FONT; outText(ctx, 'Stage ' + r.stage, W - 28, y + 19.5, '#ffd84a', 3)
+  })
+  const y = 484
+  plate(ctx, 16, y, W - 32, 44, 12, '#4a6a3a', '#26421f')
+  ctx.textAlign = 'left'; ctx.font = '400 13px ' + FONT; outText(ctx, 'You: ' + playerName(), 28, y + 15, '#fff', 3)
+  ctx.font = '400 10px ' + FONT; ctx.fillStyle = '#c9dcd2'; ctx.fillText(LB.rank ? 'Rank #' + LB.rank + ' of ' + LB.total : 'Ranking you...', 28, y + 31)
+  ctx.textAlign = 'right'; ctx.font = '400 16px ' + FONT; outText(ctx, 'Stage ' + G.best, W - 28, y + 22, '#ffd84a', 3)
+  button(ctx, 'lb_name', 16, 534, 150, 34, { top: '#5b6c75', bot: '#3a4850', label: 'New name', size: 12 })
+  button(ctx, 'lb_refresh', W - 166, 534, 150, 34, { top: '#5ab8ff', bot: '#2a73c4', label: LB.status === 'loading' ? 'Updating...' : 'Refresh', size: 12, disabled: LB.status === 'loading' })
+}
+registerTile({ id: 'rank', label: 'Leaderboard', sub: () => LB.rank ? 'Rank #' + LB.rank : 'Global top players', icon: 'star', col: '#ffd84a' })

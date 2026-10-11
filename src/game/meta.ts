@@ -55,4 +55,4 @@ export const SPIN_SEGS: SpinSeg[] = [
 ]
 
 // ---- staged feature unlocks (by best stage), like the top games reveal menus gradually ----
-export const UNLOCK_STAGE: Record<string, number> = { stats: 1, tour: 1, help: 1, auto: 1, login: 1, quests: 2, spin: 2, gear: 3, pass: 3, weekly: 4, ach: 4, skills: 5, kennel: 6, raid: 8, clan: 10, rebirth: 1 }
+export const UNLOCK_STAGE: Record<string, number> = { stats: 1, tour: 1, help: 1, auto: 1, login: 1, quests: 2, spin: 2, gear: 3, pass: 3, weekly: 4, ach: 4, skills: 5, kennel: 6, raid: 8, clan: 10, rebirth: 1, rank: 1 }
