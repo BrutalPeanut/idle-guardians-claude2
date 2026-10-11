@@ -30,6 +30,7 @@ export type GEvent =
   | { type: 'down'; i: number; x: number; y: number }
   | { type: 'revive'; i: number; x: number; y: number }
   | { type: 'ability'; kind: 'frenzy' | 'shield'; x: number; y: number }
+  | { type: 'rebirth'; gain: number }
   | { type: 'blessing'; id: string }
   | { type: 'nade_throw'; x: number; y: number }
 
@@ -45,6 +46,8 @@ interface State {
   nades: Nade[]; nadeCd: number
   /** Blessing stacks (id -> count) and a pending 3-way pick (ids) that pauses the game until chosen. */
   blessings: Record<string, number>; pick: string[] | null
+  /** Rebirth currency (permanent) and how many times the player has reborn. */
+  stardust: number; rebirths: number
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -60,7 +63,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
+  status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, banner: null, kills: 0, combo: 0, comboT: 0,
   stash: 0, lastSeen: Date.now(), away: null,
 }
 /**
@@ -72,6 +75,10 @@ export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
 export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
 export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
 export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60
+/** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
+export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
+export const starMul = () => 1 + STAR_BONUS * G.stardust
+export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
 export const bl = (id: string) => G.blessings[id] ?? 0
 export const nadeCdMax = () => NADE.cd * Math.pow(0.85, bl('blast'))
 export const shieldDur = () => ABIL.shield.dur + bl('aegis')
@@ -82,13 +89,13 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 export function save() {
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, sd: G.stardust, rb: G.rebirths, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem('ig_save') || 'null')
     if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
-    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: s.gold, stage: s.stage, bought: s.bought, bench: s.bench, maxLevel: s.maxLevel, stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, lastSeen: s.t ?? Date.now() })
     return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -132,7 +139,7 @@ const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.cov
 function killReward(e: Enemy) {
   G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
-  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')))
+  const gold = Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune')) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean) {
@@ -148,7 +155,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * starMul() * mult, crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col })
   }
   G.events.push({ type: 'fire', kind: wd.kind, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -190,7 +197,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * 2.4 * starMul() })
   G.nadeCd = nadeCdMax(); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
@@ -370,6 +377,15 @@ export function update(dtReal: number) {
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()
   }
+}
+
+// ---- rebirth ----
+export function doRebirth() {
+  const gain = rebirthGain(G.stage); if (!gain) return 0
+  G.stardust += gain; G.rebirths++
+  Object.assign(G, { gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0 })
+  G.bench[0] = 0; G.bench[1] = 0
+  startStage(); G.events.push({ type: 'rebirth', gain }); save(); return gain
 }
 
 // ---- blessings ----
