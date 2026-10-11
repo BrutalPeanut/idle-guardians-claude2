@@ -131,11 +131,6 @@ function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: number)
   collar(ctx, x, y, '#d63a3a', false)
 }
 /** Small fur spike: a triangle poking out of an outline at (x,y) pointing along `ang`. Used for scruffiness. */
-function tuft(ctx: Ctx, x: number, y: number, ang: number, len: number, w: number, fill: string) {
-  const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx
-  ctx.fillStyle = fill; ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.lineJoin = 'round'
-  ctx.beginPath(); ctx.moveTo(x + px * w, y + py * w); ctx.lineTo(x + dx * len, y + dy * len); ctx.lineTo(x - px * w, y - py * w); ctx.closePath(); ctx.fill(); ctx.stroke()
-}
 /** Green army-style helmet sitting on top of a head centred at (x,y). strap = chin strap fastened; otherwise loose straps dangle. */
 function helmet(ctx: Ctx, x: number, y: number, hw: number, strapped: boolean, t: number, tilt = 0) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(tilt)
@@ -169,25 +164,23 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
     ctx.beginPath(); ctx.moveTo(x + sx * 8, y - 12); ctx.quadraticCurveTo(x + sx * 18, y - 11, x + sx * 15.5, y + 3); ctx.quadraticCurveTo(x + sx * 12, y + 5, x + sx * 9.5, y - 1); ctx.closePath(); ctx.fill(); ctx.stroke()
   }
   blob(ctx, x, y - 4.5, 14.2, 12.8, g.fur, g.shade)                                                   // big round head
-  for (const [a, l] of [[-2.9, 4.5], [3.05, 4.5], [2.35, 5], [0.8, 5], [0.15, 4.5]] as [number, number][]) tuft(ctx, x + Math.cos(a) * 12.6, y - 4.5 + Math.sin(a) * 11.4, a, l, 3.2, g.fur)   // scruffy fur sticking out round the head
+  for (const a of [3.05, 0.1, 2.4, 0.75]) blob(ctx, x + Math.cos(a) * 12.9, y - 4.5 + Math.sin(a) * 11.6, 3.4, 2.8, g.fur, null)   // soft fluffy cheek tufts (scruffy but friendly)
   blob(ctx, x, y + 1.8, 6, 4.2, '#fffaf0', null)                                                  // light muzzle
   ctx.fillStyle = 'rgba(255,130,120,.55)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9.6, y - 0.2, 3.2, 2.1, 0, 0, 6.283); ctx.fill() } // rosy cheeks
   for (const sx of [-1, 1]) {                                                                       // big shiny eyes
-    const ex = x + sx * 5.6, ey = y - 6
-    ctx.fillStyle = '#2a1608'; ctx.beginPath(); ctx.ellipse(ex, ey, 3.8, 4.5, 0, 0, 6.283); ctx.fill()
+    const ex = x + sx * 5.6, ey = y - 5.6
+    ctx.fillStyle = '#2a1608'; ctx.beginPath(); ctx.ellipse(ex, ey, 4.1, 4.9, 0, 0, 6.283); ctx.fill()
     ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.ellipse(ex + look * 0.5, ey + 1.6, 2.8, 2.3, 0, 0, 6.283); ctx.fill()
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + look * 0.4 + 1.1, ey - 1.5, 1.6, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(ex - 1.1 + look * 0.4, ey + 2, 0.8, 0, 6.283); ctx.fill()
-    ctx.strokeStyle = g.shade; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(ex - 2.6, ey - 5.4); ctx.quadraticCurveTo(ex, ey - 6.6 - (sx < 0 ? 0 : 0.6), ex + 2.6, ey - 5.2); ctx.stroke() // happy brows
   }
   ctx.fillStyle = '#3a2418'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.ellipse(x, y - 0.4, 2.5, 1.9, 0, 0, 6.283); ctx.fill(); ctx.stroke() // nose
   ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - 1, y - 1.4, 0.9, 0.55, 0, 0, 6.283); ctx.fill()
-  ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y + 1.4); ctx.lineTo(x, y + 3); ctx.moveTo(x - 4.2, y + 2.2); ctx.quadraticCurveTo(x - 2, y + 5, x, y + 3); ctx.quadraticCurveTo(x + 2, y + 5, x + 4.2, y + 2.2); ctx.stroke() // smile
-  ctx.fillStyle = '#ff8fa8'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(x + 0.5, y + 4.4, 2.6, 2.8, 0, 0, Math.PI); ctx.fill(); ctx.stroke() // tongue
-  ctx.strokeStyle = 'rgba(160,70,90,.6)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x + 0.5, y + 3.6); ctx.lineTo(x + 0.5, y + 6); ctx.stroke()
-  for (const [dx, l] of [[-6, 4.5], [0, 4], [6, 4.5]] as [number, number][]) tuft(ctx, x + dx, y + 12.5, Math.PI / 2 + dx * 0.06, l, 3, '#fbeccb')   // ragged chest ruff
+  ctx.fillStyle = '#8a2f45'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.ellipse(x, y + 2.6, 5.2, 4.6, 0, 0, Math.PI); ctx.fill(); ctx.stroke()   // big open happy mouth
+  ctx.fillStyle = '#ff8fa8'; ctx.beginPath(); ctx.ellipse(x + 0.6, y + 6.6, 2.9, 2, 0, Math.PI, 0, true); ctx.fill()   // tongue
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.lineCap = 'round'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 5.2, y + 2.6); ctx.quadraticCurveTo(x + sx * 6.6, y + 1.6, x + sx * 6.9, y + 0.2); ctx.stroke() } ctx.lineCap = 'butt'   // smile cheeks
+  for (const dx of [-6, 0, 6]) blob(ctx, x + dx, y + 13.2, 3.6, 2.6, '#fbeccb', null)   // fluffy chest ruff
   collar(ctx, x, y + 4.2, '#c0392b', true)
-  for (const [dx, a] of [[-7, 1.9], [-3, 1.4], [2, 1.7], [7, 1.2]] as [number, number][]) tuft(ctx, x + dx, y - 9.2, a, 4, 2.8, g.fur)   // messy fringe poking out under the rim
-  helmet(ctx, x + 0.5, y - 10.5, 12.2, false, t, 0.1)   // green helmet, straps hanging loose
+  helmet(ctx, x + 0.3, y - 12.4, 12, false, t, -0.1)   // green helmet pushed back, straps hanging loose
 }
 /** Cooper: short-coated tan mix. Dark muzzle, one perked ear + one folded, white chest patch, head tilt, wide worried eyes. */
 function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
