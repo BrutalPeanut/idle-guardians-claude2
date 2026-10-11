@@ -1,4 +1,4 @@
-# Idle Guardians
+# Barkpocalypse
 
 Portrait-first idle merge-shooter RPG: dog guardians auto-fire at zombies and robots, merge duplicate weapons up a 13-rung historical ladder, and layer multiplicative progression systems.
 
