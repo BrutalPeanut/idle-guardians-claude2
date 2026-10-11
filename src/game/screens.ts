@@ -1,5 +1,7 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
+import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt } from './clan'
+import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGift, clanClaimable, milestoneReady, cp } from './sim'
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT } from './render'
 import type { Ctx } from './render'
@@ -74,6 +76,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'weekly': drawWeekly(ctx); break
     case 'kennel': drawKennel(ctx); break
     case 'raid': drawRaid(ctx); break
+    case 'clan': drawClan(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -160,6 +163,11 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  if (k.startsWith('cj_')) { const d = CLANS[+k.slice(3)]; if (joinClan(d.id)) { G.banner = { text: 'Joined ' + d.name, sub: 'Contribute by clearing stages and raiding', t: 1.8 }; Audio_.fanfare() } else G.banner = { text: 'Reach stage ' + d.req, sub: 'to join ' + d.name, t: 1.4 }; return true }
+  if (k === 'ct_0' || k === 'ct_1') { R.clanTab = +k.slice(3); return true }
+  if (k.startsWith('cm_')) { if (claimMilestone(+k.slice(3))) { G.banner = { text: 'Clan reward claimed', sub: MILESTONES[+k.slice(3)].text, t: 1.6 }; Audio_.coins() } return true }
+  if (k === 'cgift') { const c = claimClanGift(); if (c) { G.banner = { text: '+' + c + ' Dungeon Coins', sub: 'Treats from your clanmates', t: 1.6 }; Audio_.coins() } return true }
+  if (k === 'cleave') { if (R.leaveArm) { leaveClan(); R.leaveArm = false } else R.leaveArm = true; return true }
   if (k === 'raid_go') { if (startRaid()) { R.screen = null; Audio_.fanfare() } else G.banner = { text: 'No raid attempts left', sub: 'Back tomorrow, or watch an ad for one more', t: 1.6 }; return true }
   if (k === 'raid_done') { closeRaid(); R.screen = null; return true }
   if (k.startsWith('ks_')) { R.kSlot = +k.slice(3); return true }
@@ -324,3 +332,69 @@ export function drawRaid(ctx: Ctx) {
   button(ctx, 'raid_ad', W / 2 - 110, 436, 220, 38, { top: '#b58cf0', bot: '#6a3fb8', label: 'Watch an ad: +1 attempt', size: 12 })
 }
 registerTile({ id: 'raid', label: 'Boss Raid', sub: () => raidLeft() + ' attempts today', icon: 'sword', col: '#ff6a5a', badge: () => raidLeft() > 0 })
+
+// ================= Clan =================
+export function drawClan(ctx: Ctx) {
+  panel(ctx, 'Clan')
+  ctx.textBaseline = 'middle'
+  const foot = (y: number) => { ctx.textAlign = 'center'; ctx.fillStyle = '#5f7078'; ctx.font = '600 9px system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now (no online service yet).', W / 2, y) }
+  if (!G.clan) {
+    ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '700 12px system-ui,sans-serif'; ctx.fillText('Join a clan: bigger clans give stronger perks.', W / 2, 62)
+    CLANS.forEach((d, i) => {
+      const y = 82 + i * 70, ok = G.best >= d.req, p = PERKS[Math.min(9, d.base) - 1]
+      button(ctx, 'cj_' + i, 16, y, W - 32, 62, { top: ok ? '#2e3e48' : '#252f36', bot: ok ? '#1a2830' : '#1b2328' })
+      ctx.fillStyle = d.col; rr(ctx, 26, y + 12, 38, 38, 10); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '800 11px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 45, y + 31)
+      ctx.textAlign = 'left'; ctx.fillStyle = ok ? '#fff' : '#9fb0b8'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(d.name, 76, y + 18)
+      ctx.fillStyle = '#9fb5aa'; ctx.font = '600 10px system-ui,sans-serif'; ctx.fillText('Level ' + d.base + '  \u00b7  12 members  \u00b7  ' + onlineCount(d) + ' online', 76, y + 35)
+      ctx.fillStyle = '#ffd84a'; ctx.fillText('Starts with: ' + p.text, 76, y + 50)
+      ctx.textAlign = 'right'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillStyle = ok ? '#7af09a' : '#ff9a7a'; ctx.fillText(ok ? 'JOIN' : 'Stage ' + d.req, W - 28, y + 18)
+    })
+    foot(520); return
+  }
+  const d = clanById(G.clan.id), lv = clanLevel(G.clan), pool = clanPool()!
+  ctx.fillStyle = d.col; rr(ctx, 16, 54, 46, 46, 12); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '800 13px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 39, 77)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 17px system-ui,sans-serif'; ctx.fillText(d.name, 72, 66)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('Clan level ' + lv + (lv >= 10 ? '  (MAX)' : ''), 72, 84)
+  const into = lv >= 10 ? XP_PER_LEVEL : G.clan.xp % XP_PER_LEVEL
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, 160, 78, 184, 12, 6); ctx.fill(); ctx.fillStyle = '#ffd84a'; rr(ctx, 160, 78, Math.max(8, 184 * into / XP_PER_LEVEL), 12, 6); ctx.fill()
+  ;['Overview', 'Members'].forEach((n, i) => button(ctx, 'ct_' + i, 16 + i * 170, 108, 158, 30, { top: R.clanTab === i ? '#ffb347' : '#3a4850', bot: R.clanTab === i ? '#e0731a' : '#26323a', label: n, size: 13 }))
+  if (R.clanTab === 1) {
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('THIS WEEK: CLAN RAID DAMAGE', W / 2, 152)
+    const on = onlineSet(d), ms = mates(d)
+    pool.rows.forEach((r, i) => {
+      const y = 164 + i * 33, on1 = r.you || on[ms.findIndex(m => m.name === r.name)]
+      ctx.fillStyle = r.you ? 'rgba(255,216,74,.16)' : 'rgba(255,255,255,.05)'; rr(ctx, 16, y, W - 32, 29, 9); ctx.fill()
+      ctx.fillStyle = on1 ? '#7af09a' : '#46545b'; ctx.beginPath(); ctx.arc(30, y + 14.5, 4, 0, 6.283); ctx.fill()
+      ctx.textAlign = 'left'; ctx.fillStyle = r.you ? '#ffd84a' : '#fff'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillText((i + 1) + '.  ' + r.name, 42, y + 15)
+      ctx.textAlign = 'right'; ctx.fillStyle = '#c9d8d0'; ctx.fillText(fmt(r.dmg), W - 28, y + 15)
+    })
+    foot(574); return
+  }
+  // overview: weekly goal with 3 milestones
+  ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 13px system-ui,sans-serif'; ctx.fillText('Weekly Clan Raid Goal', 18, 156)
+  ctx.textAlign = 'right'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(fmt(pool.total) + ' / ' + fmt(pool.goal), W - 18, 156)
+  const f = Math.min(1, pool.total / pool.goal)
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(ctx, 18, 168, W - 36, 14, 7); ctx.fill(); const gr = ctx.createLinearGradient(18, 0, W - 18, 0); gr.addColorStop(0, '#ff9a3a'); gr.addColorStop(1, '#ff4a6a'); ctx.fillStyle = gr; rr(ctx, 18, 168, Math.max(8, (W - 36) * f), 14, 7); ctx.fill()
+  MILESTONES.forEach((m, k) => {
+    const x = 18 + (W - 36) * m.at, got = !!(G.clan!.claimed & (1 << k)), ready = milestoneReady(k)
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, 166, 2, 18)
+    const bw = 104, bx = 16 + k * 110
+    button(ctx, 'cm_' + k, bx, 190, bw, 40, { top: got ? '#2f3a40' : ready ? '#52d273' : '#34444e', bot: got ? '#232c31' : ready ? '#25994a' : '#1d2a31', disabled: !ready })
+    ctx.textAlign = 'center'; ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(got ? 'CLAIMED' : ready ? 'CLAIM' : Math.round(m.at * 100) + '%', bx + bw / 2, 203); ctx.font = '600 8px system-ui,sans-serif'; ctx.fillStyle = got ? '#5f7078' : '#d8e4de'; ctx.fillText(m.text, bx + bw / 2, 219)
+  })
+  const hunt = Math.round(clanHunt(G.clan) * 100), nOn = onlineCount(d)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#7af09a'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillText('Clan Hunt: ' + nOn + ' clanmates online  =  +' + hunt + '% damage', 18, 252)
+  ctx.fillStyle = '#7f929a'; ctx.font = '600 10px system-ui,sans-serif'; ctx.fillText(G.clan!.wk >= raidBase() * RAID.tiers[0] ? 'Your raids add to the pool. Stages and bosses earn clan XP.' : 'Do a Boss Raid (Bronze or better) this week to unlock rewards.', 18, 270)
+  const gift = canClanGift()
+  button(ctx, 'cgift', 16, 284, W - 32, 40, { top: gift ? '#ffb347' : '#3a4850', bot: gift ? '#e0731a' : '#26323a', label: gift ? 'Daily clan treats: collect ' + (3 + Math.floor(lv / 2)) + ' coins' : 'Treats collected. Back tomorrow', size: 13, disabled: !gift })
+  ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('CLAN PERKS', 18, 346)
+  PERKS.forEach((p, i) => {
+    const y = 358 + i * 19, on = p.lv <= lv
+    ctx.fillStyle = on ? '#7af09a' : '#46545b'; ctx.font = '800 11px system-ui,sans-serif'; ctx.fillText('Lv ' + p.lv, 22, y + 9)
+    ctx.fillStyle = on ? '#fff' : '#6d7d85'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(p.text, 70, y + 9)
+  })
+  button(ctx, 'cleave', W - 134, 552, 118, 24, { top: R.leaveArm ? '#ff6a5a' : '#4a565d', bot: R.leaveArm ? '#c42f2f' : '#2f3a40', label: R.leaveArm ? 'Tap again to leave' : 'Leave clan', size: 10 })
+  ctx.textAlign = 'left'; ctx.fillStyle = '#5f7078'; ctx.font = '600 9px system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now.', 18, 564)
+}
+registerTile({ id: 'clan', label: 'Clan', sub: () => G.clan ? clanById(G.clan.id).name + '  Lv' + clanLevel(G.clan) : 'Join a clan', icon: 'gem', col: '#9fd0ff', badge: () => !G.clan ? G.best >= 8 : clanClaimable() })
+void cp
