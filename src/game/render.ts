@@ -22,7 +22,7 @@ export type Ctx = CanvasRenderingContext2D
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -53,9 +53,9 @@ export function drainEvents() {
     else if (e.type === 'down') { Audio_.ui(); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' down!', hurt: true, big: true, t: 0 }) }
     else if (e.type === 'revive') { Audio_.merge(0); burst(e.x, e.y, '#7af09a', 14, 90); R.floats.push({ x: e.x, y: e.y - 30, v: GUARDIANS[e.i].n + ' is back', gold: true, t: 0 }) }
     else if (e.type === 'ability') {
-      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', sub: 'No damage for ' + shieldDur() + 's', t: 1.2 } }
-      else if (e.kind === 'tank') { Audio_.merge(2); burst(e.x, e.y, '#9fd6a0', 16, 110); G.banner = { text: 'TANK MODE', sub: 'Rudy: ' + Math.round((1 - MODES.tank.armor) * 100) + '% less damage taken, +' + Math.round((MODES.tank.power - 1) * 100) + '% damage for ' + MODES.tank.dur + 's', t: 1.4 } }
-      else if (e.kind === 'panic') { Audio_.zap(); burst(e.x, e.y, '#ff6a5a', 16, 110); G.banner = { text: 'PANIC MODE!', sub: 'Cooper: ' + MODES.panic.power + 'x damage, but takes ' + MODES.panic.armor + 'x for ' + MODES.panic.dur + 's', t: 1.4 } }
+      if (e.kind === 'shield') { Audio_.merge(3); G.banner = { text: 'SHIELD UP', t: 0.8 } }
+      else if (e.kind === 'tank') { Audio_.merge(2); burst(e.x, e.y, '#9fd6a0', 16, 110); G.banner = { text: 'TANK MODE', t: 0.8 } }
+      else if (e.kind === 'panic') { Audio_.zap(); burst(e.x, e.y, '#ff6a5a', 16, 110); G.banner = { text: 'PANIC MODE!', t: 0.8 } }
       else { Audio_.zap(); G.banner = { text: 'FRENZY!', sub: 'Double fire rate for ' + frenzyDur() + 's', t: 1.2 } }
       R.flash = 0.15
     }
@@ -325,7 +325,7 @@ export function outText(ctx: Ctx, txt: string, x: number, y: number, fill: strin
 }
 /** Chunky panel: dark fill, thick outline, soft inner highlight. */
 export function plate(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, top = '#2d4252', bot = '#17252f') {
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 3
   const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, top); g.addColorStop(1, bot)
   ctx.fillStyle = g; rr(ctx, x, y, w, h, r); ctx.fill(); ctx.restore()
   ctx.strokeStyle = OUT; ctx.lineWidth = 2.4; rr(ctx, x, y, w, h, r); ctx.stroke()
@@ -337,7 +337,7 @@ export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h
   const top = o.disabled ? '#6a767d' : o.top, bot = o.disabled ? '#434d54' : o.bot
   ctx.save()
   // drop shadow + dark bottom lip gives the button depth
-  if (!down) { ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3 }
+  if (!down) { ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 3 }
   ctx.fillStyle = OUT; rr(ctx, x, y + lip + dy, w, fh, rad); ctx.fill(); ctx.shadowColor = 'transparent'
   ctx.fillStyle = o.disabled ? '#2c353b' : bot; rr(ctx, x + 1.5, y + 1.5 + lip + dy, w - 3, fh - 3, rad - 1); ctx.fill()
   const g = ctx.createLinearGradient(0, y + dy, 0, y + dy + fh - 3); g.addColorStop(0, top); g.addColorStop(1, bot)
@@ -378,7 +378,7 @@ export function render(ctx: Ctx, t: number) {
     if (G.hp[i] > 0 && i === 0 && G.tankT > 0) { const k = G.tankT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1; ctx.strokeStyle = 'rgba(150,235,160,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(90,200,110,' + 0.16 * k + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, 26 * dogScale(i), 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && i === 1 && G.panicT > 0) { const k = G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, p = 1 + 0.08 * Math.sin(t * 22); ctx.strokeStyle = 'rgba(255,90,80,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(255,60,50,' + 0.2 * k + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(gp.x + Math.sin(t * 40) * 0.8, gp.y + 2, 24 * dogScale(i) * p, 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
-  ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
+  ents.sort((a, b) => a.y - b.y).forEach(o => { ctx.save(); try { o.d() } catch (e) { if (!R.errLogged) { R.errLogged = true; console.error("entity draw", e) } } ctx.restore() });
   for (const s of G.shots) drawShot(ctx, s);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
     const f = g.t / g.dur, x = g.x + (g.tx - g.x) * f, y = g.y + (g.ty - g.y) * f, hgt = Math.sin(f * Math.PI) * 60
@@ -733,5 +733,5 @@ export function drawAd(ctx: Ctx, t: number) {
 // Give every icon a thick dark sticker outline (silhouette drawn in 8 directions under the real icon).
 for (const k of ['tank', 'panic', 'nade', 'shield', 'frenzy', 'vest', 'charm', 'sword', 'gem', 'star', 'collar', 'bolt', 'plus', 'merge']) {
   const f = icons[k]
-  icons[k] = (c, x, y, col) => { for (let a = 0; a < 8; a++) f(c, x + Math.cos(a * 0.7854) * 1.5, y + Math.sin(a * 0.7854) * 1.5, OUT); f(c, x, y, col) }
+  icons[k] = (c, x, y, col) => { for (let a = 0; a < 4; a++) f(c, x + Math.cos(a * 1.5708 + 0.785) * 1.5, y + Math.sin(a * 1.5708 + 0.785) * 1.5, OUT); f(c, x, y, col) }
 }
