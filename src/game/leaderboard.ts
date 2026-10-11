@@ -13,15 +13,19 @@ const rnd = (a: string[]) => a[Math.floor(Math.random() * a.length)]
 const makeName = () => rnd(ADJ) + rnd(DOG) + (10 + Math.floor(Math.random() * 90))
 
 export const playerId = () => { let id = store('ig_pid'); if (!id) { id = uuid(); store('ig_pid', id) } return id }
-export const playerName = () => { let n = store('ig_pname'); if (!n) { n = makeName(); store('ig_pname', n) } return n }
-export function rerollName() { store('ig_pname', makeName()); void submit(true) }
+/** The name is chosen once (from a few suggestions) and then locked: there is deliberately no way to change it afterwards. */
+export const nameChosen = () => store('ig_pname_set') === '1' && !!store('ig_pname')
+export const playerName = () => store('ig_pname') || 'Guardian'
+export const nameOptions: string[] = []
+export function shuffleNames() { nameOptions.length = 0; while (nameOptions.length < 4) { const n = makeName(); if (!nameOptions.includes(n)) nameOptions.push(n) } }
+export function chooseName(i: number) { if (nameChosen() || !nameOptions[i]) return; store('ig_pname', nameOptions[i]); store('ig_pname_set', '1'); void submit(true) }
 
 const hdr = () => ({ apikey: LB_KEY, Authorization: 'Bearer ' + LB_KEY, 'Content-Type': 'application/json' })
 let lastSent = 0, lastStage = 0, lastReb = -1
 
 /** Push our best stage. Throttled; only sends when something improved (or forced, e.g. after a rename). */
 export async function submit(force = false) {
-  if (LB.status === 'off') return
+  if (LB.status === 'off' || !nameChosen()) return
   const now = Date.now()
   if (!force && (G.best === lastStage && G.rebirths === lastReb)) return
   if (!force && now - lastSent < 20000) return

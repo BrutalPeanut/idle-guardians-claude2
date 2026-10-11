@@ -8,7 +8,7 @@ import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGi
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
-import { LB, refresh, rerollName, playerName, playerId } from './leaderboard'
+import { LB, refresh, chooseName, nameChosen, nameOptions, shuffleNames, playerName, playerId } from './leaderboard'
 
 const mix = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
 export interface Tile { id: string; label: string; sub: () => string; icon: string; col: string; badge?: () => boolean }
@@ -196,7 +196,8 @@ export function screenButton(k: string): boolean {
   if (k === 'pass_all') { let n = 0; for (let x = 1; x <= PASS_TIERS; x++) if (claimPassTier(x)) n++; if (n) { G.banner = { text: n + ' rewards claimed', t: 1.4 }; Audio_.coins() } return true }
   if (k.startsWith('ac_')) { const a = ACHIEVEMENTS.find(x => x.id === k.slice(3)); if (a && claimAch(a.id)) { G.banner = { text: 'Achievement!', sub: a.text + '  +' + a.gems + ' gems', t: 1.6 }; Audio_.fanfare() } return true }
   if (k === 'lb_refresh') { void refresh(); return true }
-  if (k === 'lb_name') { rerollName(); return true }
+  if (k === 'lb_shuffle') { shuffleNames(); return true }
+  if (k.startsWith('lb_pick')) { chooseName(+k.slice(7)); void refresh(); return true }
   if (k === 'ach_prev') { R.achPage = Math.max(0, R.achPage - 1); return true }
   if (k === 'ach_next') { R.achPage = Math.min(Math.ceil(ACHIEVEMENTS.length / 7) - 1, R.achPage + 1); return true }
   if (k.startsWith('au_')) { const key = k.slice(3) as keyof typeof G.auto; G.auto[key] = !G.auto[key]; return true }
@@ -538,6 +539,15 @@ registerTile({ id: 'ach', label: 'Achievements', sub: () => achReady() ? achRead
 /** Global leaderboard: top players by best stage (rebirths break ties), with our own row pinned at the bottom. */
 export function drawRank(ctx: Ctx) {
   panel(ctx, 'Leaderboard')
+  if (LB.status !== 'off' && !nameChosen()) { // first visit: pick a name once; it can never be changed afterwards
+    if (!nameOptions.length) shuffleNames()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = '400 17px ' + FONT; outText(ctx, 'Choose your name', W / 2, 90, '#fff', 4)
+    ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#ffb4a8'; ctx.fillText('This is permanent. You cannot change it later.', W / 2, 114)
+    nameOptions.forEach((n, i) => button(ctx, 'lb_pick' + i, 40, 140 + i * 64, W - 80, 52, { top: '#52d273', bot: '#25994a', label: n, size: 17 }))
+    button(ctx, 'lb_shuffle', W / 2 - 80, 410, 160, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Show other names', size: 12 })
+    return
+  }
   if (LB.status === 'idle' || (LB.status === 'ok' && Date.now() - LB.at > 60000)) void refresh()
   const me = playerId()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
@@ -563,7 +573,6 @@ export function drawRank(ctx: Ctx) {
   ctx.textAlign = 'left'; ctx.font = '400 13px ' + FONT; outText(ctx, 'You: ' + playerName(), 28, y + 15, '#fff', 3)
   ctx.font = '400 10px ' + FONT; ctx.fillStyle = '#c9dcd2'; ctx.fillText(LB.rank ? 'Rank #' + LB.rank + ' of ' + LB.total : 'Ranking you...', 28, y + 31)
   ctx.textAlign = 'right'; ctx.font = '400 16px ' + FONT; outText(ctx, 'Stage ' + G.best, W - 28, y + 22, '#ffd84a', 3)
-  button(ctx, 'lb_name', 16, 534, 150, 34, { top: '#5b6c75', bot: '#3a4850', label: 'New name', size: 12 })
-  button(ctx, 'lb_refresh', W - 166, 534, 150, 34, { top: '#5ab8ff', bot: '#2a73c4', label: LB.status === 'loading' ? 'Updating...' : 'Refresh', size: 12, disabled: LB.status === 'loading' })
+  button(ctx, 'lb_refresh', W / 2 - 75, 534, 150, 34, { top: '#5ab8ff', bot: '#2a73c4', label: LB.status === 'loading' ? 'Updating...' : 'Refresh', size: 12, disabled: LB.status === 'loading' })
 }
 registerTile({ id: 'rank', label: 'Leaderboard', sub: () => LB.rank ? 'Rank #' + LB.rank : 'Global top players', icon: 'star', col: '#ffd84a' })
