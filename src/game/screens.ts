@@ -67,6 +67,105 @@ export function drawScreen(ctx: Ctx, t: number) {
   switch (R.screen) {
     case 'hub': drawHub(ctx, t); break
     case 'stats': drawStats(ctx); break
+    case 'gear': drawGear(ctx, t); break
     default: drawHub(ctx, t)
   }
 }
+
+// ================= Gear =================
+import { SLOTS, RARITY, CHEST_NAMES, CHEST_COLS, INV_MAX, itemName, fmtStat } from './gear'
+import type { Item } from './gear'
+import { openChest, equipItem, unequipItem, sellItem, sellValue, invCount } from './sim'
+import { Audio_ } from './audio'
+
+const itemOf = (id: number) => G.gear.find(x => x.id === id)
+function itemIcon(ctx: Ctx, it: Item, x: number, y: number, s: number) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); icons[it.slot](ctx, 0, 0, RARITY[it.rar].col); ctx.restore() }
+function itemCard(ctx: Ctx, x: number, y: number, w: number, h: number, it: Item | null, sel: boolean, label?: string) {
+  const col = it ? RARITY[it.rar].col : 'rgba(255,255,255,.18)'
+  ctx.fillStyle = it ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.03)'; rr(ctx, x, y, w, h, 11); ctx.fill()
+  ctx.strokeStyle = col; ctx.lineWidth = sel ? 3 : 1.5; rr(ctx, x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(fmtStat(it).replace(/ (damage|max HP|crit chance|fire rate|kill gold)/, m => ({ ' damage': ' dmg', ' max HP': ' HP', ' crit chance': ' crit', ' fire rate': ' rate', ' kill gold': ' gold' } as Record<string, string>)[m]), x + w / 2, y + h - 11) }
+  else { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '700 11px system-ui,sans-serif'; ctx.fillText(label ?? 'empty', x + w / 2, y + h / 2) }
+}
+function chestIcon(ctx: Ctx, x: number, y: number, s: number, tier: number, open = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); const col = CHEST_COLS[tier]
+  ctx.fillStyle = col; ctx.strokeStyle = OUT; ctx.lineWidth = 2; rr(ctx, -16, -4, 32, 20, 4); ctx.fill(); ctx.stroke()
+  ctx.save(); ctx.translate(-16, -4); ctx.rotate(-open * 0.9); ctx.fillStyle = col; rr(ctx, 0, -12, 32, 12, 5); ctx.fill(); ctx.stroke(); ctx.restore()
+  ctx.fillStyle = '#3a2a14'; ctx.fillRect(-3, 1, 6, 8); ctx.restore()
+}
+
+export function drawGear(ctx: Ctx, t: number) {
+  panel(ctx, 'Gear')
+  const n = unlockedGuardians(G.stage)
+  if (R.gearDog >= n) R.gearDog = 0
+  for (let k = 0; k < 3; k++) {
+    const x = 16 + k * 112, c = G.chests[k]
+    button(ctx, 'chest_' + k, x, 52, 104, 44, { top: c ? '#34444e' : '#252f36', bot: c ? '#1d2a31' : '#1b2328' })
+    chestIcon(ctx, x + 24, 72, 0.75, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 46, 66); ctx.font = '700 11px system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c + (c ? '  OPEN' : ''), x + 46, 82)
+  }
+  for (let i = 0; i < n; i++) button(ctx, 'gt_' + i, 16 + i * 84, 106, 78, 28, { top: i === R.gearDog ? '#ffb347' : '#3a4850', bot: i === R.gearDog ? '#e0731a' : '#26323a', label: GUARDIANS[i].n, size: 12 })
+  const dog = R.gearDog
+  SLOTS.forEach((sl, k) => { const x = 16 + k * 112, it = G.gear.find(g => g.on === dog && g.slot === sl) ?? null; R.btns['slot_' + k] = { x, y: 142, w: 104, h: 74 }; itemCard(ctx, x, 142, 104, 74, it, false, sl.toUpperCase()) })
+  ctx.textAlign = 'left'; ctx.fillStyle = '#8fa69b'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('INVENTORY  ' + invCount() + '/' + INV_MAX + '  (tap an item)', 16, 228)
+  const inv = G.gear.filter(g => g.on < 0)
+  for (let k = 0; k < INV_MAX; k++) { const x = 16 + (k % 4) * 84, y = 238 + Math.floor(k / 4) * 62, it = inv[k] ?? null; R.btns['inv_' + k] = { x, y, w: 76, h: 56 }; itemCard(ctx, x, y, 76, 56, it, !!it && it.id === R.sel, '') }
+  const sel = itemOf(R.sel)
+  const py = 490
+  ctx.fillStyle = 'rgba(255,255,255,.05)'; rr(ctx, 16, py, W - 32, 88, 14); ctx.fill()
+  if (sel) {
+    ctx.textAlign = 'left'; ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(itemName(sel), 28, py + 20)
+    ctx.fillStyle = '#d6e4dc'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText(fmtStat(sel) + '  (found at stage ' + sel.lvl + ')', 28, py + 40)
+    const cur = G.gear.find(g => g.on === dog && g.slot === sel.slot)
+    if (cur && sel.on < 0) { const d = (sel.val - cur.val) * 100; ctx.fillStyle = d >= 0 ? '#5be07f' : '#ff8a7a'; ctx.fillText((cur.stat === sel.stat ? (d >= 0 ? '+' : '') + d.toFixed(1) + '% vs worn' : 'different stat than worn'), 28, py + 58) }
+    if (sel.on < 0) button(ctx, 'rv_equipsel', 150, py + 48, 94, 34, { top: '#52d273', bot: '#25994a', label: 'Equip', size: 13 })
+    button(ctx, 'sellsel', sel.on < 0 ? 250 : 150, py + 48, sel.on < 0 ? 94 : 194, 34, { top: '#e0b24a', bot: '#9a6a18', label: 'Sell ' + fmt(sellValue(sel)), size: 12 })
+  } else { ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText('Open chests for gear. Equip it on ' + GUARDIANS[dog].n + '.', W / 2, py + 44) }
+  if (R.reveal) drawReveal(ctx, t)
+}
+
+function drawReveal(ctx: Ctx, t: number) {
+  const rv = R.reveal; if (!rv) return
+  R.btns = {}; rv.t += 1 / 60
+  ctx.fillStyle = 'rgba(2,4,6,.93)'; ctx.fillRect(0, 0, W, H)
+  const it = itemOf(rv.id)
+  if (rv.phase === 0) {
+    const sh = Math.sin(t * 30) * 3
+    chestIcon(ctx, W / 2 + sh, 250, 4.2, rv.tier, 0)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = '800 20px system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[rv.tier], W / 2, 150)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 14px system-ui,sans-serif'; ctx.fillText('Tap to open', W / 2, 400)
+    R.btns.rv_tap = { x: 0, y: 0, w: W, h: H }
+  } else {
+    const col = it ? RARITY[it.rar].col : '#ffd84a'
+    const g = ctx.createRadialGradient(W / 2, 250, 10, W / 2, 250, 170); g.addColorStop(0, col + 'aa'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 60, W, 400)
+    chestIcon(ctx, W / 2, 120, 1.6, rv.tier, Math.min(1, rv.t * 3))
+    if (it) {
+      ctx.save(); ctx.translate(W / 2, 250); ctx.scale(5, 5); icons[it.slot](ctx, 0, 0, col); ctx.restore()
+      ctx.textAlign = 'center'; ctx.fillStyle = col; ctx.font = '800 22px system-ui,sans-serif'; ctx.fillText(RARITY[it.rar].n.toUpperCase(), W / 2, 330)
+      ctx.fillStyle = '#fff'; ctx.font = '800 18px system-ui,sans-serif'; ctx.fillText(itemName(it), W / 2, 362); ctx.fillStyle = '#d6e4dc'; ctx.font = '700 15px system-ui,sans-serif'; ctx.fillText(fmtStat(it), W / 2, 390)
+      button(ctx, 'rv_equip', 50, 440, 260, 46, { top: '#52d273', bot: '#25994a', label: 'Equip on ' + GUARDIANS[R.gearDog].n, size: 15 })
+      button(ctx, 'rv_keep', 90, 498, 180, 38, { top: '#5b6c75', bot: '#3a4850', label: 'Keep', size: 13 })
+    } else {
+      ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a'; ctx.font = '800 18px system-ui,sans-serif'; ctx.fillText('Inventory full: sold for ' + fmt(rv.sold) + ' gold', W / 2, 300)
+      button(ctx, 'rv_keep', 90, 440, 180, 40, { top: '#5b6c75', bot: '#3a4850', label: 'OK', size: 14 })
+    }
+  }
+}
+
+/** Buttons owned by the gear screens. Returns true if the key was handled. */
+export function screenButton(k: string): boolean {
+  if (k.startsWith('chest_')) {
+    const r = openChest(+k.slice(6)); if (r) { R.reveal = { id: r.sold ? -1 : r.item.id, tier: +k.slice(6), sold: r.sold, phase: 0, t: 0 }; if (r.item.rar >= 2) R.reveal.t = 0; Audio_.ui() } else G.banner = { text: 'No chests', sub: 'Chests drop from bosses, login streaks and raids', t: 1.4 }
+    return true
+  }
+  if (k === 'rv_tap') { if (R.reveal) { R.reveal.phase = 1; R.reveal.t = 0; const it = itemOf(R.reveal.id); if (it && it.rar >= 2) Audio_.fanfare(); else Audio_.coins() } return true }
+  if (k === 'rv_equip') { if (R.reveal) { equipItem(R.reveal.id, R.gearDog); R.sel = -1 } R.reveal = null; return true }
+  if (k === 'rv_keep') { R.reveal = null; return true }
+  if (k.startsWith('gt_')) { R.gearDog = +k.slice(3); return true }
+  if (k.startsWith('slot_')) { const sl = SLOTS[+k.slice(5)], it = G.gear.find(g => g.on === R.gearDog && g.slot === sl); if (it && !unequipItem(it.id)) G.banner = { text: 'Inventory full', t: 1 }; return true }
+  if (k.startsWith('inv_')) { const it = G.gear.filter(g => g.on < 0)[+k.slice(4)]; R.sel = it ? it.id : -1; return true }
+  if (k === 'rv_equipsel') { if (R.sel >= 0) equipItem(R.sel, R.gearDog); R.sel = -1; return true }
+  if (k === 'sellsel') { if (R.sel >= 0) { const g = sellItem(R.sel); G.banner = { text: '+' + fmt(g) + ' gold', t: 1 } } R.sel = -1; return true }
+  return false
+}
+registerTile({ id: 'gear', label: 'Gear', sub: () => { const c = G.chests[0] + G.chests[1] + G.chests[2]; return c ? c + ' chest' + (c > 1 ? 's' : '') + ' to open' : 'Collars, vests, charms' }, icon: 'collar', col: '#ffb347', badge: () => G.chests[0] + G.chests[1] + G.chests[2] > 0 })
