@@ -1,17 +1,19 @@
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { G, rnd, buyCost, isBoss, guardianPos, sortedWeapons } from './sim'
+import { rulesFor, biomeIndex } from './cover'
+import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
 import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
-interface Floater { x: number; y: number; v: number | string; crit?: boolean; kill?: boolean; blast?: boolean; gold?: boolean; hurt?: boolean; big?: boolean; t: number }
+interface Floater { x: number; y: number; v: number | string; cover?: boolean; flank?: boolean; crit?: boolean; kill?: boolean; blast?: boolean; gold?: boolean; hurt?: boolean; big?: boolean; t: number }
 interface Rect { x: number; y: number; w: number; h: number }
 type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 const OUT = '#241810';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, help: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -23,7 +25,7 @@ export function drainEvents() {
     if (e.type === 'fire') Audio_.fire(e.kind);
     else if (e.type === 'hit') { Audio_.hit(); burst(e.x, e.y, e.col, 3, 60); }
     else if (e.type === 'dmg') {
-      R.floats.push({ x: e.x + rnd(-8, 8), y: e.y, v: e.v, crit: e.crit, kill: e.kill, blast: e.blast, t: 0 });
+      R.floats.push({ x: e.x + rnd(-8, 8), y: e.y, v: e.v, crit: e.crit, kill: e.kill, blast: e.blast, flank: e.flank, t: 0 });
       if (e.crit) R.shake = Math.max(R.shake, 3);
       if (e.blast) R.shake = Math.max(R.shake, 6);
     } else if (e.type === 'kill') {
@@ -32,6 +34,11 @@ export function drainEvents() {
       if (e.kind === 'boss') { R.flash = 0.6; R.shake = 10; }
     } else if (e.type === 'boom') { Audio_.boom(); burst(e.x, e.y, '#ff9a3a', 22, 180); R.parts.push({ ring: true, x: e.x, y: e.y, r: e.r, t: 0, life: 0.3 }); }
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
+    else if (e.type === 'cover_hit') { Audio_.hit(); burst(e.x, e.y, coverDust(e.kind), 4, 70); if (!(G.t - (R.coverT[e.id] ?? -9) < 0.35)) { R.coverT[e.id] = G.t; R.floats.push({ x: e.x, y: e.y - 6, v: Math.ceil(e.v), cover: true, t: 0 }) } }
+    else if (e.type === 'cover_break') { Audio_.boom(); burst(e.x, e.y, coverDust(e.kind), 28, 150); R.shake = Math.max(R.shake, 5); R.floats.push({ x: e.x, y: e.y - 24, v: 'COVER DOWN', hurt: e.w > 0, t: 0 }) }
+    else if (e.type === 'efire') Audio_.zap()
+    else if (e.type === 'mortar_fire') Audio_.whump()
+    else if (e.type === 'hold') { Audio_.ui(); G.banner = { text: e.on ? 'SUPPORT HELD' : 'REGROUP', sub: e.on ? 'Drag now steers Rudy & Cooper' : undefined, t: 1.6 } }
     else if (e.type === 'merge') {
       Audio_.merge(e.level); const rc = benchRect(e.slot);
       burst(rc.x + rc.w / 2, rc.y + rc.h / 2, WEAPONS[e.level].col, 26, 170); R.flash = 0.25; R.shake = 5;
@@ -155,7 +162,14 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
   const s = e.r / 11, wob = Math.sin(t * 7 + e.wob) * 1.5, x = e.x, y = e.y + wob;
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 11 * s, 10 * s, 3.5 * s, 0, 0, 6.283); ctx.fill();
   const fl = e.flash > 0;
-  if (e.kind === 'robot') {
+  if (e.kind === 'gunner' || e.kind === 'mortar') {
+    const hot = e.kind === 'mortar' ? e.cd < 0.7 : e.cd < 0.35
+    if (e.kind === 'mortar') { ctx.save(); ctx.translate(x, y - 8 * s); ctx.rotate(-0.25); ctx.fillStyle = fl ? '#fff' : '#3a414b'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-4, -20, 8, 22, 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = hot ? '#ffb347' : '#ff7a2a'; ctx.fillRect(-4, -20, 8, 4); ctx.restore() }
+    blob(ctx, x, y + 5 * s, 9 * s, 7 * s, fl ? '#fff' : e.kind === 'mortar' ? '#7a6a9a' : '#8fa3b8', fl ? null : e.kind === 'mortar' ? '#574a76' : '#6a7d92')
+    ctx.fillStyle = fl ? '#fff' : '#a9bbcf'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 11 * s, y - 13 * s, 22 * s, 17 * s, 5 * s); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = hot ? '#fff36a' : '#ff5a4a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s, y - 6 * s, 3 * s, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (e.kind === 'gunner') { ctx.fillStyle = '#3a414b'; ctx.beginPath(); ctx.roundRect(x - 3, y + 2 * s, 6, 14 * s, 2); ctx.fill(); ctx.stroke(); if (hot) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x, y + 16 * s, 3.5, 0, 6.283); ctx.fill() } }
+  } else if (e.kind === 'robot') {
     blob(ctx, x, y + 5 * s, 9 * s, 7 * s, fl ? '#fff' : '#8fa3b8', fl ? null : '#6a7d92');
     ctx.fillStyle = fl ? '#fff' : '#a9bbcf'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 11 * s, y - 14 * s, 22 * s, 18 * s, 5 * s); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ff5a4a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s, y - 6 * s, 3 * s, 0, 6.283); ctx.fill(); ctx.stroke(); }
@@ -248,22 +262,27 @@ export function render(ctx: Ctx, t: number) {
   ctx.save();
   if (R.shake > 0.3) ctx.translate(rnd(-R.shake, R.shake), rnd(-R.shake, R.shake));
   const biome = drawBackground(ctx, t);
+  for (const h of G.hazards) drawHazard(ctx, h, t);
+  if (G.hold) drawHold(ctx, G.hold.x, G.hold.y, t);
   // sort-by-y entities
   const ents: { y: number; d: () => void }[] = [];
+  for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]) } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => o.d());
   for (const s of G.shots) drawShot(ctx, s);
+  drawShells(ctx, G.shells, t); drawEBullets(ctx, G.ebullets);
+  for (let i = 0; i < n; i++) { const gp = guardianPos(i); drawStatus(ctx, gp.x, gp.y, G.status[i]) }
   for (const p of R.parts) {
     if (p.ring) { ctx.strokeStyle = 'rgba(255,200,90,' + (1 - p.t / p.life) + ')'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, p.r! * (p.t / p.life), 0, 6.283); ctx.stroke(); }
     else { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col!; ctx.beginPath(); ctx.arc(p.x, p.y, p.sz!, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1; }
   }
   for (const f of R.floats) {
     ctx.globalAlpha = Math.min(1, (0.9 - f.t) * 3); ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = OUT;
-    const sz = f.big ? 22 : f.blast ? 20 : f.kill ? 15 : f.crit ? 17 : 12;
+    const sz = f.big ? 22 : f.blast ? 20 : f.kill ? 15 : f.crit ? 17 : f.cover ? 10 : f.flank ? 14 : 12;
     ctx.font = 'bold ' + sz + 'px system-ui,sans-serif';
-    ctx.fillStyle = f.gold ? '#ffd84a' : f.hurt ? '#ff6a6a' : f.blast ? '#ff9a3a' : f.kill ? '#ff5a5a' : f.crit ? '#ffe45a' : '#fff';
+    ctx.fillStyle = f.cover ? '#cfd8dc' : f.gold ? '#ffd84a' : f.hurt ? '#ff6a6a' : f.flank ? '#ffab40' : f.blast ? '#ff9a3a' : f.kill ? '#ff5a5a' : f.crit ? '#ffe45a' : '#fff';
     const txt = typeof f.v === 'number' ? (f.blast ? 'BLAST ' : '') + fmt(f.v) + (f.crit ? '!' : '') : f.v;
     ctx.strokeText(txt, f.x, f.y); ctx.fillText(txt, f.x, f.y); ctx.globalAlpha = 1;
   }
@@ -281,13 +300,14 @@ export function render(ctx: Ctx, t: number) {
   const gtxt = fmt(G.gold); ctx.font = '800 14px system-ui,sans-serif'; const gw = ctx.measureText(gtxt).width + 34
   glass(ctx, 10, 45, gw, 24, 10); icons.coin(ctx, 23, 45 + 24 / 2, '#ffd84a'); ctx.fillStyle = '#ffe9a0'; ctx.textAlign = 'left'; ctx.fillText(gtxt, 34, 45 + 24 / 2 + 0.5)
   // pack HP
-  const hx = 118, hw = 128, hy = 14, hh = 12
+  const hx = 118, hw = 92, hy = 14, hh = 12
   ctx.textAlign = 'left'; ctx.fillStyle = '#9fb5aa'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillText('PACK', hx, 8)
   ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, hx, hy, hw, hh, 6); ctx.fill()
   const frac = Math.max(0, G.pack.hp / G.pack.max)
   if (frac > 0) { const hgR = ctx.createLinearGradient(0, hy, 0, hy + hh); hgR.addColorStop(0, frac > 0.35 ? '#7af09a' : '#ff8a7a'); hgR.addColorStop(1, frac > 0.35 ? '#2fb85a' : '#d63a3a'); ctx.fillStyle = hgR; rr(ctx, hx + 1, hy + 1, Math.max(8, (hw - 2) * frac), hh - 2, 5); ctx.fill() }
   ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rr(ctx, hx + 0.5, hy + 0.5, hw - 1, hh - 1, 6); ctx.stroke()
   ctx.fillStyle = '#c9d8d0'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Enemies left  ' + (G.toSpawn - G.spawned + G.enemies.length), hx, 44)
+  button(ctx, 'help', 216, 8, 40, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
   button(ctx, 'speed', 262, 8, 44, 34, { top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 310, 8, 42, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
   ctx.textAlign = 'center'; ctx.font = '700 10px system-ui,sans-serif'; ctx.fillStyle = G.speed > 1 ? '#ffcf8a' : '#7f929a'; ctx.fillText(G.speed > 1 ? '2× ON' : 'SPEED 1×', 284, 54)
@@ -316,19 +336,20 @@ export function render(ctx: Ctx, t: number) {
   if (R.drag) { const d = R.drag; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6; drawCard(ctx, d.x - BENCH.w / 2, d.y - BENCH.h / 2 - 10, BENCH.w, BENCH.h, G.bench[d.from] ?? 0, 1.12, undefined); ctx.restore() }
   // action bar
   const cost = buyCost(), can = G.gold >= cost && G.bench.includes(null)
-  button(ctx, 'buy', 10, ACTION_BAR.y, 196, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 14 })
-  button(ctx, 'merge', 214, ACTION_BAR.y, 136, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 14 })
+  button(ctx, 'buy', 10, ACTION_BAR.y, 142, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
+  button(ctx, 'merge', 158, ACTION_BAR.y, 96, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
+  button(ctx, 'hold', 260, ACTION_BAR.y, 90, ACTION_BAR.h, { top: G.hold ? '#ffb347' : '#b58cf0', bot: G.hold ? '#e0731a' : '#7a4ec0', disabled: unlockedGuardians(G.stage) <= 2, label: G.hold ? 'RECALL' : 'HOLD', size: 13 })
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '700 12px system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, W / 2 - tw / 2, ARENA.y1 - 38, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, W / 2, ARENA.y1 - 25) }
 
   // banner
   if (G.banner) {
     const b = G.banner, a = Math.min(1, b.t * 2.5); ctx.globalAlpha = a; ctx.textAlign = 'center'
     ctx.font = '800 ' + (b.big ? 28 : 22) + 'px system-ui,-apple-system,sans-serif'
-    const bw = Math.max(ctx.measureText(b.text).width, b.sub ? 180 : 0) + 44, bh = b.sub ? 74 : 46, by = 160
+    ctx.font = '600 13px system-ui,sans-serif'; const subW = b.sub ? ctx.measureText(b.sub).width : 0; ctx.font = '800 ' + (b.big ? 28 : 22) + 'px system-ui,-apple-system,sans-serif'; const bw = Math.min(W - 16, Math.max(ctx.measureText(b.text).width, subW) + 44), bh = b.sub ? 74 : 46, by = 160
     ctx.fillStyle = 'rgba(10,16,19,.72)'; rr(ctx, W / 2 - bw / 2, by, bw, bh, 18); ctx.fill()
     ctx.strokeStyle = b.big ? 'rgba(255,216,74,.7)' : 'rgba(255,255,255,.2)'; ctx.lineWidth = 1.5; rr(ctx, W / 2 - bw / 2 + 0.75, by + 0.75, bw - 1.5, bh - 1.5, 18); ctx.stroke()
     ctx.fillStyle = b.big ? '#ffd84a' : '#fff'; ctx.fillText(b.text, W / 2, by + 24)
-    if (b.sub) { ctx.font = '600 15px system-ui,sans-serif'; ctx.fillStyle = '#e8f1ec'; ctx.fillText(b.sub, W / 2, by + 52) }
+    if (b.sub) { ctx.font = '600 13px system-ui,sans-serif'; ctx.fillStyle = '#e8f1ec'; ctx.fillText(b.sub, W / 2, by + 52) }
     ctx.globalAlpha = 1
   }
   if (R.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.7, R.flash) + ')'; ctx.fillRect(0, 0, W, H); }
@@ -349,4 +370,37 @@ function drawCard(ctx: Ctx, x: number, y: number, w: number, h: number, lvl: num
   ctx.shadowColor = 'transparent'
   if (armedBy !== undefined) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(11, 11, 8, 0, 6.283); ctx.fill(); ctx.fillStyle = '#3a2a08'; ctx.font = '800 10px system-ui,sans-serif'; ctx.fillText(GUARDIANS[armedBy].n[0], 11, 11.5) }
   ctx.restore()
+}
+
+/** Pause-style legend. Any tap closes it. */
+export function drawHelp(ctx: Ctx) {
+  ctx.fillStyle = 'rgba(6,10,12,.94)'; ctx.fillRect(0, 0, W, H)
+  const rules = rulesFor(G.stage), bi = BIOMES[biomeIndex(G.stage)]
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 20px system-ui,sans-serif'; ctx.fillText('How to win', 18, 30)
+  ctx.fillStyle = '#ffd84a'; ctx.font = '700 12px system-ui,sans-serif'; ctx.fillText(bi.n, 18, 49); ctx.fillStyle = '#9fb5aa'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText(rules.tip, 18, 66)
+  const rows: [string, string, string][] = [
+    ['shield', 'In cover', 'Bullets hit your cover first. It cracks, and under 35% HP it leaks half the damage.'],
+    ['arrows', 'Flanking', 'A clear line round an enemy barricade: x1.35 when a guardian shuffles, x1.55 when you placed them.'],
+    ['ring', 'Mortar ring', 'Shells arc OVER cover. Move or spread out before the ring fills.'],
+    ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
+    ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
+    ['hold', 'HOLD', 'Plants Bruno, Luna and pups. Your drag then steers only Rudy & Cooper: send them round the barricades. RECALL regroups.'],
+  ]
+  let y = 92
+  for (const [icon, title, body] of rows) {
+    ctx.save(); ctx.translate(34, y + 12)
+    if (icon === 'shield') { ctx.fillStyle = '#4aa8ff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-9, -9); ctx.lineTo(9, -9); ctx.lineTo(9, 2); ctx.quadraticCurveTo(9, 9, 0, 12); ctx.quadraticCurveTo(-9, 9, -9, 2); ctx.closePath(); ctx.fill(); ctx.stroke() }
+    else if (icon === 'arrows') { ctx.fillStyle = '#ffa23a'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; for (const dx of [-7, 3]) { ctx.beginPath(); ctx.moveTo(dx - 3, -9); ctx.lineTo(dx + 6, 0); ctx.lineTo(dx - 3, 9); ctx.lineTo(dx, 0); ctx.closePath(); ctx.fill(); ctx.stroke() } }
+    else if (icon === 'ring') { ctx.strokeStyle = '#ff5a46'; ctx.lineWidth = 2.5; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.ellipse(0, 0, 13, 8, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,110,90,.5)'; ctx.beginPath(); ctx.ellipse(0, 0, 7, 4, 0, 0, 6.283); ctx.fill() }
+    else if (icon === 'zombie') { ctx.fillStyle = '#8ccf6e'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3.5, -2, 3, 0, 6.283); ctx.arc(4, -2, 2.4, 0, 6.283); ctx.fill() }
+    else if (icon === 'boom') { ctx.fillStyle = '#ff9a3a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283, r = i % 2 ? 6 : 12; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) } ctx.closePath(); ctx.fill(); ctx.stroke() }
+    else { ctx.strokeStyle = '#ffc34a'; ctx.lineWidth = 2.2; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.ellipse(0, 6, 13, 6, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.strokeStyle = '#d8d0c0'; ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -10); ctx.stroke(); ctx.fillStyle = '#ffc34a'; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -6); ctx.lineTo(0, -2); ctx.closePath(); ctx.fill() }
+    ctx.restore()
+    ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(title, 62, y + 5)
+    ctx.fillStyle = '#c9d8d0'; ctx.font = '500 12px system-ui,sans-serif'
+    const words = body.split(' '); let line = '', ly = y + 22
+    for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > W - 80 && line) { ctx.fillText(line, 62, ly); line = w; ly += 15 } else line = test }
+    ctx.fillText(line, 62, ly); y = ly + 26
+  }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText('Tap anywhere to resume', W / 2, H - 22)
 }
