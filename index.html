@@ -5,9 +5,18 @@
     
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
     <title>Idle Guardians</title>
+    <style>html,body{background:#10181a;color:#cfe;font:14px system-ui,sans-serif}#boot{padding:24px;text-align:center}#err{white-space:pre-wrap;word-break:break-word;text-align:left;color:#ffb4a8;font:12px monospace;margin-top:12px}</style>
+    <script>
+      // If the game fails to start on someone's device, show why instead of a blank page.
+      window.__igOK = false
+      function showErr(m) { var e = document.getElementById('err'); if (e) e.textContent += m + '\n' }
+      window.addEventListener('error', function (ev) { showErr('Error: ' + (ev.message || ev.error) + (ev.filename ? ' @' + ev.filename.slice(-30) + ':' + ev.lineno : '')) })
+      window.addEventListener('unhandledrejection', function (ev) { showErr('Rejection: ' + (ev.reason && ev.reason.message || ev.reason)) })
+      setTimeout(function () { if (!window.__igOK) showErr('Game did not start after 3s. ' + navigator.userAgent) }, 3000)
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot">Loading Idle Guardians…<div id="err"></div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

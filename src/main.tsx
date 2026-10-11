@@ -17,6 +17,8 @@ import App from './App.tsx'
   }
 }
 
+document.getElementById('root')!.innerHTML = ''
+;(window as unknown as { __igOK: boolean }).__igOK = true
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
