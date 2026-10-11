@@ -642,7 +642,9 @@ export function buyWeapon() {
   const slot = G.bench.indexOf(null), c = buyCost()
   if (slot < 0 || G.gold < c) return false
   G.gold -= c; G.bought++; track('buys')
-  G.bench[slot] = Math.max(0, G.maxLevel - 3)
+  // New buys normally arrive 3 rungs behind your best. But if a dog is stuck on something weaker than that (a lone Thrown Rock can never find a partner), buy that weak level instead so it can pair up and merge forward.
+  const low = Math.min(...(G.bench.filter(v => v !== null) as number[]), 99)
+  G.bench[slot] = Math.min(Math.max(0, G.maxLevel - 3), low)
   save(); return true
 }
 export function tryMerge(a: number, b: number) {
