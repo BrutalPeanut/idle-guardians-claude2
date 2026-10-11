@@ -1,6 +1,7 @@
 import { W, H, ARENA } from './data'
+import { unlocked, unlockStage, spinsLeft } from './sim'
 import { G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
-import { drawScreen, screenButton } from './screens'
+import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests, drawAd } from './render'
@@ -59,13 +60,14 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
     else if (k === 'ad_done') finishAd()
     else if (k === 'raid_ad') { if (R.screen === 'raid') adGate(showRewardedAd('raid', () => { G.raidInfo.extra++; G.banner = { text: '+1 Raid attempt', t: 1.4 } })) }
+    else if (k === 'spin_ad') { if (R.screen === 'spin' && !R.spinAnim) adGate(showRewardedAd('spin', () => { if (spinsLeft().ad) startSpin(true) })) }
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }
     else if (k === 'reroll_ad') { if (G.pick) adGate(showRewardedAd('reroll', () => { rerollBlessings(true) })) }
     else if (k.startsWith('qa')) { const qi = +k.slice(2); if (R.quests) adGate(showRewardedAd('quest2x', () => { if (claimQuest(qi, 2)) Audio_.coins() })) }
     else if (k === 'menu') R.screen = 'hub'
     else if (k === 'scr_x') R.screen = null
     else if (k === 'scr_close') R.screen = R.screen === 'hub' ? null : 'hub'
-    else if (k.startsWith('nav_')) { const id = k.slice(4); if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
+    else if (k.startsWith('nav_')) { const id = k.slice(4); if (!unlocked(id)) G.banner = { text: 'Unlocks at stage ' + unlockStage(id), sub: 'Keep climbing!', t: 1.4 }; else if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
     else if (k === 'q_close') R.quests = false
     else if (k.startsWith('qc')) { if (claimQuest(+k.slice(2))) Audio_.coins() }
     else if (k === 'reroll') { if (!rerollBlessings()) G.banner = { text: 'Need ' + REROLL_COST + ' gems', sub: 'Earn gems from daily quests', t: 1.4 } }

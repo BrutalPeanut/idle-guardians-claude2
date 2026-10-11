@@ -1,6 +1,9 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
 import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt } from './clan'
+import { unlocked, unlockStage, doSpin, spinsLeft, claimPassTier, claimAch, passLevel, passReady, achReady, statValue, ensurePass } from './sim'
+import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, SPIN_SEGS, seasonDaysLeft, passReward } from './meta'
+import type { Reward } from './meta'
 import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGift, clanClaimable, milestoneReady, cp } from './sim'
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
@@ -31,15 +34,17 @@ export function panel(ctx: Ctx, title: string, back = true) {
 
 export function drawHub(ctx: Ctx, t: number) {
   panel(ctx, 'Menu', false)
-  const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 64
+  const cols = 3, gap = 8, tw = (W - 16 * 2 - gap * 2) / cols, th = 78
   TILES.forEach((tl, i) => {
-    const x = 16 + (i % cols) * (tw + 12), y = 58 + Math.floor(i / cols) * (th + 8)
-    button(ctx, 'nav_' + tl.id, x, y, tw, th, { top: mix(tl.col, '#101820', 0.38), bot: mix(tl.col, '#101820', 0.72) })
-    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + 30, y + th / 2 - 2, 22, 0, 6.283); ctx.fill()
-    ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(1.8, 1.8); icons[tl.icon]?.(ctx, 0, 0, mix(tl.col, '#ffffff', 0.35)); ctx.restore()
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, tl.label, x + 58, y + 24, '#fff', 3.5)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 42)
-    if (tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 12, y + 12 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
+    const x = 16 + (i % cols) * (tw + gap), y = 56 + Math.floor(i / cols) * (th + 8), lock = !unlocked(tl.id), need = unlockStage(tl.id)
+    button(ctx, 'nav_' + tl.id, x, y, tw, th, lock ? { top: '#4a545a', bot: '#2a3238' } : { top: mix(tl.col, '#101820', 0.38), bot: mix(tl.col, '#101820', 0.72) })
+    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + tw / 2, y + 27, 19, 0, 6.283); ctx.fill()
+    ctx.save(); ctx.translate(x + tw / 2, y + 27); ctx.scale(1.55, 1.55); ctx.globalAlpha = lock ? 0.35 : 1; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : mix(tl.col, '#ffffff', 0.35)); ctx.restore()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 13px ' + FONT; outText(ctx, tl.label, x + tw / 2, y + 54, lock ? '#b8c4ca' : '#fff', 3)
+    ctx.font = '400 9px ' + FONT; ctx.fillStyle = lock ? '#ffd84a' : '#c9dcd2'
+    let sub = lock ? 'Stage ' + need : tl.sub(); while (sub.length > 4 && ctx.measureText(sub).width > tw - 8) sub = sub.slice(0, -2)
+    ctx.fillText(lock ? 'Unlocks at stage ' + need : sub, x + tw / 2, y + 67)
+    if (!lock && tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 9, y + 11 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
 }
 
@@ -89,6 +94,9 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'raid': drawRaid(ctx); break
     case 'clan': drawClan(ctx); break
     case 'auto': drawAuto(ctx); break
+    case 'pass': drawPass(ctx); break
+    case 'ach': drawAch(ctx); break
+    case 'spin': drawSpin(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -180,6 +188,13 @@ export function screenButton(k: string): boolean {
   if (k.startsWith('cm_')) { if (claimMilestone(+k.slice(3))) { G.banner = { text: 'Clan reward claimed', sub: MILESTONES[+k.slice(3)].text, t: 1.6 }; Audio_.coins() } return true }
   if (k === 'cgift') { const c = claimClanGift(); if (c) { G.banner = { text: '+' + c + ' Dungeon Coins', sub: 'Treats from your clanmates', t: 1.6 }; Audio_.coins() } return true }
   if (k === 'cleave') { if (R.leaveArm) { leaveClan(); R.leaveArm = false } else R.leaveArm = true; return true }
+  if (k === 'spin_go') { if (!R.spinAnim && spinsLeft().free) startSpin(false); return true }
+  if (k === 'spin_ok') { R.spinAnim = null; return true }
+  if (k.startsWith('pt_')) { if (claimPassTier(+k.slice(3))) { G.banner = { text: 'Season reward', sub: rewardText(passReward(+k.slice(3))), t: 1.4 }; Audio_.coins() } return true }
+  if (k === 'pass_all') { let n = 0; for (let x = 1; x <= PASS_TIERS; x++) if (claimPassTier(x)) n++; if (n) { G.banner = { text: n + ' rewards claimed', t: 1.4 }; Audio_.coins() } return true }
+  if (k.startsWith('ac_')) { const a = ACHIEVEMENTS.find(x => x.id === k.slice(3)); if (a && claimAch(a.id)) { G.banner = { text: 'Achievement!', sub: a.text + '  +' + a.gems + ' gems', t: 1.6 }; Audio_.fanfare() } return true }
+  if (k === 'ach_prev') { R.achPage = Math.max(0, R.achPage - 1); return true }
+  if (k === 'ach_next') { R.achPage = Math.min(Math.ceil(ACHIEVEMENTS.length / 7) - 1, R.achPage + 1); return true }
   if (k.startsWith('au_')) { const key = k.slice(3) as keyof typeof G.auto; G.auto[key] = !G.auto[key]; return true }
   if (k === 'raid_go') { if (startRaid()) { R.screen = null; Audio_.fanfare() } else G.banner = { text: 'No raid attempts left', sub: 'Back tomorrow, or watch an ad for one more', t: 1.6 }; return true }
   if (k === 'raid_done') { closeRaid(); R.screen = null; return true }
@@ -436,3 +451,82 @@ export function drawAuto(ctx: Ctx) {
   })
 }
 registerTile({ id: 'auto', label: 'Auto Mode', sub: () => G.auto.on ? 'On' : 'Off', icon: 'frenzy', col: '#52d273' })
+
+// ================= Season pass, achievements, lucky spin =================
+export const rewardText = (r: Reward) => [r.gems ? r.gems + ' gems' : '', r.coins ? r.coins + ' coins' : '', r.chest !== undefined ? ['Wooden', 'Silver', 'Golden'][r.chest] + ' chest' : ''].filter(Boolean).join(' + ')
+export function drawPass(ctx: Ctx) {
+  panel(ctx, 'Season Pass'); ensurePass()
+  const lv = passLevel(), into = lv >= PASS_TIERS ? PASS_XP : G.pass.xp % PASS_XP
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = '400 15px ' + FONT; outText(ctx, 'Tier ' + lv + ' / ' + PASS_TIERS + '   \u00b7   ' + seasonDaysLeft() + ' days left', W / 2, 66, '#ffd84a', 3)
+  ctx.fillStyle = OUT; rr(ctx, 20, 80, W - 40, 16, 8); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.14)'; rr(ctx, 22, 82, W - 44, 12, 6); ctx.fill()
+  const g = ctx.createLinearGradient(0, 82, 0, 94); g.addColorStop(0, '#ffe27a'); g.addColorStop(1, '#e8841a'); ctx.fillStyle = g; rr(ctx, 22, 82, Math.max(10, (W - 44) * into / PASS_XP), 12, 6); ctx.fill()
+  ctx.font = '400 9px ' + FONT; ctx.fillStyle = '#9fb5aa'; ctx.fillText(into + ' / ' + PASS_XP + ' XP to next tier  (stages, bosses, raids, quests, spins)', W / 2, 108)
+  const cols = 5, cw = (W - 32 - 4 * 6) / cols, ch = 62
+  for (let tr = 1; tr <= PASS_TIERS; tr++) {
+    const i = tr - 1, x = 16 + (i % cols) * (cw + 6), y = 122 + Math.floor(i / cols) * (ch + 5), got = !!(G.pass.claimed & (1 << tr)), ready = tr <= lv && !got, rw = passReward(tr)
+    button(ctx, 'pt_' + tr, x, y, cw, ch, { top: got ? '#2f3a40' : ready ? '#52d273' : '#34444e', bot: got ? '#232c31' : ready ? '#25994a' : '#1d2a31', disabled: !ready })
+    ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.font = '400 10px ' + FONT; ctx.fillText('' + tr, x + cw / 2, y + 11)
+    ctx.save(); ctx.translate(x + cw / 2, y + 30); ctx.scale(1.0, 1.0); ctx.globalAlpha = got ? 0.4 : 1
+    if (rw.chest !== undefined) chestIcon(ctx, 0, 0, 0.5, rw.chest); else if (rw.gems) icons.gem(ctx, 0, 0, '#6fd6ff'); else icons.coin(ctx, 0, 0, '#ffd84a')
+    ctx.restore()
+    ctx.font = '400 9px ' + FONT; ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.fillText(got ? 'DONE' : rw.gems ? '+' + rw.gems : rw.coins ? '+' + rw.coins : 'Chest', x + cw / 2, y + 52)
+  }
+  button(ctx, 'pass_all', W / 2 - 80, 540, 160, 34, { top: passReady() ? '#ffb347' : '#4a565d', bot: passReady() ? '#e0731a' : '#2f3a40', label: passReady() ? 'Claim all (' + passReady() + ')' : 'Nothing to claim', size: 13, disabled: !passReady() })
+}
+export function drawAch(ctx: Ctx) {
+  panel(ctx, 'Achievements')
+  const list = ACHIEVEMENTS.slice().sort((a, b) => {
+    const rank = (x: typeof a) => G.achClaimed.includes(x.id) ? 2 : statValue(x.stat) >= x.target ? 0 : 1
+    return rank(a) - rank(b) || statValue(b.stat) / b.target - statValue(a.stat) / a.target
+  })
+  const per = 7, pages = Math.ceil(list.length / per); R.achPage = Math.min(R.achPage, pages - 1)
+  list.slice(R.achPage * per, R.achPage * per + per).forEach((a, i) => {
+    const y = 58 + i * 63, v = Math.min(a.target, statValue(a.stat)), done = statValue(a.stat) >= a.target, got = G.achClaimed.includes(a.id)
+    plate(ctx, 16, y, W - 32, 57, 14, got ? '#26343c' : '#2d4252', got ? '#182229' : '#17252f')
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 13px ' + FONT; outText(ctx, a.text, 28, y + 16, got ? '#8fa0a8' : '#fff', 3)
+    ctx.fillStyle = OUT; rr(ctx, 28, y + 31, 160, 12, 6); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.14)'; rr(ctx, 29.5, y + 32.5, 157, 9, 4.5); ctx.fill()
+    if (v > 0) { ctx.fillStyle = got ? '#7f929a' : done ? '#52d273' : '#ffd84a'; rr(ctx, 29.5, y + 32.5, Math.max(8, 157 * v / a.target), 9, 4.5); ctx.fill() }
+    ctx.font = '400 9px ' + FONT; ctx.fillStyle = '#c9dcd2'; ctx.fillText(fmt(v) + ' / ' + fmt(a.target), 196, y + 37)
+    button(ctx, 'ac_' + a.id, W - 100, y + 10, 76, 36, { top: got ? '#3a4850' : done ? '#52d273' : '#3a4850', bot: got ? '#26323a' : done ? '#25994a' : '#26323a', label: got ? 'DONE' : done ? '+' + a.gems + ' gems' : a.gems + ' gems', size: 11, disabled: !done || got })
+  })
+  button(ctx, 'ach_prev', 16, 506, 80, 30, { top: '#5b6c75', bot: '#3a4850', label: '< Prev', size: 12, disabled: R.achPage === 0 })
+  ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; outText(ctx, 'Page ' + (R.achPage + 1) + ' / ' + pages, W / 2, 521, '#fff', 3)
+  button(ctx, 'ach_next', W - 96, 506, 80, 30, { top: '#5b6c75', bot: '#3a4850', label: 'Next >', size: 12, disabled: R.achPage >= pages - 1 })
+}
+export function startSpin(viaAd: boolean) {
+  const idx = doSpin(viaAd), n = SPIN_SEGS.length, seg = 6.283 / n
+  // pointer is at the top; segment i is centred at angle i*seg - PI/2. Rotate the wheel so segment idx ends under the pointer, after 4 full turns.
+  R.spinAnim = { t: 0, from: 0, to: 4 * 6.283 - (idx + 0.5) * seg + (Math.random() - 0.5) * seg * 0.6, idx, done: false, last: performance.now() }
+}
+export function drawSpin(ctx: Ctx) {
+  panel(ctx, 'Lucky Spin')
+  const a = R.spinAnim, n = SPIN_SEGS.length, seg = 6.283 / n, cx = W / 2, cy = 236, r = 120
+  if (a && !a.done) { const now = performance.now(), dt = Math.min(0.1, (now - (a.last ?? now)) / 1000); a.last = now; const t0 = a.t; a.t += dt; const k = Math.min(1, a.t / 3.2); if (k >= 1) { a.done = true; Audio_.fanfare() } else if (Math.floor(a.t * 14) !== Math.floor(t0 * 14) && k < 0.9) Audio_.ui() }
+  const k = a ? Math.min(1, a.t / 3.2) : 0, rot = a ? a.from + (a.to - a.from) * (1 - Math.pow(1 - k, 3)) : 0
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6; ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, 6.283); ctx.fill(); ctx.restore()
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot)
+  SPIN_SEGS.forEach((s, i) => {
+    const a0 = i * seg - 1.5708 - seg / 2 + seg / 2 - seg / 2
+    ctx.fillStyle = s.col; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r, a0, a0 + seg); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = i % 2 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.1)'; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke()
+    ctx.save(); ctx.rotate(a0 + seg / 2); ctx.translate(r * 0.62, 0); ctx.rotate(Math.PI / 2)
+    const rw = s.r
+    if (rw === 'gold' || (rw as Reward).coins) icons.coin(ctx, 0, -8, '#ffd84a'); else if ((rw as Reward).gems) icons.gem(ctx, 0, -8, '#6fd6ff'); else chestIcon(ctx, 0, -8, 0.45, (rw as Reward).chest ?? 0)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 11px ' + FONT; outText(ctx, s.label, 0, 12, '#fff', 3); ctx.restore()
+  })
+  ctx.restore()
+  ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(cx, cy, 22, 0, 6.283); ctx.fill(); const hg = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 18); hg.addColorStop(0, '#fff2a0'); hg.addColorStop(1, '#e8841a'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(cx, cy, 18, 0, 6.283); ctx.fill()
+  ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = OUT; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, cy - r + 6); ctx.lineTo(cx - 13, cy - r - 18); ctx.lineTo(cx + 13, cy - r - 18); ctx.closePath(); ctx.fill(); ctx.stroke()
+  const sl = spinsLeft(), busy = !!a && !a.done
+  if (a && a.done) {
+    const sg = SPIN_SEGS[a.idx]; ctx.textAlign = 'center'; ctx.font = '400 24px ' + FONT; outText(ctx, 'You won: ' + sg.label + '!', W / 2, 400, '#ffd84a', 5)
+    button(ctx, 'spin_ok', W / 2 - 90, 424, 180, 46, { top: '#52d273', bot: '#25994a', label: 'NICE!', size: 16 })
+  } else {
+    button(ctx, 'spin_go', W / 2 - 100, 408, 200, 52, { top: sl.free && !busy ? '#ff7a5a' : '#4a565d', bot: sl.free && !busy ? '#c42f2f' : '#2f3a40', label: sl.free ? 'FREE SPIN' : 'Come back tomorrow', size: 16, disabled: !sl.free || busy, shine: sl.free && !busy })
+    button(ctx, 'spin_ad', W / 2 - 100, 470, 200, 38, { top: sl.ad && !busy ? '#b58cf0' : '#4a565d', bot: sl.ad && !busy ? '#6a3fb8' : '#2f3a40', label: sl.ad ? 'Watch an ad: bonus spin' : 'Bonus spin used', size: 12, disabled: !sl.ad || busy })
+  }
+}
+registerTile({ id: 'spin', label: 'Lucky Spin', sub: () => spinsLeft().free ? 'Free spin ready' : 'Daily', icon: 'star', col: '#ff6a8a', badge: () => spinsLeft().free })
+registerTile({ id: 'pass', label: 'Season Pass', sub: () => 'Tier ' + passLevel() + ' / ' + PASS_TIERS, icon: 'gem', col: '#ffb347', badge: () => passReady() > 0 })
+registerTile({ id: 'ach', label: 'Achievements', sub: () => achReady() ? achReady() + ' to claim' : 'Goals', icon: 'sword', col: '#c9a6ff', badge: () => achReady() > 0 })
