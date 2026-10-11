@@ -55,4 +55,13 @@ export const SPIN_SEGS: SpinSeg[] = [
 ]
 
 // ---- staged feature unlocks (by best stage), like the top games reveal menus gradually ----
-export const UNLOCK_STAGE: Record<string, number> = { stats: 1, tour: 1, help: 1, auto: 1, login: 1, quests: 2, spin: 2, gear: 3, pass: 3, weekly: 4, ach: 4, skills: 5, kennel: 6, raid: 8, clan: 10, rebirth: 1, rank: 1 }
+export const UNLOCK_STAGE: Record<string, number> = { stats: 1, tour: 1, help: 1, auto: 1, login: 1, quests: 2, spin: 2, gear: 3, pass: 3, weekly: 4, ach: 4, skills: 5, kennel: 6, raid: 8, clan: 10, rebirth: 1, rank: 1, train: 3 }
+
+/** The closest thing to look forward to: the next menu feature to unlock or the next boss, whichever is nearer. */
+const UNLOCK_NAME: Record<string, string> = { quests: 'Daily Quests', spin: 'Lucky Spin', gear: 'Gear', pass: 'Season Pass', train: 'Training', weekly: 'Weekly Event', ach: 'Achievements', skills: 'Skill Tree', kennel: 'Kennel', raid: 'Boss Raid', clan: 'Clans' }
+export function nextGoal(best: number): string {
+  let id = '', at = 1e9
+  for (const k in UNLOCK_NAME) { const u = UNLOCK_STAGE[k]; if (u !== undefined && u > best && u < at) { at = u; id = k } }
+  const boss = Math.ceil((best + 1) / 10) * 10
+  return id && at <= boss ? UNLOCK_NAME[id] + ' at stage ' + at : 'Boss at stage ' + boss
+}

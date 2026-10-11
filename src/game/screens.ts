@@ -8,6 +8,7 @@ import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGi
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
+import { TRAIN, tl, trainCost, buyTrain, trainAffordable } from './sim'
 import { LB, refresh, chooseName, nameChosen, nameOptions, shuffleNames, playerName, playerId } from './leaderboard'
 
 const mix = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
@@ -98,6 +99,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'pass': drawPass(ctx); break
     case 'ach': drawAch(ctx); break
     case 'rank': drawRank(ctx); break
+    case 'train': drawTrain(ctx); break
     case 'spin': drawSpin(ctx); break
     default: drawHub(ctx, t)
   }
@@ -195,6 +197,7 @@ export function screenButton(k: string): boolean {
   if (k.startsWith('pt_')) { if (claimPassTier(+k.slice(3))) { G.banner = { text: 'Season reward', sub: rewardText(passReward(+k.slice(3))), t: 1.4 }; Audio_.coins() } return true }
   if (k === 'pass_all') { let n = 0; for (let x = 1; x <= PASS_TIERS; x++) if (claimPassTier(x)) n++; if (n) { G.banner = { text: n + ' rewards claimed', t: 1.4 }; Audio_.coins() } return true }
   if (k.startsWith('ac_')) { const a = ACHIEVEMENTS.find(x => x.id === k.slice(3)); if (a && claimAch(a.id)) { G.banner = { text: 'Achievement!', sub: a.text + '  +' + a.gems + ' gems', t: 1.6 }; Audio_.fanfare() } return true }
+  if (k.startsWith('tr_')) { if (buyTrain(k.slice(3))) Audio_.merge(1); else G.banner = { text: 'Not enough gold', t: 0.9 }; return true }
   if (k === 'lb_refresh') { void refresh(); return true }
   if (k === 'lb_shuffle') { shuffleNames(); return true }
   if (k.startsWith('lb_pick')) { chooseName(+k.slice(7)); void refresh(); return true }
@@ -576,3 +579,22 @@ export function drawRank(ctx: Ctx) {
   button(ctx, 'lb_refresh', W / 2 - 75, 534, 150, 34, { top: '#5ab8ff', bot: '#2a73c4', label: LB.status === 'loading' ? 'Updating...' : 'Refresh', size: 12, disabled: LB.status === 'loading' })
 }
 registerTile({ id: 'rank', label: 'Leaderboard', sub: () => LB.rank ? 'Rank #' + LB.rank : 'Global top players', icon: 'star', col: '#ffd84a' })
+
+/** Training: the endless gold sink. Four stats, each level a little pricier than the last. */
+export function drawTrain(ctx: Ctx) {
+  panel(ctx, 'Training')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#9fb5aa'; ctx.fillText('Spend gold on permanent upgrades. There is no cap.', W / 2, 62)
+  TRAIN.forEach((d, i) => {
+    const y = 78 + i * 98, c = trainCost(d.id), can = G.gold >= c
+    plate(ctx, 16, y, W - 32, 90, 14, '#2d4252', '#17252f')
+    ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(46, y + 45, 22, 0, 6.283); ctx.fill(); ctx.fillStyle = mix(d.col, '#101820', 0.35); ctx.beginPath(); ctx.arc(46, y + 45, 19, 0, 6.283); ctx.fill()
+    icons[d.icon](ctx, 46, y + 45, '#fff')
+    ctx.textAlign = 'left'; ctx.font = '400 15px ' + FONT; outText(ctx, d.name, 78, y + 18, '#fff', 3)
+    ctx.textAlign = 'right'; ctx.font = '400 12px ' + FONT; outText(ctx, 'Lv ' + tl(d.id), W - 28, y + 18, '#ffd84a', 3); ctx.textAlign = 'left'
+    ctx.font = '400 10px ' + FONT; ctx.fillStyle = '#c9dcd2'; ctx.fillText(d.text, 78, y + 38)
+    button(ctx, 'tr_' + d.id, 78, y + 50, W - 110, 34, { top: can ? '#52d273' : '#4a545a', bot: can ? '#25994a' : '#2a3238', label: fmt(c) + ' gold', icon: 'coin', size: 14, disabled: !can })
+  })
+  ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; outText(ctx, 'You have ' + fmt(G.gold) + ' gold', W / 2, 482, '#ffd84a', 3)
+}
+registerTile({ id: 'train', label: 'Training', sub: () => trainAffordable() ? 'Upgrade ready!' : 'Spend your gold', icon: 'bolt', col: '#ff9a3a', badge: () => trainAffordable() })
