@@ -34,19 +34,39 @@ export function panel(ctx: Ctx, title: string, back = true) {
   button(ctx, 'scr_close', W / 2 - 60, H - 52, 120, 38, { top: '#6f8794', bot: '#3f525d', label: back ? 'Back' : 'Close', size: 14 })
 }
 
+export const HUB_SECTIONS: { id: string; label: string; col: string; tiles: string[] }[] = [
+  { id: 'battle', label: 'Battle', col: '#ff6a5a', tiles: ['raid', 'auto', 'weekly', 'stats'] },
+  { id: 'grow', label: 'Grow', col: '#ff9a3a', tiles: ['train', 'skills', 'gear', 'kennel', 'rebirth'] },
+  { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['quests', 'login', 'spin', 'pass', 'ach'] },
+  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'tour', 'help'] },
+]
+const tileLive = (id: string) => { const tl = TILES.find(x => x.id === id); return !!tl && unlocked(id) && !!tl.badge?.() }
+const sectionBadge = (sec: { tiles: string[] }) => sec.tiles.some(tileLive)
+
 export function drawHub(ctx: Ctx, t: number) {
   panel(ctx, 'Menu', false)
-  const cols = 3, gap = 8, tw = (W - 16 * 2 - gap * 2) / cols, th = 78
-  TILES.forEach((tl, i) => {
-    const x = 16 + (i % cols) * (tw + gap), y = 56 + Math.floor(i / cols) * (th + 8), lock = !unlocked(tl.id), need = unlockStage(tl.id)
+  if (R.hubTab == null) R.hubTab = Math.max(0, HUB_SECTIONS.findIndex(sec => sectionBadge(sec)))
+  const sec = HUB_SECTIONS[R.hubTab] ?? HUB_SECTIONS[0]
+  // section tabs
+  const n = HUB_SECTIONS.length, tg = 6, tabW = (W - 32 - tg * (n - 1)) / n
+  HUB_SECTIONS.forEach((s, i) => {
+    const x = 16 + i * (tabW + tg), on = i === R.hubTab
+    button(ctx, 'hub_tab' + i, x, 54, tabW, 38, on ? { top: mix(s.col, '#ffffff', 0.15), bot: mix(s.col, '#101820', 0.35), label: s.label, size: 14 } : { top: '#4a5c66', bot: '#2a3840', label: s.label, size: 13 })
+    if (!on && sectionBadge(s)) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tabW - 8, 62 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
+  })
+  // tiles of the selected section, two per row so each one is easy to read and hit
+  const cols = 2, gap = 10, tw = (W - 16 * 2 - gap) / cols, th = 112
+  const list = sec.tiles.map(id => TILES.find(x => x.id === id)).filter((x): x is Tile => !!x)
+  list.forEach((tl, i) => {
+    const x = 16 + (i % cols) * (tw + gap), y = 106 + Math.floor(i / cols) * (th + 10), lock = !unlocked(tl.id), need = unlockStage(tl.id)
     button(ctx, 'nav_' + tl.id, x, y, tw, th, lock ? { top: '#4a545a', bot: '#2a3238' } : { top: mix(tl.col, '#101820', 0.38), bot: mix(tl.col, '#101820', 0.72) })
-    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + tw / 2, y + 27, 19, 0, 6.283); ctx.fill()
-    ctx.save(); ctx.translate(x + tw / 2, y + 27); ctx.scale(1.55, 1.55); ctx.globalAlpha = lock ? 0.35 : 1; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : mix(tl.col, '#ffffff', 0.35)); ctx.restore()
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 13px ' + FONT; outText(ctx, tl.label, x + tw / 2, y + 54, lock ? '#b8c4ca' : '#fff', 3)
-    ctx.font = '400 9px ' + FONT; ctx.fillStyle = lock ? '#ffd84a' : '#c9dcd2'
-    let sub = lock ? 'Stage ' + need : tl.sub(); while (sub.length > 4 && ctx.measureText(sub).width > tw - 8) sub = sub.slice(0, -2)
-    ctx.fillText(lock ? 'Unlocks at stage ' + need : sub, x + tw / 2, y + 67)
-    if (!lock && tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 9, y + 11 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
+    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + tw / 2, y + 36, 25, 0, 6.283); ctx.fill()
+    ctx.save(); ctx.translate(x + tw / 2, y + 36); ctx.scale(2, 2); ctx.globalAlpha = lock ? 0.35 : 1; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : mix(tl.col, '#ffffff', 0.35)); ctx.restore()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 16px ' + FONT; outText(ctx, tl.label, x + tw / 2, y + 76, lock ? '#b8c4ca' : '#fff', 3)
+    ctx.font = '400 11px ' + FONT; ctx.fillStyle = lock ? '#ffd84a' : '#c9dcd2'
+    let sub = lock ? 'Unlocks at stage ' + need : tl.sub(); while (sub.length > 4 && ctx.measureText(sub).width > tw - 12) sub = sub.slice(0, -2)
+    ctx.fillText(sub, x + tw / 2, y + 96)
+    if (!lock && tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 11, y + 13 + Math.sin(t * 5) * 0.8, 7, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
 }
 
