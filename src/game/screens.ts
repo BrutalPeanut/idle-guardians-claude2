@@ -21,13 +21,13 @@ export function panel(ctx: Ctx, title: string, back = true) {
 
 export function drawHub(ctx: Ctx, t: number) {
   panel(ctx, 'Menu', false)
-  const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 72
+  const cols = 2, tw = (W - 16 * 2 - 12) / cols, th = 64
   TILES.forEach((tl, i) => {
-    const x = 16 + (i % cols) * (tw + 12), y = 60 + Math.floor(i / cols) * (th + 10)
+    const x = 16 + (i % cols) * (tw + 12), y = 58 + Math.floor(i / cols) * (th + 8)
     button(ctx, 'nav_' + tl.id, x, y, tw, th, { top: '#2e3e48', bot: '#1a2830' })
     ctx.save(); ctx.translate(x + 30, y + th / 2); ctx.scale(1.8, 1.8); icons[tl.icon]?.(ctx, 0, 0, tl.col); ctx.restore()
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 15px system-ui,sans-serif'; ctx.fillText(tl.label, x + 58, y + 27)
-    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 47)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '800 15px system-ui,sans-serif'; ctx.fillText(tl.label, x + 58, y + 24)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText(tl.sub(), x + 58, y + 42)
     if (tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 12, y + 12 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
 }
@@ -77,6 +77,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'kennel': drawKennel(ctx); break
     case 'raid': drawRaid(ctx); break
     case 'clan': drawClan(ctx); break
+    case 'auto': drawAuto(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -168,6 +169,7 @@ export function screenButton(k: string): boolean {
   if (k.startsWith('cm_')) { if (claimMilestone(+k.slice(3))) { G.banner = { text: 'Clan reward claimed', sub: MILESTONES[+k.slice(3)].text, t: 1.6 }; Audio_.coins() } return true }
   if (k === 'cgift') { const c = claimClanGift(); if (c) { G.banner = { text: '+' + c + ' Dungeon Coins', sub: 'Treats from your clanmates', t: 1.6 }; Audio_.coins() } return true }
   if (k === 'cleave') { if (R.leaveArm) { leaveClan(); R.leaveArm = false } else R.leaveArm = true; return true }
+  if (k.startsWith('au_')) { const key = k.slice(3) as keyof typeof G.auto; G.auto[key] = !G.auto[key]; return true }
   if (k === 'raid_go') { if (startRaid()) { R.screen = null; Audio_.fanfare() } else G.banner = { text: 'No raid attempts left', sub: 'Back tomorrow, or watch an ad for one more', t: 1.6 }; return true }
   if (k === 'raid_done') { closeRaid(); R.screen = null; return true }
   if (k.startsWith('ks_')) { R.kSlot = +k.slice(3); return true }
@@ -398,3 +400,28 @@ export function drawClan(ctx: Ctx) {
 }
 registerTile({ id: 'clan', label: 'Clan', sub: () => G.clan ? clanById(G.clan.id).name + '  Lv' + clanLevel(G.clan) : 'Join a clan', icon: 'gem', col: '#9fd0ff', badge: () => !G.clan ? G.best >= 8 : clanClaimable() })
 void cp
+
+// ================= Auto abilities =================
+const AUTO_ROWS: { key: 'shield' | 'frenzy' | 'nade' | 'tank' | 'panic'; name: string; icon: string; col: string; when: string }[] = [
+  { key: 'shield', name: 'Shield', icon: 'shield', col: '#5ab8ff', when: 'When a dog is hurt (under 45%) or down' },
+  { key: 'frenzy', name: 'Frenzy', icon: 'frenzy', col: '#ffd84a', when: 'When 4+ enemies are out, or a boss' },
+  { key: 'tank',   name: 'Tank (Rudy)', icon: 'tank', col: '#7fcf86', when: 'When 4+ enemies are out, or a boss' },
+  { key: 'panic',  name: 'Panic (Cooper)', icon: 'panic', col: '#ff7a6a', when: 'Only when Cooper is healthy and 6+ enemies / a boss' },
+  { key: 'nade',   name: 'Grenade', icon: 'nade', col: '#ff9a3a', when: 'When it would catch 3+ enemies (after you throw your first by hand, or from stage 6)' },
+]
+export function drawAuto(ctx: Ctx) {
+  panel(ctx, 'Auto Abilities')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '600 11px system-ui,sans-serif'; ctx.fillText('Abilities fire themselves when they are worth it. Cooldowns still apply.', W / 2, 62)
+  button(ctx, 'auto', 16, 78, W - 32, 44, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: G.auto.on ? 'AUTO IS ON' : 'AUTO IS OFF  (tap to enable)', size: 15 })
+  AUTO_ROWS.forEach((r, i) => {
+    const y = 134 + i * 68, on = G.auto[r.key] && G.auto.on
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; rr(ctx, 16, y, W - 32, 60, 14); ctx.fill()
+    ctx.save(); ctx.translate(44, y + 30); ctx.scale(1.5, 1.5); icons[r.icon]?.(ctx, 0, 0, r.col); ctx.restore()
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.fillText(r.name, 74, y + 20)
+    ctx.fillStyle = '#9fb5aa'; ctx.font = '600 10px system-ui,sans-serif'
+    const words = r.when.split(' '); let line = '', ly = y + 38; for (const w of words) { if (ctx.measureText(line + w).width > 170) { ctx.fillText(line, 74, ly); line = ''; ly += 12 } line += w + ' ' } ctx.fillText(line, 74, ly)
+    button(ctx, 'au_' + r.key, W - 86, y + 14, 60, 32, { top: on ? '#52d273' : '#5a666d', bot: on ? '#25994a' : '#39434a', label: G.auto[r.key] ? 'ON' : 'OFF', size: 13 })
+  })
+}
+registerTile({ id: 'auto', label: 'Auto Mode', sub: () => G.auto.on ? 'On' : 'Off', icon: 'frenzy', col: '#52d273' })
