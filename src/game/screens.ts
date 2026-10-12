@@ -131,7 +131,7 @@ export function drawScreen(ctx: Ctx, t: number) {
 }
 
 // ================= Gear =================
-import { SLOTS, RARITY, CHEST_NAMES, CHEST_COLS, INV_MAX, itemName, fmtStat } from './gear'
+import { SLOTS, RARITY, CHEST_NAMES, CHEST_COLS, INV_MAX, itemName, fmtStat, fmtShort, fmtSubs } from './gear'
 import type { Item } from './gear'
 import { openChest, equipItem, unequipItem, sellItem, sellValue, invCount } from './sim'
 import { Audio_ } from './audio'
@@ -143,7 +143,7 @@ function itemCard(ctx: Ctx, x: number, y: number, w: number, h: number, it: Item
   ctx.fillStyle = it ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.03)'; rr(ctx, x, y, w, h, 11); ctx.fill()
   ctx.strokeStyle = col; ctx.lineWidth = sel ? 3 : 1.5; rr(ctx, x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(it).replace(/ (damage|max HP|crit chance|fire rate|kill gold)/, m => ({ ' damage': ' dmg', ' max HP': ' HP', ' crit chance': ' crit', ' fire rate': ' rate', ' kill gold': ' gold' } as Record<string, string>)[m]), x + w / 2, y + h - 11) }
+  if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtShort(it), x + w / 2, y + h - 11); if (it.subs) { ctx.fillStyle = RARITY[it.rar].col; for (let k = 0; k < it.subs.length; k++) { ctx.beginPath(); ctx.arc(x + w - 9 - k * 8, y + 9, 2.6, 0, 6.283); ctx.fill() } } }
   else { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(label ?? 'empty', x + w / 2, y + h / 2) }
 }
 function chestIcon(ctx: Ctx, x: number, y: number, s: number, tier: number, open = 0) {
@@ -172,10 +172,12 @@ export function drawGear(ctx: Ctx, t: number) {
   const py = 490
   ctx.fillStyle = 'rgba(255,255,255,.05)'; rr(ctx, 16, py, W - 32, 88, 14); ctx.fill()
   if (sel) {
-    ctx.textAlign = 'left'; ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(itemName(sel), 28, py + 20)
-    ctx.fillStyle = '#d6e4dc'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(sel) + '  (found at stage ' + sel.lvl + ')', 28, py + 40)
+    const F = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+    ctx.textAlign = 'left'; ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '400 13px ' + F; ctx.fillText(itemName(sel), 28, py + 15)
+    ctx.fillStyle = '#d6e4dc'; ctx.font = '400 11px ' + F; ctx.fillText(fmtStat(sel), 28, py + 31)
+    ctx.fillStyle = RARITY[sel.rar].col; ctx.font = '400 10px ' + F; fmtSubs(sel).forEach((l, k) => ctx.fillText(l, 28, py + 45 + k * 13))
     const cur = G.gear.find(g => g.on === dog && g.slot === sel.slot)
-    if (cur && sel.on < 0) { const d = (sel.val - cur.val) * 100; ctx.fillStyle = d >= 0 ? '#5be07f' : '#ff8a7a'; ctx.fillText((cur.stat === sel.stat ? (d >= 0 ? '+' : '') + d.toFixed(1) + '% vs worn' : 'different stat than worn'), 28, py + 58) }
+    if (cur && sel.on < 0) { const d = (sel.val - cur.val) * 100; ctx.font = '400 10px ' + F; ctx.fillStyle = cur.stat === sel.stat ? (d >= 0 ? '#5be07f' : '#ff8a7a') : '#9fb5aa'; ctx.fillText(cur.stat === sel.stat ? (d >= 0 ? '+' : '') + d.toFixed(Math.abs(d) < 1 ? 2 : 1) + '% vs worn' : 'different from worn', 28, py + 78) }
     if (sel.on < 0) button(ctx, 'rv_equipsel', 150, py + 48, 94, 34, { top: '#52d273', bot: '#25994a', label: 'Equip', size: 13 })
     button(ctx, 'sellsel', sel.on < 0 ? 250 : 150, py + 48, sel.on < 0 ? 94 : 194, 34, { top: '#e0b24a', bot: '#9a6a18', label: 'Sell ' + fmt(sellValue(sel)), size: 12 })
   } else { ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Open chests for gear. Equip it on ' + GUARDIANS[dog].n + '.', W / 2, py + 44) }
@@ -200,7 +202,7 @@ function drawReveal(ctx: Ctx, t: number) {
     if (it) {
       ctx.save(); ctx.translate(W / 2, 250); ctx.scale(5, 5); icons[it.slot](ctx, 0, 0, col); ctx.restore()
       ctx.textAlign = 'center'; ctx.fillStyle = col; ctx.font = '400 22px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(RARITY[it.rar].n.toUpperCase(), W / 2, 330)
-      ctx.fillStyle = '#fff'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(itemName(it), W / 2, 362); ctx.fillStyle = '#d6e4dc'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(it), W / 2, 390)
+      ctx.fillStyle = '#fff'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(itemName(it), W / 2, 362); ctx.fillStyle = '#d6e4dc'; ctx.font = '400 15px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtStat(it), W / 2, 390); ctx.fillStyle = col; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; fmtSubs(it).forEach((l, k) => ctx.fillText(l, W / 2, 410 + k * 17))
       button(ctx, 'rv_equip', 50, 440, 260, 46, { top: '#52d273', bot: '#25994a', label: 'Equip on ' + GUARDIANS[R.gearDog].n, size: 15 })
       button(ctx, 'rv_keep', 90, 498, 180, 38, { top: '#5b6c75', bot: '#3a4850', label: 'Keep', size: 13 })
     } else {
