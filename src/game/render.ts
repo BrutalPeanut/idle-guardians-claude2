@@ -816,17 +816,18 @@ export function render(ctx: Ctx, t: number) {
   const ag = ctx.createLinearGradient(0, BENCH.y - 24, 0, H); ag.addColorStop(0, '#1c2c37'); ag.addColorStop(1, '#0d171d')
   ctx.fillStyle = ag; ctx.fillRect(0, BENCH.y - 24, W, H - BENCH.y + 24)
   ctx.fillStyle = OUT; ctx.fillRect(0, BENCH.y - 26, W, 2.5); ctx.fillStyle = '#ffd84a'; ctx.globalAlpha = 0.85; ctx.fillRect(0, BENCH.y - 23.5, W, 1.5); ctx.globalAlpha = 1
-  ctx.textAlign = 'left'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, 'ARMORY · drag to merge', 8, BENCH.y - 11, '#c9dcd2', 3)
+  ctx.textAlign = 'left'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, 'ARMORY', 8, BENCH.y - 11, '#c9dcd2', 3)
   { const gy = BENCH.y - 21, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
-    button(ctx, 'nav_shop', 206, gy, 62, 18, { top: '#2a3d4b', bot: '#142029' }); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
-    ctx.fillStyle = '#52d273'; ctx.beginPath(); ctx.arc(258, gy + 9, 6, 0, 6.283); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(255, gy + 8.2, 6, 1.6); ctx.fillRect(257.2, gy + 6, 1.6, 6)
-    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
+    button(ctx, 'nav_shop', 66, gy, 62, 18, { top: '#2a3d4b', bot: '#142029' }); ctx.save(); ctx.translate(78, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+    ctx.fillStyle = '#52d273'; ctx.beginPath(); ctx.arc(118, gy + 9, 6, 0, 6.283); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(115, gy + 8.2, 6, 1.6); ctx.fillRect(117.2, gy + 6, 1.6, 6)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + G.gems, 89, gy + 9.5)
     { const gOn = unlocked('gear'), ch = G.chests[0] + G.chests[1] + G.chests[2], nd = Math.min(4, 2 + Math.floor(G.stage / 5))
       const spare = G.gear.some(it => it.on < 0 && Array.from({ length: nd }, (_, i) => i).some(i => !G.gear.some(w => w.on === dogId(i) && w.slot === it.slot)))
-      button(ctx, 'nav_gear', 142, gy - 1, 58, 20, { top: gOn ? (ch ? '#e0a02a' : '#5a7a98') : '#3a444a', bot: gOn ? (ch ? '#a8680f' : '#34506a') : '#262e33', label: gOn ? 'GEAR' : 'LOCKED', size: 11 })
-      if (gOn && (ch || spare)) { ctx.fillStyle = ch ? '#ff5a46' : '#5be07f'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(197, gy + 1, ch ? 6.5 : 5, 0, 6.283); ctx.fill(); ctx.stroke(); if (ch) { ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + Math.min(ch, 9), 197, gy + 1.5); ctx.textAlign = 'left' } } }
-    button(ctx, 'menu', 274, gy - 1, 76, 20, { top: '#5b6c75', bot: '#3a4850', label: 'MENU', size: 11 })
-    if (rdy || pointsLeft() > 0 || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy + 1, 5, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
+      button(ctx, 'nav_gear', 134, gy - 1, 58, 20, { top: gOn ? (ch ? '#e0a02a' : '#5a7a98') : '#3a444a', bot: gOn ? (ch ? '#a8680f' : '#34506a') : '#262e33', label: gOn ? 'GEAR' : 'LOCKED', size: 11 })
+      if (gOn && (ch || spare)) { ctx.fillStyle = ch ? '#ff5a46' : '#5be07f'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(189, gy + 1, ch ? 6.5 : 5, 0, 6.283); ctx.fill(); ctx.stroke(); if (ch) { ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + Math.min(ch, 9), 189, gy + 1.5); ctx.textAlign = 'left' } } }
+    button(ctx, 'menu', 198, gy - 8, 154, 30, { top: '#ffcf4a', bot: '#e8741a', label: 'MENU', size: 17 })
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUT; ctx.lineWidth = 1; for (let k = 0; k < 3; k++) { rr(ctx, 214, gy - 1 + k * 5.5, 16, 3.2, 1.6); ctx.fill(); ctx.stroke() }
+    if (rdy || pointsLeft() > 0 || canClaimLogin() || G.chests[0] + G.chests[1] + G.chests[2] > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(346, gy - 6, 6, 0, 6.283); ctx.fill(); ctx.stroke(); void pl } }
   const order = G.bench.map((v, i) => ({ v, i })).filter(o => o.v !== null).sort((a, b) => (b.v as number) - (a.v as number)), armed = new Map<number, number>()
   order.slice(0, n).forEach((o, k) => armed.set(o.i, k))
   for (let i = 0; i < 8; i++) {
