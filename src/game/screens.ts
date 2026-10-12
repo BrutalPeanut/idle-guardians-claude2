@@ -37,12 +37,14 @@ export function panel(ctx: Ctx, title: string, back = true) {
   button(ctx, 'scr_close', W / 2 - 60, H - 52, 120, 38, { top: '#6f8794', bot: '#3f525d', label: back ? 'Back' : 'Close', size: 14 })
 }
 
-export const HUB_SECTIONS: { id: string; label: string; col: string; tiles: string[] }[] = [
-  { id: 'battle', label: 'Battle', col: '#ff6a5a', tiles: ['raid', 'auto', 'weekly', 'stats'] },
-  { id: 'grow', label: 'Grow', col: '#ff9a3a', tiles: ['train', 'skills', 'gear', 'kennel', 'rebirth'] },
-  { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['boost', 'quests', 'login', 'spin', 'pass', 'ach'] },
-  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'noads', 'savedata', 'tour', 'help', 'privacy'] },
-]
+/** `main` tiles are the things you reach for every session: big, bright, pulsing when there is something to do. `minor` tiles are smaller, tucked at the bottom. */
+export const HUB_SECTIONS: { id: string; label: string; col: string; main: string[]; minor: string[]; tiles: string[] }[] = ([
+  { id: 'battle', label: 'Battle', col: '#ff6a5a', main: ['raid', 'auto', 'weekly'], minor: ['stats'] },
+  { id: 'grow', label: 'Grow', col: '#ff9a3a', main: ['gear', 'train', 'skills', 'kennel'], minor: ['rebirth'] },
+  { id: 'rewards', label: 'Rewards', col: '#52d273', main: ['boost', 'quests', 'login', 'spin'], minor: ['pass', 'ach'] },
+  { id: 'more', label: 'More', col: '#5ab8ff', main: ['rank', 'clan', 'help'], minor: ['noads', 'savedata', 'tour', 'privacy'] },
+] as { id: string; label: string; col: string; main: string[]; minor: string[] }[]).map(x => ({ ...x, tiles: [...x.main, ...x.minor] }))
+const MINOR_LABEL: Record<string, string> = { privacy: 'Privacy', savedata: 'Save Data', noads: 'No Ads', tour: 'Tour', help: 'Help', weekly: 'Weekly', stats: 'Stats', pass: 'Season Pass', ach: 'Awards', rebirth: 'Rebirth' }
 const tileLive = (id: string) => { const tl = TILES.find(x => x.id === id); return !!tl && unlocked(id) && !!tl.badge?.() }
 const sectionBadge = (sec: { tiles: string[] }) => sec.tiles.some(tileLive)
 
@@ -57,20 +59,41 @@ export function drawHub(ctx: Ctx, t: number) {
     button(ctx, 'hub_tab' + i, x, 54, tabW, 38, on ? { top: mix(s.col, '#ffffff', 0.15), bot: mix(s.col, '#101820', 0.35), label: s.label, size: 14 } : { top: '#4a5c66', bot: '#2a3840', label: s.label, size: 13 })
     if (!on && sectionBadge(s)) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tabW - 8, 62 + Math.sin(t * 5) * 0.8, 6, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
-  // tiles of the selected section, two per row so each one is easy to read and hit
-  const cols = 2, gap = 10, tw = (W - 16 * 2 - gap) / cols, th = 112
-  const list = sec.tiles.map(id => TILES.find(x => x.id === id)).filter((x): x is Tile => !!x)
-  list.forEach((tl, i) => {
-    const x = 16 + (i % cols) * (tw + gap), y = 106 + Math.floor(i / cols) * (th + 10), lock = !unlocked(tl.id), need = unlockStage(tl.id)
-    button(ctx, 'nav_' + tl.id, x, y, tw, th, lock ? { top: '#4a545a', bot: '#2a3238' } : { top: mix(tl.col, '#101820', 0.38), bot: mix(tl.col, '#101820', 0.72) })
-    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x + tw / 2, y + 36, 25, 0, 6.283); ctx.fill()
-    ctx.save(); ctx.translate(x + tw / 2, y + 36); ctx.scale(2, 2); ctx.globalAlpha = lock ? 0.35 : 1; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : mix(tl.col, '#ffffff', 0.35)); ctx.restore()
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 16px ' + FONT; outText(ctx, tl.label, x + tw / 2, y + 76, lock ? '#b8c4ca' : '#fff', 3)
-    ctx.font = '400 11px ' + FONT; ctx.fillStyle = lock ? '#ffd84a' : '#c9dcd2'
-    let sub = lock ? 'Unlocks at stage ' + need : tl.sub(); while (sub.length > 4 && ctx.measureText(sub).width > tw - 12) sub = sub.slice(0, -2)
-    ctx.fillText(sub, x + tw / 2, y + 96)
-    if (!lock && tl.badge?.()) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 11, y + 13 + Math.sin(t * 5) * 0.8, 7, 0, 6.283); ctx.fill(); ctx.stroke() }
+  // main tiles: big and bright; minor tiles: compact pills anchored at the bottom
+  const find = (ids: string[]) => ids.map(id => TILES.find(x => x.id === id)).filter((x): x is Tile => !!x)
+  const mainL = find(sec.main), minorL = find(sec.minor)
+  const mc = 3, mh = 44, mg = 8, mrows = Math.ceil(minorL.length / mc), minorTop = 574 - mrows * (mh + mg) + mg
+  const gap = 10, tw = (W - 16 * 2 - gap) / 2, hero = mainL.length % 2 === 1, rows = Math.ceil((mainL.length + (hero ? 1 : 0)) / 2), avail = minorTop - 30 - 106
+  const th = Math.min(170, (avail - (rows - 1) * 10) / rows)
+  mainL.forEach((tl, i) => {
+    const j = hero ? i + 1 : i, isHero = hero && i === 0, tw2 = isHero ? W - 32 : tw
+    const x = isHero ? 16 : 16 + (j % 2) * (tw + gap), y = 106 + Math.floor(j / 2) * (th + 10), lock = !unlocked(tl.id), need = unlockStage(tl.id), live = !lock && !!tl.badge?.()
+    if (live) { const k = 0.5 + 0.5 * Math.sin(t * 5); ctx.strokeStyle = 'rgba(255,230,120,' + (0.35 + 0.5 * k) + ')'; ctx.lineWidth = 3.5; rr(ctx, x - 3, y - 3, tw2 + 6, th + 6, 16); ctx.stroke() }
+    button(ctx, 'nav_' + tl.id, x, y, tw2, th, lock ? { top: '#4a545a', bot: '#2a3238' } : { top: mix(tl.col, '#ffffff', 0.05), bot: mix(tl.col, '#101820', 0.5) })
+    const cy = y + th * 0.38
+    ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(x + tw2 / 2, cy, 29, 0, 6.283); ctx.fill()
+    ctx.save(); ctx.translate(x + tw2 / 2, cy); ctx.scale(2.4, 2.4); ctx.globalAlpha = lock ? 0.35 : 1; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : '#ffffff'); ctx.restore()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 18px ' + FONT; outText(ctx, tl.label, x + tw2 / 2, y + th - 36, lock ? '#b8c4ca' : '#fff', 3.5)
+    ctx.font = '400 12px ' + FONT; ctx.fillStyle = lock ? '#ffd84a' : '#f2fff6'
+    let sub = lock ? 'Unlocks at stage ' + need : tl.sub(); while (sub.length > 4 && ctx.measureText(sub).width > tw2 - 12) sub = sub.slice(0, -2)
+    ctx.fillText(sub, x + tw2 / 2, y + th - 16)
+    if (live) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + tw2 - 12, y + 14 + Math.sin(t * 5) * 0.8, 8, 0, 6.283); ctx.fill(); ctx.stroke() }
   })
+  if (minorL.length) {
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 10px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('MORE', 18, minorTop - 12)
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(52, minorTop - 12, W - 68, 1)
+    const sw = (W - 32 - mg * (mc - 1)) / mc
+    minorL.forEach((tl, i) => {
+      const x = 16 + (i % mc) * (sw + mg), y = minorTop + Math.floor(i / mc) * (mh + mg), lock = !unlocked(tl.id), live = !lock && !!tl.badge?.()
+      button(ctx, 'nav_' + tl.id, x, y, sw, mh, lock ? { top: '#3e484e', bot: '#262d32' } : { top: mix(tl.col, '#101820', 0.55), bot: mix(tl.col, '#101820', 0.8) })
+      ctx.save(); ctx.translate(x + 17, y + mh / 2); ctx.scale(1.1, 1.1); ctx.globalAlpha = lock ? 0.35 : 0.95; icons[tl.icon]?.(ctx, 0, 0, lock ? '#cfd8dc' : mix(tl.col, '#ffffff', 0.5)); ctx.restore()
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 11px ' + FONT
+      let lab = MINOR_LABEL[tl.id] ?? tl.label; while (lab.length > 3 && ctx.measureText(lab).width > sw - 40) lab = lab.slice(0, -1)
+      ctx.fillStyle = lock ? '#8e9aa0' : '#e8f2ee'; ctx.fillText(lab, x + 32, y + mh / 2 - (lock ? 5 : 0))
+      if (lock) { ctx.font = '400 9px ' + FONT; ctx.fillStyle = '#ffd84a'; ctx.fillText('Stage ' + unlockStage(tl.id), x + 32, y + mh / 2 + 8) }
+      if (live) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + sw - 9, y + 9, 5.5, 0, 6.283); ctx.fill(); ctx.stroke() }
+    })
+  }
 }
 
 /** Damage breakdown: who is carrying, what the abilities add, what the pack absorbed. */
