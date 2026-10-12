@@ -77,7 +77,7 @@ interface State {
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; missiles: Missile[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
-  fail: number; failStage: number; spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
+  fail: number; failStage: number; wipe: null | { stage: number; fails: number }; reviveStage: number; reinforce: boolean; spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
   nades: Nade[]; nadeCd: number
   /** Blessing stacks (id -> count) and a pending 3-way pick (ids) that pauses the game until chosen. */
   blessings: Record<string, number>; pick: string[] | null
@@ -117,7 +117,7 @@ export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], missiles: [], cover: [], hazards: [], events: [], t: 0,
-  fail: 0, failStage: 0, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
+  fail: 0, failStage: 0, wipe: null, reviveStage: 0, reinforce: false, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, shop: { day: '', chest: 0, gems: 0 }, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
   stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, life: {}, achClaimed: [], pass: { s: 0, xp: 0, claimed: 0 }, spin: { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
@@ -414,7 +414,29 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
 /** Pack Resolve: every wipe on the same stage gives the next attempt +10% power and health (max +60%), until the stage is cleared. Keeps a boss wall from being a dead end. */
-export const resolve = () => !G.raid && G.failStage === G.stage ? Math.min(0.6, 0.1 * G.fail) : 0
+/** Reinforce (after a wall of 3+ wipes): the next attempt is +25% power and health on top of Pack Resolve. */
+export const REINFORCE_BONUS = 0.25, WALL_WIPES = 3, REINFORCE_GEMS = 30
+export const resolve = () => !G.raid && G.failStage === G.stage ? Math.min(0.6, 0.1 * G.fail) + (G.reinforce ? REINFORCE_BONUS : 0) : 0
+/** Regroup for free: restart the stage (Pack Resolve applies on repeat wipes). */
+export function regroupFree() {
+  if (G.failStage === G.stage) G.fail++; else { G.failStage = G.stage; G.fail = 1 }
+  G.wipe = null; startStage(); G.banner = { text: 'REGROUP!', sub: 'Pack Resolve +' + Math.round(resolve() * 100) + '% power and health', t: 2.2 }
+}
+/** Revive (ad, once per stage): the pack returns at full health and the fight carries on with the enemies still standing. */
+export function revivePack(): boolean {
+  if (!G.wipe || G.reviveStage === G.stage) return false
+  G.wipe = null; G.reviveStage = G.stage
+  for (let i = 0; i < 4; i++) { G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
+  G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.missiles.length = 0; G.nades.length = 0
+  G.banner = { text: 'REVIVED!', sub: 'Pick up where you fell', t: 1.6 }
+  return true
+}
+/** Reinforce (after WALL_WIPES wipes): restart the stage with the next attempt boosted. Costs an ad or REINFORCE_GEMS gems. */
+export function reinforceRegroup(paid: 'ad' | 'gems'): boolean {
+  if (!G.wipe || G.wipe.fails < WALL_WIPES) return false
+  if (paid === 'gems') { if (G.gems < REINFORCE_GEMS) return false; G.gems -= REINFORCE_GEMS }
+  G.reinforce = true; regroupFree(); G.banner = { text: 'REINFORCED!', sub: '+' + Math.round(REINFORCE_BONUS * 100) + '% power and health', t: 1.8 }; save(); return true
+}
 const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0)
 const alive = (i: number) => G.hp[i] > 0
 /** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
@@ -710,15 +732,16 @@ export function update(dtReal: number) {
   if (G.auto.on && (G.autoT -= dt) <= 0) { G.autoT = 0.3; autoAbilities() }
   if (G.raid?.result) return
   if (!anyAlive) {
-    if (G.failStage === G.stage) G.fail++; else { G.failStage = G.stage; G.fail = 1 }
-    startStage(); G.banner = { text: 'REGROUP!', sub: 'Pack Resolve +' + Math.round(resolve() * 100) + '% power and health', t: 2.2 }; return
+    if (G.auto.on) { regroupFree(); return } // auto players keep the instant regroup
+    if (!G.wipe) G.wipe = { stage: G.stage, fails: (G.failStage === G.stage ? G.fail : 0) + 1 } // pause: the player chooses (wipeOverlay)
+    return
   }
   if (!G.raid && G.spawned >= G.toSpawn && G.enemies.length === 0) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages'); addPassXp(isBoss(cleared) ? PASS_XP_GAIN.boss : PASS_XP_GAIN.stage); if (isBoss(cleared)) track('bosses')
     if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0); G.coins += Math.round((4 + Math.floor(cleared / 5)) * (1 + cp('coins'))); clanContribute(12) } else clanContribute(3)
-    G.stage++; G.best = Math.max(G.best, G.stage); startStage()
+    G.stage++; G.best = Math.max(G.best, G.stage); G.reinforce = false; startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()
   }
@@ -729,7 +752,7 @@ export function doRebirth() {
   const gain = rebirthGain(G.stage); if (!gain) return 0
   G.stardust += gain; G.rebirths++
   G.stats = newStats()
-  Object.assign(G, { gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0, tankCd: 0, panicCd: 0 })
+  Object.assign(G, { wipe: null, reinforce: false, gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0, stash: 0, blessings: {}, pick: null, hold: null, nadeCd: 0, frenzyCd: 0, shieldCd: 0, tankCd: 0, panicCd: 0 })
   G.bench[0] = 0; G.bench[1] = 0
   startStage(); G.events.push({ type: 'rebirth', gain }); save(); return gain
 }

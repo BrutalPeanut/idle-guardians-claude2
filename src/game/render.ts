@@ -3,7 +3,7 @@ import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unloc
 import type { Guardian } from './data'
 import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
-import { baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
+import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -1038,6 +1038,31 @@ export function drawRebirth(ctx: Ctx, t: number) {
   }
   if (gain) { button(ctx, 'rb_go', cx + 24, cy + 240, cw - 48, 40, { top: '#b58cf0', bot: '#6a3fb8', label: 'REBIRTH', size: 15 }); button(ctx, 'rb_close', cx + 24, cy + 288, cw - 48, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Not yet', size: 13 }) }
   else button(ctx, 'rb_close', cx + 24, cy + 270, cw - 48, 44, { top: '#5b6c75', bot: '#3a4850', label: 'Close', size: 14 })
+}
+
+/** Pack down: the game is paused on a wipe. Regroup free, revive once per stage (ad), reinforce after a wall (ad or gems). */
+export function drawWipe(ctx: Ctx, t: number) {
+  if (!G.wipe) return
+  R.btns = {}
+  const wp = G.wipe, cy = 0
+  ctx.fillStyle = 'rgba(4,8,10,.9)'; ctx.fillRect(0, 0, W, H)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ff7a6a'; ctx.font = '400 30px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('PACK DOWN', W / 2, 130)
+  ctx.fillStyle = '#c9d8d0'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Stage ' + wp.stage + '  ·  wipe ' + wp.fails, W / 2, 166)
+  const canRevive = G.reviveStage !== G.stage, wall = wp.fails >= WALL_WIPES, adsOk = adsLeft() > 0 || G.noAds
+  const row = (y: number, key: string, label: string, sub: string, top: string, bot: string, disabled: boolean) => {
+    button(ctx, key, 30, y, W - 60, 56, { top: disabled ? '#5a666d' : top, bot: disabled ? '#39434a' : bot, label, size: 15, disabled })
+    ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#aebfb6'; ctx.fillText(sub, W / 2, y + 70)
+  }
+  row(204, 'wipe_regroup', 'Regroup', 'Restart this stage. Free.', '#6fa3c4', '#3a6a8a', false)
+  row(300, 'wipe_revive', canRevive ? 'Revive (ad)' : 'Revived already', canRevive ? 'Pick up where you fell, full health. Once per stage.' : 'Only one revive per stage.', '#b58cf0', '#6a3fb8', !canRevive || !adsOk)
+  if (wall) {
+    row(396, 'wipe_reinf_ad', 'Reinforce (ad)', 'Next attempt: +25% power and health.', '#ffcf4a', '#e8841a', !adsOk)
+    row(492, 'wipe_reinf_gems', 'Reinforce  ' + REINFORCE_GEMS + ' gems', 'Same boost, paid in gems. You have ' + G.gems + '.', '#5ab8ff', '#2b6fd0', G.gems < REINFORCE_GEMS)
+  } else {
+    ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Reinforce unlocks after ' + WALL_WIPES + ' wipes on the same stage.', W / 2, 410)
+  }
+  ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#5f7079'; ctx.fillText('Ads are optional and only run when you tap them.', W / 2, 600); void cy; void t
 }
 
 /** Daily quests: three objectives, claim for gems + gold. */
