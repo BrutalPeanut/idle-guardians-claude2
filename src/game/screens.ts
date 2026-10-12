@@ -1,8 +1,9 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
 import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt } from './clan'
-import { unlocked, unlockStage, doSpin, spinsLeft, claimPassTier, claimAch, passLevel, passReady, achReady, statValue, ensurePass } from './sim'
-import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, SPIN_SEGS, seasonDaysLeft, passReward } from './meta'
+import { premiumOn, unlocked, unlockStage, doSpin, spinsLeft, claimPassTier, claimAch, passLevel, passReady, achReady, statValue, ensurePass } from './sim'
+import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, SPIN_SEGS, seasonDaysLeft, passReward, passPremiumReward } from './meta'
+import { buyPassPlus } from './iap'
 import type { Reward } from './meta'
 import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGift, clanClaimable, milestoneReady, cp } from './sim'
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
@@ -267,6 +268,7 @@ export function screenButton(k: string): boolean {
   if (k === 'spin_go') { if (!R.spinAnim && spinsLeft().free) startSpin(false); return true }
   if (k === 'spin_ok') { R.spinAnim = null; return true }
   if (k.startsWith('pt_')) { if (claimPassTier(+k.slice(3))) { G.banner = { text: 'Season reward', sub: rewardText(passReward(+k.slice(3))), t: 1.4 }; Audio_.coins() } return true }
+  if (k === 'pass_buy') { void buyPassPlus(); return true }
   if (k === 'pass_all') { let n = 0; for (let x = 1; x <= PASS_TIERS; x++) if (claimPassTier(x)) n++; if (n) { G.banner = { text: n + ' rewards claimed', t: 1.4 }; Audio_.coins() } return true }
   if (k.startsWith('ac_')) { const a = ACHIEVEMENTS.find(x => x.id === k.slice(3)); if (a && claimAch(a.id)) { G.banner = { text: 'Achievement!', sub: a.text + '  +' + a.gems + ' gems', t: 1.6 }; Audio_.fanfare() } return true }
   if (k.startsWith('tr_')) { if (buyTrain(k.slice(3))) Audio_.merge(1); else G.banner = { text: 'Not enough gold', t: 0.9 }; return true }
@@ -562,8 +564,13 @@ export function drawPass(ctx: Ctx) {
     if (rw.chest !== undefined) chestIcon(ctx, 0, 0, 0.5, rw.chest); else if (rw.gems) icons.gem(ctx, 0, 0, '#6fd6ff'); else icons.coin(ctx, 0, 0, '#ffd84a')
     ctx.restore()
     ctx.font = '400 9px ' + FONT; ctx.fillStyle = got ? '#7f929a' : '#fff'; ctx.fillText(got ? 'DONE' : rw.gems ? '+' + rw.gems : rw.coins ? '+' + rw.coins : 'Chest', x + cw / 2, y + 52)
+    const pg = passPremiumReward(tr).gems, prem = premiumOn(), pDone = !!((G.pass.pc ?? 0) & (1 << tr))
+    ctx.font = '400 8px ' + FONT; ctx.textAlign = 'right'; ctx.fillStyle = pDone ? '#7f929a' : prem ? '#ffd84a' : '#8a7a40'; ctx.fillText(prem ? (pDone ? 'P done' : 'P +' + pg) : 'P', x + cw - 4, y + 9); ctx.textAlign = 'center'
   }
-  button(ctx, 'pass_all', W / 2 - 80, 540, 160, 34, { top: passReady() ? '#ffb347' : '#4a565d', bot: passReady() ? '#e0731a' : '#2f3a40', label: passReady() ? 'Claim all (' + passReady() + ')' : 'Nothing to claim', size: 13, disabled: !passReady() })
+  button(ctx, 'pass_all', 16, 540, 160, 34, { top: passReady() ? '#ffb347' : '#4a565d', bot: passReady() ? '#e0731a' : '#2f3a40', label: passReady() ? 'Claim all (' + passReady() + ')' : 'Nothing to claim', size: 12, disabled: !passReady() })
+  const pOn = premiumOn(), pBusy = IAP.status === 'busy', pAvail = !!IAP.passPlus && !pOn
+  button(ctx, 'pass_buy', W - 176, 540, 160, 34, { top: pOn ? '#3f5a46' : pAvail ? '#b58cf0' : '#4a565d', bot: pOn ? '#26382b' : pAvail ? '#6a3fb8' : '#2f3a40', label: pOn ? 'Premium active' : pBusy ? 'Please wait...' : pAvail ? 'Premium ' + (IAP.passPlus?.product?.priceString ?? '') : 'Premium: in the app', size: 12, disabled: !pAvail || pBusy })
+  ctx.textAlign = 'center'; ctx.font = '400 9px ' + FONT; ctx.fillStyle = '#9fb5aa'; ctx.fillText(IAP.msg || 'Premium adds gems to every tier, for this season only.', W / 2, 530)
 }
 export function drawAch(ctx: Ctx) {
   panel(ctx, 'Achievements')
