@@ -141,8 +141,9 @@ export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max
 // ---- shop ----
 /** Starter bundle: one-time offer shown when a player first reaches this stage. */
 export const STARTER_STAGE = 11, STARTER_GEMS = 350, STARTER_BOOST_S = 600
-export const SHOP = { chestAds: 3, gemAds: 3, gemAdAmt: 5, cost: { chest1: 25, chest2: 70, boost: 30, raid: 20 } as Record<string, number> }
-export const GEM_PACKS = [{ key: 'gems_s', gems: 60, name: 'Handful', tag: '' }, { key: 'gems_m', gems: 350, name: 'Pouch', tag: 'POPULAR' }, { key: 'gems_l', gems: 900, name: 'Treasure', tag: 'BEST VALUE' }]
+export const SHOP = { chestAds: 3, gemAds: 3, gemAdAmt: 5, cost: { chest1: 70, chest2: 160, boost: 30, raid: 20 } as Record<string, number> }
+/** Gem packs. Amounts set so a silver chest costs about one small pack; prices live in the store (tune both together). */
+export const GEM_PACKS = [{ key: 'gems_s', gems: 80, name: 'Handful', tag: '' }, { key: 'gems_m', gems: 400, name: 'Pouch', tag: 'POPULAR' }, { key: 'gems_l', gems: 1000, name: 'Treasure', tag: 'BEST VALUE' }]
 function rollShop() { const d = dayKey(); if (G.shop.day !== d) G.shop = { day: d, chest: 0, gems: 0 } }
 export const shopLeft = (kind: 'chest' | 'gems') => { rollShop(); return Math.max(0, (kind === 'chest' ? SHOP.chestAds : SHOP.gemAds) - G.shop[kind]) }
 export function shopClaim(kind: 'chest' | 'gems') { rollShop(); if (shopLeft(kind) <= 0) return false; G.shop[kind]++; if (kind === 'chest') addChest(0); else G.gems += SHOP.gemAdAmt; save(); return true }

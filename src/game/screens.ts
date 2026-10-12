@@ -736,7 +736,10 @@ function drawShop(ctx: Ctx) {
     r(192, 'collar', '#ffd84a', 'Golden Chest', 'The best gear odds', 'shop_buy_chest2', SHOP.cost.chest2, true)
     r(264, 'bolt', '#d9c4ff', 'Pack Boost', '+10 min of boost', 'shop_buy_boost', SHOP.cost.boost, G.boostT < BOOST.cap)
     r(336, 'sword', '#ff9a8a', 'Raid Attempt', '+1 Boss Raid try', 'shop_buy_raid', SHOP.cost.raid, true)
-    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Earn gems from quests, spins and achievements.', W / 2, 420)
+    ctx.textAlign = 'center'; ctx.font = '400 10px ' + FONT; ctx.fillStyle = '#9fb5aa'
+    ctx.fillText('Chest odds: Common / Rare / Epic / Legendary %', W / 2, 408)
+    ctx.fillStyle = '#c9d8d0'; ctx.fillText('Silver 35 / 40 / 20 / 5   ·   Golden 10 / 35 / 40 / 15', W / 2, 422)
+    ctx.fillStyle = '#7f929a'; ctx.fillText('Hunter skill nudges these toward rarer items.', W / 2, 436)
   }
   button(ctx, 'nav_noads', 16, 478, W - 32, 52, G.noAds ? { top: '#3f5a46', bot: '#26382b', label: 'Ads removed. Thank you!', size: 13 } : { top: '#ffcf4a', bot: '#e8841a', label: 'Remove ads for good', size: 15, sub: IAP.price || undefined })
 }
