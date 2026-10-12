@@ -132,6 +132,8 @@ export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.fac
 export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper') + 0.15 * pk('lucky'))
 /** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
 export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
+/** Prestige perk: once you have rebirthed, the game always runs at 2x; the manual 2x button multiplies on top (4x). */
+export const baseSpeed = () => (G.rebirths > 0 ? 2 : 1)
 export const starMul = () => 1 + STAR_BONUS * G.stardust
 export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
 // ---- daily quests ----
@@ -505,7 +507,7 @@ export function useAbility(kind: 'frenzy' | 'shield' | 'tank' | 'panic'): 'ok' |
 export function update(dtReal: number) {
   if (Math.floor(G.t) % 20 === 0) ensureDaily() // cheap midnight rollover check
   if (G.raid?.result) closeRaid()
-  const dt = dtReal * G.speed; G.t += dt
+  const dt = dtReal * G.speed * baseSpeed(); G.t += dt
   { const dealt = G.stats.dealt.reduce((a, b) => a + b, 0), d = dealt - G.dpsLast; G.dpsLast = dealt   // gun DPS, smoothed over ~6s of combat
     if (d < 0) G.dpsEma *= 0.5; else if (G.enemies.length > 0 && dt > 0) G.dpsEma += (d / dt - G.dpsEma) * Math.min(1, dt / 6) }
   G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)

@@ -1,7 +1,7 @@
 import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
-import { BOOST, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
+import { BOOST, baseSpeed, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
 import { PRIVACY_URL } from './config'
@@ -122,7 +122,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
     try {
-      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick) update(1 / 60); acc -= 1 / 60 }
+      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick) { const k = Math.max(1, Math.round(G.speed * baseSpeed() / 2)); for (let j = 0; j < k; j++) update(1 / 60 / k) } acc -= 1 / 60 }
       drainEvents(); updateFx(dt)
     } catch (e) { acc = 0; if (errs++ < 5) console.error('sim error', e) }
     try {
