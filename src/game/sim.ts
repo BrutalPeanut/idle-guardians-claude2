@@ -66,6 +66,8 @@ interface State {
   stats: Stats
   /** Gear: every item owned (on = wearer's roster index, -1 = inventory) and unopened chests per tier. */
   gear: Item[]; chests: number[]; nextItem: number
+  /** Smoothed gun damage per second (ignores grenades). The grenade is sized from this so it stays an assist at every stage. */
+  dpsEma: number; dpsLast: number
   /** Login streak: date of the last claim and the current streak length. */
   login: { last: string; streak: number }
   /** Skill ranks (id -> rank) and the best stage ever reached (feeds Paw Points). */
@@ -107,7 +109,7 @@ const reviveTime = () => Math.max(5, REVIVE_T - sk('recov'))
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
   fail: 0, failStage: 0, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
@@ -413,12 +415,16 @@ export function toggleHold(): 'on' | 'off' | 'locked' {
 
 /** Active ability: lob a grenade at the densest clump of enemies (nearest to the pack wins ties). Arcs over cover. */
 export const NADE = { cd: 12, r: 64, dur: 0.75 }
-/** Grenade hit as a multiple of a same-stage enemy's HP, and the global gun damage multiplier. Tuned so guns do ~70% of damage and the grenade is a strong assist, not the main weapon. */
-export const NADE_DMG = 0.5
+/** Gun damage multiplier (x2.33 vs before) and grenade sizing. Tuned so guns do roughly 65-85% of damage at every stage and the grenade is a strong assist. */
+export const NADE_DMG = 0.03 // only used before any gun damage has been measured (first seconds of a session): fraction of one enemy's HP
+/** Grenade damage per enemy caught = this many seconds of the pack's recent gun DPS. Anchoring it to gun output (not enemy HP) keeps the grenade at roughly a quarter to a third of damage at any stage. */
+export const NADE_SECONDS = 0.7
+/** A grenade deals at most this many enemies' worth of damage per throw, however many it catches, so it can't dominate against huge hordes. */
+export const NADE_TARGETS = 5
 /** Pack Boost: a player-chosen rewarded-ad buff. 10 minutes of +50% gold and +25% gun damage; watching again adds time up to a 30 minute cap. */
 export const BOOST = { dur: 600, cap: 1800, gold: 0.5, dmg: 0.25 }
 export const startBoost = () => { G.boostT = Math.min(BOOST.cap, G.boostT + BOOST.dur); save() }
-export const GUN_MUL = 3
+export const GUN_MUL = 7
 /** Size of the biggest bunch of enemies a grenade would catch. */
 export function bestClump() {
   const live = G.enemies.filter(e => e.hp > 0); let bc = 0
@@ -437,7 +443,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: hpScale(G.stage) * NADE_DMG * starMul() * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
   G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
@@ -460,6 +466,8 @@ export function update(dtReal: number) {
   if (Math.floor(G.t) % 20 === 0) ensureDaily() // cheap midnight rollover check
   if (G.raid?.result) closeRaid()
   const dt = dtReal * G.speed; G.t += dt
+  { const dealt = G.stats.dealt.reduce((a, b) => a + b, 0), d = dealt - G.dpsLast; G.dpsLast = dealt   // gun DPS, smoothed over ~6s of combat
+    if (d < 0) G.dpsEma *= 0.5; else if (G.enemies.length > 0 && dt > 0) G.dpsEma += (d / dt - G.dpsEma) * Math.min(1, dt / 6) }
   G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)
   const p = G.pack, n = unlockedGuardians(G.stage), rules = rulesFor(G.stage)
 
@@ -609,7 +617,8 @@ export function update(dtReal: number) {
     g.t += dt
     if (g.t < g.dur) continue
     G.events.push({ type: 'boom', x: g.tx, y: g.ty, r: g.r }); let total = 0
-    for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = o.kind === 'boss' ? g.dmg * 0.6 : g.dmg; total += d; G.stats.nade += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
+    const caught = G.enemies.filter(o => o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5).length, spread = Math.min(1, NADE_TARGETS / Math.max(1, caught)) // big bunches share the blast: damage is capped at NADE_TARGETS worth
+    for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = (o.kind === 'boss' ? g.dmg * 0.6 : g.dmg) * spread; total += d; G.stats.nade += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
     for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && Math.hypot(c.x - g.tx, c.y - g.ty) < g.r + c.w / 2) hitCover(c, g.dmg * 0.5, c.x, c.y)
     G.events.push({ type: 'dmg', x: g.tx, y: g.ty - 14, v: total, crit: false, kill: false, blast: true })
   }
