@@ -133,7 +133,7 @@ export function drawScreen(ctx: Ctx, t: number) {
 // ================= Gear =================
 import { SLOTS, RARITY, CHEST_NAMES, CHEST_COLS, INV_MAX, itemName, fmtStat, fmtShort, fmtSubs } from './gear'
 import type { Item } from './gear'
-import { openChest, equipItem, unequipItem, sellItem, sellValue, invCount } from './sim'
+import { autoEquip, openChest, equipItem, unequipItem, sellItem, sellValue, invCount } from './sim'
 import { Audio_ } from './audio'
 
 const itemOf = (id: number) => G.gear.find(x => x.id === id)
@@ -180,7 +180,7 @@ export function drawGear(ctx: Ctx, t: number) {
     if (cur && sel.on < 0) { const d = (sel.val - cur.val) * 100; ctx.font = '400 10px ' + F; ctx.fillStyle = cur.stat === sel.stat ? (d >= 0 ? '#5be07f' : '#ff8a7a') : '#9fb5aa'; ctx.fillText(cur.stat === sel.stat ? (d >= 0 ? '+' : '') + d.toFixed(Math.abs(d) < 1 ? 2 : 1) + '% vs worn' : 'different from worn', 28, py + 78) }
     if (sel.on < 0) button(ctx, 'rv_equipsel', 150, py + 48, 94, 34, { top: '#52d273', bot: '#25994a', label: 'Equip', size: 13 })
     button(ctx, 'sellsel', sel.on < 0 ? 250 : 150, py + 48, sel.on < 0 ? 94 : 194, 34, { top: '#e0b24a', bot: '#9a6a18', label: 'Sell ' + fmt(sellValue(sel)), size: 12 })
-  } else { ctx.textAlign = 'center'; ctx.fillStyle = '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Open chests for gear. Equip it on ' + GUARDIANS[dog].n + '.', W / 2, py + 44) }
+  } else { ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Tap an item to compare, or let the pack pick:', W / 2, py + 22); button(ctx, 'gear_auto', 70, py + 36, 220, 40, { top: '#52d273', bot: '#25994a', label: 'AUTO-EQUIP BEST', size: 14 }) }
   if (R.reveal) drawReveal(ctx, t)
 }
 
@@ -252,6 +252,7 @@ export function screenButton(k: string): boolean {
   if (k === 'rv_tap') { if (R.reveal) { R.reveal.phase = 1; R.reveal.t = 0; const it = itemOf(R.reveal.id); if (it && it.rar >= 2) Audio_.fanfare(); else Audio_.coins() } return true }
   if (k === 'rv_equip') { if (R.reveal) { equipItem(R.reveal.id, dogId(R.gearDog)); R.sel = -1 } R.reveal = null; return true }
   if (k === 'rv_keep') { R.reveal = null; return true }
+  if (k === 'gear_auto') { const m = autoEquip(); G.banner = { text: m ? 'GEAR UPDATED' : 'Already the best set', t: 1.3 }; R.sel = -1; return true }
   if (k.startsWith('gt_')) { R.gearDog = +k.slice(3); return true }
   if (k.startsWith('slot_')) { const sl = SLOTS[+k.slice(5)], it = G.gear.find(g => g.on === dogId(R.gearDog) && g.slot === sl); if (it && !unequipItem(it.id)) G.banner = { text: 'Inventory full', t: 1 }; return true }
   if (k.startsWith('inv_')) { const it = G.gear.filter(g => g.on < 0)[+k.slice(4)]; R.sel = it ? it.id : -1; return true }

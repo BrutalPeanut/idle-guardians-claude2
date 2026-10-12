@@ -3,7 +3,7 @@ import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
 import { weekMod } from './weekly'
 import { pointsEarned, RESPEC_GEMS, SKILLS } from './skills'
-import { rollItem, INV_MAX, CAPS, statVal } from './gear'
+import { rollItem, INV_MAX, CAPS, statVal, itemScore, SLOTS } from './gear'
 import type { Item, Stat } from './gear'
 import { dayKey, rollDaily, questDef } from './quests'
 import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, PASS_XP_GAIN, SPIN_SEGS, ACH_XP, seasonIndex, passReward, UNLOCK_STAGE } from './meta'
@@ -206,6 +206,16 @@ export function equipItem(id: number, dog: number) {
   const it = G.gear.find(x => x.id === id); if (!it) return false
   for (const o of G.gear) if (o.on === dog && o.slot === it.slot) o.on = -1
   it.on = dog; save(); return true
+}
+/** Gives each slot's best items to the dogs in roster order (strike team first). Returns how many items changed hands. */
+export function autoEquip(): number {
+  const nd = unlockedGuardians(G.stage), dogs = Array.from({ length: nd }, (_, i) => dogId(i)), before = G.gear.map(it => it.on); let moved = 0
+  for (const sl of SLOTS) {
+    const pool = G.gear.filter(it => it.slot === sl && (it.on < 0 || dogs.includes(it.on))).sort((a, b) => itemScore(b) - itemScore(a))
+    pool.forEach((it, k) => { it.on = k < dogs.length ? dogs[k] : -1 })
+  }
+  G.gear.forEach((it, k) => { if (it.on !== before[k]) moved++ })
+  if (moved) save(); return moved
 }
 export function unequipItem(id: number) { const it = G.gear.find(x => x.id === id); if (!it || invCount() >= INV_MAX) return false; it.on = -1; save(); return true }
 export function sellItem(id: number) { const k = G.gear.findIndex(x => x.id === id); if (k < 0) return 0; const g = sellValue(G.gear[k]); G.gold += g; G.gear.splice(k, 1); save(); return g }
