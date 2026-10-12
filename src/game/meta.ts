@@ -39,6 +39,8 @@ export function passReward(t: number): Reward { // t = 1..30
   if (t % 5 === 0) return { chest: 0, coins: 5 }
   return t % 2 ? { coins: 3 + Math.floor(t / 4) } : { gems: 3 + Math.floor(t / 6) }
 }
+/** Premium season pass track (paid, gems only: never gear, so it can't change balance). */
+export function passPremiumReward(t: number): { gems: number } { return { gems: t === 30 ? 60 : 4 + Math.floor(t / 3) } }
 export const PASS_XP_GAIN = { stage: 4, boss: 20, raid: 25, quest: 30, ach: ACH_XP, login: 20, spin: 10 }
 
 // ---- lucky spin ----

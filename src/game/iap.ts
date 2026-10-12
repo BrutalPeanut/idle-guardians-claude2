@@ -4,7 +4,7 @@
  * build can unlock this for free. On the phone, the entitlement is re-checked with RevenueCat at start-up, so a hand-edited save
  * cannot keep ads off.
  */
-import { G, save, GEM_PACKS, STARTER_GEMS, STARTER_BOOST_S, BOOST } from './sim'
+import { G, save, GEM_PACKS, STARTER_GEMS, STARTER_BOOST_S, BOOST, buyPremiumPass } from './sim'
 import { RC_KEYS, RC_ENTITLEMENT } from './config'
 import { track } from './telemetry'
 
@@ -17,7 +17,7 @@ interface PurchasesApi {
   restorePurchases: () => Promise<{ customerInfo?: CustomerInfo }>
   getCustomerInfo: () => Promise<{ customerInfo?: CustomerInfo }>
 }
-export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg>, starter: null as Pkg | null }
+export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg>, starter: null as Pkg | null, passPlus: null as Pkg | null }
 const pkgFor = (pk: Pkg[], key: string) => pk.find(p => p.identifier === key || p.product?.identifier === key || (p.product?.identifier ?? '').endsWith(key) || p.identifier.endsWith(key))
 let api: PurchasesApi | null = null
 
@@ -41,7 +41,7 @@ export async function initPurchases() {
     apply((await api.getCustomerInfo()).customerInfo)
     const off = await api.getOfferings(), pk = off.current?.availablePackages ?? []
     IAP.pkg = pkgFor(pk, 'noads') ?? (pk.length === 1 ? pk[0] : null); for (const g of GEM_PACKS) { const f = pkgFor(pk, g.key); if (f) IAP.gems[g.key] = f }
-    IAP.starter = pkgFor(pk, 'starter') ?? null; IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
+    IAP.starter = pkgFor(pk, 'starter') ?? null; IAP.passPlus = pkgFor(pk, 'pass_plus') ?? null; IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
   } catch { IAP.status = 'unavailable' }
 }
 export async function buyNoAds() {
@@ -60,6 +60,15 @@ export async function restoreBuys() {
 }
 
 /** Gem packs are consumables: gems are granted on the device the moment the store confirms the purchase. */
+/** Premium season pass track: a per-season purchase, gems only. */
+export async function buyPassPlus() {
+  const pkg = IAP.passPlus
+  if (!api || !pkg || IAP.status === 'busy') return
+  IAP.status = 'busy'; IAP.msg = ''; track('pass_plus_tap')
+  try { await api.purchasePackage({ aPackage: pkg }); buyPremiumPass(); track('pass_plus_bought'); IAP.msg = 'Premium pass active for this season.' }
+  catch { IAP.msg = 'Purchase cancelled.' }
+  IAP.status = 'ready'
+}
 /** The starter offer shows only where it can be bought (the phone app), and only once. */
 export const starterShowing = () => G.starterDue && !G.starterSeen && !G.noAds && IAP.starter !== null
 export function skipStarter() { G.starterSeen = true; G.starterDue = false; save() }
