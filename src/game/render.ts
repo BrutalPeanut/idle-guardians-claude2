@@ -759,9 +759,8 @@ export function render(ctx: Ctx, t: number) {
   if (R.drag) { const d = R.drag; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6; drawCard(ctx, d.x - BENCH.w / 2, d.y - BENCH.h / 2 - 10, BENCH.w, BENCH.h, G.bench[d.from] ?? 0, 1.12, undefined); ctx.restore() }
   // action bar
   const cost = buyCost(), can = G.gold >= cost && G.bench.includes(null)
-  button(ctx, 'buy', 10, ACTION_BAR.y, 142, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
-  button(ctx, 'merge', 158, ACTION_BAR.y, 96, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
-  button(ctx, 'hold', 260, ACTION_BAR.y, 90, ACTION_BAR.h, { top: G.hold ? '#ffb347' : '#b58cf0', bot: G.hold ? '#e0731a' : '#7a4ec0', disabled: unlockedGuardians(G.stage) <= 2, label: G.hold ? 'RECALL' : 'HOLD', size: 13 })
+  button(ctx, 'buy', 10, ACTION_BAR.y, 180, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
+  button(ctx, 'merge', 198, ACTION_BAR.y, 152, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
   { // active ability row under the arena: shield, frenzy, grenade. Each shows its cooldown sweep, or a drain bar while active.
     const ns = 40, ny = ARENA.y1 - 44
     const abil = (key: string, x: number, icon: string, top: string, bot: string, cd: number, cdMax: number, act: number, actMax: number) => {
@@ -772,6 +771,10 @@ export function render(ctx: Ctx, t: number) {
       else if (cd > 0) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.moveTo(x + ns / 2, ny + ns / 2); ctx.arc(x + ns / 2, ny + ns / 2, ns / 2 - 2, -Math.PI / 2, -Math.PI / 2 + 6.283 * (cd / cdMax)); ctx.closePath(); ctx.fill(); ctx.restore()
         ctx.textAlign = 'center'; ctx.font = '400 16px ' + FONT; outText(ctx, Math.ceil(cd) + '', x + ns / 2, ny + ns / 2 + 1, '#fff', 3.5) }
     }
+    { const hs = 48, hx = 12, hy = ARENA.y1 - 48, lock = unlockedGuardians(G.stage) <= 2, held = !!G.hold
+      if (held) { const k = 0.5 + 0.5 * Math.sin(t * 6); ctx.strokeStyle = 'rgba(255,179,71,' + (0.4 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hx + hs / 2, hy + hs / 2, hs / 2 + 3 + k * 2, 0, 6.283); ctx.stroke() }
+      button(ctx, 'hold', hx, hy, hs, hs, { top: lock ? '#5a666d' : held ? '#ffb347' : '#b58cf0', bot: lock ? '#39434a' : held ? '#e0731a' : '#7a4ec0', disabled: lock, label: held ? 'RECALL' : 'HOLD', size: held ? 10 : 12, round: true })
+      ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lock ? 'STAGE 5' : held ? 'PLANTED' : 'FOLLOW', hx + hs / 2, ARENA.y1 - 8) }
     button(ctx, 'auto', 70, ARENA.y1 - 44, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
     ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ARENA.y1 - 8)
     abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
