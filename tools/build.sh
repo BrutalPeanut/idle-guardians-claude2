@@ -27,6 +27,8 @@ os.makedirs('/home/claude/idle-guardians-claude2/docs/play',exist_ok=True)
 open('/home/claude/idle-guardians-claude2/docs/play/index.html','w').write(ext)
 open('/home/claude/idle-guardians-claude2/docs/play/game.js','w').write(js)
 open('/home/claude/idle-guardians.html','w').write(h)
+os.makedirs('/home/claude/idle-guardians-claude2/capdist',exist_ok=True)
+open('/home/claude/idle-guardians-claude2/capdist/index.html','w').write(h)  # self-contained page for the Capacitor phone app
 css=re.findall(r'<style>(.*?)</style>',h,re.S)[0]; b=re.search(r'<body[^>]*>(.*)</body>',h,re.S).group(1)
 open('/tmp/claude-0/-home-claude/bb4a0b91-ab13-54ff-a753-3965443f1142/scratchpad/idle-guardians-artifact.html','w').write('<title>Woof Wars</title>\n<style>'+css+'</style>\n'+b)
 PY

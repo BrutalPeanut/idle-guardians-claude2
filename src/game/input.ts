@@ -4,6 +4,7 @@ import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
 import { BOOST, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
+import { PRIVACY_URL } from './config'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests, drawAd } from './render'
 import { Audio_ } from './audio'
@@ -71,7 +72,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'scr_x') R.screen = null
     else if (k === 'scr_close') R.screen = R.screen === 'hub' ? null : 'hub'
     else if (k.startsWith('hub_tab')) R.hubTab = +k.slice(7)
-    else if (k.startsWith('nav_')) { const id = k.slice(4); if (!unlocked(id)) G.banner = { text: 'Unlocks at stage ' + unlockStage(id), sub: 'Keep climbing!', t: 1.4 }; else if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
+    else if (k.startsWith('nav_')) { const id = k.slice(4); if (!unlocked(id)) G.banner = { text: 'Unlocks at stage ' + unlockStage(id), sub: 'Keep climbing!', t: 1.4 }; else if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'privacy') { try { window.open(PRIVACY_URL, '_blank', 'noopener') } catch { /* blocked */ } } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
     else if (k === 'q_close') R.quests = false
     else if (k.startsWith('qc')) { if (claimQuest(+k.slice(2))) Audio_.coins() }
     else if (k === 'reroll') { if (!rerollBlessings()) G.banner = { text: 'Need ' + REROLL_COST + ' gems', sub: 'Earn gems from daily quests', t: 1.4 } }
