@@ -7,6 +7,7 @@
 import { G, save, GEM_PACKS, STARTER_GEMS, STARTER_BOOST_S, BOOST, buyPremiumPass } from './sim'
 import { RC_KEYS, RC_ENTITLEMENT } from './config'
 import { track } from './telemetry'
+import { COLLARS } from './cosmetics'
 
 interface CustomerInfo { entitlements?: { active?: Record<string, unknown> } }
 interface Pkg { identifier: string; product?: { identifier?: string; priceString?: string } }
@@ -17,7 +18,7 @@ interface PurchasesApi {
   restorePurchases: () => Promise<{ customerInfo?: CustomerInfo }>
   getCustomerInfo: () => Promise<{ customerInfo?: CustomerInfo }>
 }
-export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg>, starter: null as Pkg | null, passPlus: null as Pkg | null }
+export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg>, starter: null as Pkg | null, passPlus: null as Pkg | null, collars: {} as Record<string, Pkg> }
 const pkgFor = (pk: Pkg[], key: string) => pk.find(p => p.identifier === key || p.product?.identifier === key || (p.product?.identifier ?? '').endsWith(key) || p.identifier.endsWith(key))
 let api: PurchasesApi | null = null
 
@@ -41,7 +42,7 @@ export async function initPurchases() {
     apply((await api.getCustomerInfo()).customerInfo)
     const off = await api.getOfferings(), pk = off.current?.availablePackages ?? []
     IAP.pkg = pkgFor(pk, 'noads') ?? (pk.length === 1 ? pk[0] : null); for (const g of GEM_PACKS) { const f = pkgFor(pk, g.key); if (f) IAP.gems[g.key] = f }
-    IAP.starter = pkgFor(pk, 'starter') ?? null; IAP.passPlus = pkgFor(pk, 'pass_plus') ?? null; IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
+    IAP.starter = pkgFor(pk, 'starter') ?? null; IAP.passPlus = pkgFor(pk, 'pass_plus') ?? null; for (const c of COLLARS) if (!c.free) { const f = pkgFor(pk, 'cos_' + c.id); if (f) IAP.collars[c.id] = f } IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
   } catch { IAP.status = 'unavailable' }
 }
 export async function buyNoAds() {
@@ -69,6 +70,16 @@ export async function buyPassPlus() {
   catch { IAP.msg = 'Purchase cancelled.' }
   IAP.status = 'ready'
 }
+/** Collar colourway: a one-time store product (cos_<id>). Cosmetic only. */
+export async function buyCollar(id: string) {
+  const pkg = IAP.collars[id]
+  if (!api || !pkg || IAP.status === 'busy') return
+  IAP.status = 'busy'; IAP.msg = ''; track('collar_buy_tap', { k: id })
+  try { await api.purchasePackage({ aPackage: pkg }); if (!G.collarOwned.includes(id)) G.collarOwned.push(id); G.collar = id; save(); track('collar_bought', { k: id }); IAP.msg = 'Looks unlocked.' }
+  catch { IAP.msg = 'Purchase cancelled.' }
+  IAP.status = 'ready'
+}
+export function wearCollar(id: string) { if (G.collarOwned.includes(id)) { G.collar = id; save() } }
 /** The starter offer shows only where it can be bought (the phone app), and only once. */
 export const starterShowing = () => G.starterDue && !G.starterSeen && !G.noAds && IAP.starter !== null
 export function skipStarter() { G.starterSeen = true; G.starterDue = false; save() }

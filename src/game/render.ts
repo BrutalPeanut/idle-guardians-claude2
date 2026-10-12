@@ -4,6 +4,7 @@ import type { Guardian } from './data'
 import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
 import { IAP } from './iap'
+import { collarOf } from './cosmetics'
 import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
@@ -153,6 +154,7 @@ function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing:
   if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill() }
 }
 function collar(ctx: Ctx, x: number, y: number, col: string, tag: boolean) {
+  if (G.collar !== 'red') col = collarOf(G.collar).col // worn colourway (cosmetic, no stat effect); 'red' keeps each dog's own colour
   ctx.fillStyle = col; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 8, y + 3, 16, 3.5, 1.5); ctx.fill(); ctx.stroke()
   if (tag) { ctx.fillStyle = '#f0c24a'; ctx.beginPath(); ctx.arc(x, y + 8, 1.9, 0, 6.283); ctx.fill(); ctx.stroke() }
 }
