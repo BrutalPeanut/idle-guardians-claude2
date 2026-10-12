@@ -420,6 +420,8 @@ export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: 
 const dogPower = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.power : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.power : 1)
 export const cp = (k: string) => clanPerk(G.clan, k)
 const dogArmor = (i: number) => (pk('guard') ? 0.92 : 1) * (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
+/** Extra bite on every enemy hit against a guardian (melee, bullets, missiles, shells): damage lands on single dogs, so they have to be kept alive. */
+const hitMul = () => 1.5 + 1.5 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
 function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
@@ -640,7 +642,7 @@ export function update(dtReal: number) {
     for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < td) { td = d; tgt = c } }
     const slow = ehz === 'mud' ? 0.45 : ehz === 'shallows' ? 0.75 : 1
     if (td > 30) { e.x += (tgt.x - e.x) / td * e.spd * slow * dt; e.y += (tgt.y - e.y) / td * e.spd * slow * dt }
-    else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
+    else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura * hitMul()); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
     for (const c of G.cover) if (c.hp > 0) { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
     e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y))
   }
@@ -659,7 +661,7 @@ export function update(dtReal: number) {
       break
     }
     if (b.life <= 0) continue
-    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(b.x - gp.x, b.y - gp.y) < 12) { b.life = 0; hurt(i, b.dmg * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(b.dmg * aura) }); break } }
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(b.x - gp.x, b.y - gp.y) < 12) { b.life = 0; hurt(i, b.dmg * aura * hitMul()); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(b.dmg * aura) }); break } }
   }
   G.ebullets = G.ebullets.filter(b => b.life > 0)
 
@@ -684,7 +686,7 @@ export function update(dtReal: number) {
     for (const c of G.cover) if (!boom && c.side === 'player' && c.hp > 0 && segRect(px, py, m.x, m.y, c)) { boom = true; hitCover(c, m.dmg, m.x, m.y) }
     if (!boom) continue
     m.life = -1; G.events.push({ type: 'boom', x: m.x, y: m.y, r: m.r, col: '#ff6a3a' })
-    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - m.x, gp.y - m.y) < m.r) { hurt(i, m.dmg * 0.5 * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(m.dmg * 0.5 * aura) }) } }
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - m.x, gp.y - m.y) < m.r) { hurt(i, m.dmg * 0.5 * aura * hitMul()); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(m.dmg * 0.5 * aura) }) } }
   }
   G.missiles = G.missiles.filter(m => m.life > 0)
 
@@ -693,7 +695,7 @@ export function update(dtReal: number) {
     s.t += dt
     if (s.t < s.dur) continue
     G.events.push({ type: 'boom', x: s.tx, y: s.ty, r: s.r, col: s.col })
-    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - s.tx, gp.y - s.ty) < s.r) { hurt(i, s.dmg * 0.5 * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(s.dmg * 0.5 * aura) }) } }
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - s.tx, gp.y - s.ty) < s.r) { hurt(i, s.dmg * 0.5 * aura * hitMul()); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(s.dmg * 0.5 * aura) }) } }
     for (const c of G.cover) if (c.side === 'player' && c.hp > 0 && Math.hypot(c.x - s.tx, c.y - s.ty) < s.r + c.w / 2) hitCover(c, s.dmg * 0.4, c.x, c.y)
   }
   G.shells = G.shells.filter(s => s.t < s.dur)
