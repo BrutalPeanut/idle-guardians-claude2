@@ -292,7 +292,11 @@ export const shieldDur = () => ABIL.shield.dur + bl('aegis') + 0.4 * sk('aegisS'
 export const frenzyDur = () => ABIL.frenzy.dur + 1.5 * bl('fury')
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 // early stages are a bit beefier so the opening isn't over in two minutes; the bump fades out by the mid game
-export const hpScale = (s: number) => 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
+/** Overall toughness of the waves (hp / contact damage / headcount). Raised so a pack standing in the open no longer melts everything. */
+const diffRamp = (s: number) => Math.min(1, Math.max(0, (s - 1) / 11)) // gentle first stages, full toughness from stage 12
+export const DIFF = { hp: 4.5, dmg: 1.8, count: 1.4, spd: 1.3 }
+export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = (s: number) => 1.1 + (DIFF.count - 1.1) * diffRamp(s), dSpd = (s: number) => 1 + (DIFF.spd - 1) * diffRamp(s), dDmg = (s: number) => 1.2 + (DIFF.dmg - 1.2) * diffRamp(s)
+export const hpScale = (s: number) => dHp(s) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
@@ -327,7 +331,7 @@ export function startStage() {
     x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
-  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul)
+  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)))
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
@@ -344,8 +348,8 @@ function spawnEnemy() {
   for (let k = 0; k < n; k++) {
     G.enemies.push({
       x: runner ? Math.max(ARENA.x0 + 10, Math.min(ARENA.x1 - 10, x0 + rnd(-26, 26))) : rnd(ARENA.x0 + 20, ARENA.x1 - 20), y: ARENA.y0 - 10 - (runner ? k * 8 : 0), hp, max: hp,
-      spd: boss ? 16 : launcher ? 15 : runner ? rnd(64, 80) : rnd(22, 34) * (robot ? 0.8 : 1), r: boss ? 24 : launcher ? 14 : runner ? 8 : robot ? 13 : 11,
-      kind, flash: 0, wob: Math.random() * 6, dmg: (4 + s * 1.3) * (boss ? 3 : runner ? 0.8 : 1), cd: launcher ? rnd(2.2, 3.4) : 0,
+      spd: boss ? 16 : launcher ? 15 : runner ? rnd(64, 80) : rnd(22, 34) * dSpd(s) * (robot ? 0.8 : 1), r: boss ? 24 : launcher ? 14 : runner ? 8 : robot ? 13 : 11,
+      kind, flash: 0, wob: Math.random() * 6, dmg: dDmg(s) * (4 + s * 1.3) * (boss ? 3 : runner ? 0.8 : 1), cd: launcher ? rnd(2.2, 3.4) : 0,
       ...(boss ? { drake: drakeFor(s), ab: 3.5 } : {}),
     })
     G.spawned++
