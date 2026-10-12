@@ -3,7 +3,7 @@ import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
 import { weekMod } from './weekly'
 import { pointsEarned, RESPEC_GEMS, SKILLS } from './skills'
-import { rollItem, INV_MAX } from './gear'
+import { rollItem, INV_MAX, CAPS, statVal } from './gear'
 import type { Item, Stat } from './gear'
 import { dayKey, rollDaily, questDef } from './quests'
 import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, PASS_XP_GAIN, SPIN_SEGS, ACH_XP, seasonIndex, passReward, UNLOCK_STAGE } from './meta'
@@ -187,7 +187,9 @@ export function setSquad(k: number, r: number): boolean {
   for (const j of [2, 3]) { const was = G.mhp[j]; G.mhp[j] = Math.round((110 + G.stage * 7) * GUARDIANS[j].hpMul * hpBonus(j)); if (j === i) G.hp[j] = ratio > 0 ? Math.max(1, Math.round(G.mhp[j] * ratio)) : 0; else if (G.hp[j] > 0) G.hp[j] = Math.min(G.mhp[j], Math.max(1, Math.round(G.hp[j] * G.mhp[j] / Math.max(1, was)))) }
   save(); return true
 }
-export const gb = (i: number, stat: Stat) => { let v = 0; const d = dogId(i); for (const it of G.gear) if (it.on === d && it.stat === stat) v += it.val; return v }
+export const gb = (i: number, stat: Stat) => { let v = 0; const d = dogId(i); for (const it of G.gear) if (it.on === d) v += statVal(it, stat); return v }
+/** Gear total for a dog after the balance cap. */
+export const gbc = (i: number, stat: Stat) => Math.min(CAPS[stat] ?? Infinity, gb(i, stat))
 export const goldGear = () => { let v = 0; for (let i = 0; i < unlockedGuardians(G.stage); i++) v += gb(i, 'gold'); return v }
 export const invCount = () => G.gear.filter(it => it.on < 0).length
 export const sellValue = (it: Item) => Math.ceil(idleRate(Math.max(G.stage, 5)) * (2 + it.rar * 3))
@@ -344,6 +346,8 @@ function killReward(e: Enemy) {
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
+  if (gi >= 0 && e.kind === 'boss') dmg *= 1 + gbc(gi, 'boss')
+  if (gi >= 0 && alive(gi)) { const ls = gbc(gi, 'steal'); if (ls > 0 && G.hp[gi] < G.mhp[gi]) G.hp[gi] = Math.min(G.mhp[gi], G.hp[gi] + G.mhp[gi] * ls) } // lifesteal: a % of max HP per hit, not of damage
   if (G.raid) G.raid.dmg += Math.min(dmg, Math.max(0, e.hp))
   e.hp -= dmg; e.flash = 0.1
   if (gi >= 0) G.stats.dealt[gi] += dmg
@@ -354,7 +358,7 @@ function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = 
 }
 function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   const gp = guardianPos(i), wd = WEAPONS[w]
-  const crit = Math.random() < 0.1 + 0.06 * bl('crit') + 0.06 * pk('keen') + gb(i, 'crit') + 0.02 * sk('keen'), fk = flankMul(), mult = (crit ? 2 : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
+  const crit = Math.random() < Math.min(0.75, 0.1 + 0.06 * bl('crit') + 0.06 * pk('keen') + gbc(i, 'crit') + 0.02 * sk('keen')), fk = flankMul(), mult = (crit ? 2 + gbc(i, 'cdmg') : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
   const n = wd.pellets || 1
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
@@ -375,7 +379,7 @@ const dogArmor = (i: number) => (pk('guard') ? 0.92 : 1) * (i === 0 && G.tankT >
 function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
-  dmg *= dogArmor(i)
+  dmg *= dogArmor(i) * (1 - gbc(i, 'guard'))
   G.stats.taken[i] += Math.min(dmg, G.hp[i]); G.hp[i] -= dmg
   if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = reviveTime(); const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
