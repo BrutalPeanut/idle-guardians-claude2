@@ -5,6 +5,7 @@
  */
 import { G } from './sim'
 import { dayKey } from './quests'
+import { track } from './telemetry'
 import { ADS_LIVE, ADMOB_LIVE, ADMOB_TEST, ADMOB_TEST_DEVICES } from './config'
 
 export const ADS = { dailyCap: 8, cooldownS: 45, mockDurationS: 3 }
@@ -22,8 +23,8 @@ export function showRewardedAd(reason: string, grant: () => void): 'ok' | 'cap' 
   if (adsLeft() <= 0) return 'cap'
   if (adCooldown() > 0) return 'cooldown'
   const nat = nativeAdMob()
-  if (nat) { startNativeAd(nat, reason, grant); return 'ok' }
-  startMockAd(reason, grant); return 'ok'
+  if (nat) { track('ad_start', { r: reason, m: 'native' }); startNativeAd(nat, reason, grant); return 'ok' }
+  track('ad_start', { r: reason, m: 'mock' }); startMockAd(reason, grant); return 'ok'
 }
 
 // ---- real ads (only inside the Capacitor phone app) ----
@@ -44,7 +45,7 @@ export function adUnitId(platform: 'android' | 'ios') { return ADS_LIVE && ADMOB
 export const adsAreTest = (platform: 'android' | 'ios' = 'android') => adUnitId(platform) === ADMOB_TEST[platform]
 function startNativeAd(n: { api: AdMobApi; platform: 'android' | 'ios' }, reason: string, grant: () => void) {
   adState.play = { reason, t: 0, dur: 1e9, done: false, grant, native: true }
-  const fail = () => { adState.play = null; adState.lastEnd = Date.now() - ADS.cooldownS * 500; G.banner = { text: 'Ad not available', sub: 'Try again in a bit', t: 1.6 } }
+  const fail = () => { track('ad_fail', { r: reason }); adState.play = null; adState.lastEnd = Date.now() - ADS.cooldownS * 500; G.banner = { text: 'Ad not available', sub: 'Try again in a bit', t: 1.6 } }
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 120000))
   const run = (async () => {
     // consent first (Google's UMP message: shown only where the law requires it), then initialise, then request an ad
@@ -56,15 +57,12 @@ function startNativeAd(n: { api: AdMobApi; platform: 'android' | 'ios' }, reason
     await n.api.prepareRewardVideoAd({ adId: adUnitId(n.platform), isTesting: !ADS_LIVE || adsAreTest(n.platform) })
     await n.api.showRewardVideoAd() // resolves with the reward item only once the reward is earned
   })()
-  Promise.race([run, timeout]).then(() => { if (!adState.play) return; adState.play = null; adState.lastEnd = Date.now(); rollDay(); G.ads.used++; grant() }, () => { adInit = null; if (adState.play) fail() })
+  Promise.race([run, timeout]).then(() => { if (!adState.play) return; track('ad_done', { r: reason }); adState.play = null; adState.lastEnd = Date.now(); rollDay(); G.ads.used++; grant() }, () => { adInit = null; if (adState.play) fail() })
 }
 function startMockAd(reason: string, grant: () => void) { adState.play = { reason, t: 0, dur: ADS.mockDurationS, done: false, grant } }
 export function tickAd(dt: number) { const a = adState.play; if (a && !a.native && !a.done && (a.t += dt) >= a.dur) a.done = true }
 /** Called when the player taps CLAIM after the ad finishes. */
 export function finishAd() {
   const a = adState.play; if (!a || !a.done) return
-  adState.play = null; adState.lastEnd = Date.now(); rollDay(); G.ads.used++; a.grant()
+  track('ad_done', { r: a.reason }); adState.play = null; adState.lastEnd = Date.now(); rollDay(); G.ads.used++; a.grant()
 }
-
-/** TEST in-app purchase stub (no real billing). SKUs: 'no_ads'. */
-export function purchase(sku: 'no_ads'): boolean { if (sku === 'no_ads') { G.noAds = true; return true } return false }

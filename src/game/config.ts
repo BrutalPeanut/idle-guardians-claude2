@@ -18,3 +18,15 @@ export const ADMOB_TEST_DEVICES: string[] = []
 /** Public pages used by the in-game Privacy & Support tile and by the store listings. */
 export const SITE_URL = 'https://brutalpeanut.github.io/idle-guardians-claude2/'
 export const PRIVACY_URL = SITE_URL + 'privacy.html'
+
+/** Shown in crash and usage reports so we can tell builds apart. Bump on each release. */
+export const APP_VER = '0.1.0'
+
+// ---- In-app purchase (RevenueCat, used only inside the phone app) ----
+// Create a RevenueCat project, add the Play (and App Store) app, make an entitlement called "no_ads" and an offering with one
+// product, then paste the PUBLIC SDK keys here. With empty keys the Remove Ads screen says purchases are unavailable.
+export const RC_KEYS = { android: '', ios: '' }
+export const RC_ENTITLEMENT = 'no_ads'
+
+/** Google OAuth Web client ID (Google Cloud Console > Credentials). Empty hides the Drive backup. Not a secret. */
+export const GOOGLE_CLIENT_ID = ''

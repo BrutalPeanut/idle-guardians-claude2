@@ -2,6 +2,7 @@ import { nextGoal } from './meta'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { PERKS } from './clan'
+import { track, trackError } from './telemetry'
 import { G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
@@ -65,7 +66,7 @@ export function drainEvents() {
       R.flash = 0.15
     }
     else if (e.type === 'blessing') { Audio_.fanfare(); const b = BLESSINGS.find(x => x.id === e.id)!; G.banner = { text: b.name.toUpperCase() + ' x' + bl(e.id), sub: b.desc, t: 1.8, big: true }; R.flash = 0.25 }
-    else if (e.type === 'rebirth') { Audio_.fanfare(); G.banner = { text: 'REBORN', sub: '+' + e.gain + ' Stardust', t: 2.4, big: true }; R.flash = 0.8 }
+    else if (e.type === 'rebirth') { track('rebirth', { n: e.gain }); Audio_.fanfare(); G.banner = { text: 'REBORN', sub: '+' + e.gain + ' Stardust', t: 2.4, big: true }; R.flash = 0.8 }
     else if (e.type === 'quest_claim') { Audio_.coins(); G.banner = { text: 'QUEST DONE', sub: '+' + e.gems + ' gems  +' + fmt(e.gold) + ' gold', t: 1.6 } }
     else if (e.type === 'chest_get') { Audio_.fanfare(); G.banner = { text: 'CHEST EARNED', sub: CHEST_NAMES[e.tier] + (e.n > 1 ? ' x' + e.n : '') + ' (Menu, Gear)', t: 2.2, big: true } }
     else if (e.type === 'login_claim') { Audio_.coins(); G.banner = { text: 'DAY ' + (e.day + 1) + ' REWARD', sub: e.label, t: 1.8 } }
@@ -477,7 +478,7 @@ export function render(ctx: Ctx, t: number) {
     if (G.hp[i] > 0 && i === 0 && G.tankT > 0) { const k = G.tankT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1; ctx.strokeStyle = 'rgba(150,235,160,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(90,200,110,' + 0.16 * k + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, 26 * dogScale(i), 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && i === 1 && G.panicT > 0) { const k = G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, p = 1 + 0.08 * Math.sin(t * 22); ctx.strokeStyle = 'rgba(255,90,80,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(255,60,50,' + 0.2 * k + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(gp.x + Math.sin(t * 40) * 0.8, gp.y + 2, 24 * dogScale(i) * p, 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
-  ents.sort((a, b) => a.y - b.y).forEach(o => { ctx.save(); try { o.d() } catch (e) { if (!R.errLogged) { R.errLogged = true; console.error("entity draw", e) } } ctx.restore() });
+  ents.sort((a, b) => a.y - b.y).forEach(o => { ctx.save(); try { o.d() } catch (e) { if (!R.errLogged) { R.errLogged = true; console.error("entity draw", e); trackError(String(e), "entity draw") } } ctx.restore() });
   if (G.crate) { // supply crate: bobbing chest with a shrinking timer ring; tap it
     const c = G.crate, bob = Math.sin(t * 5) * 3, f = c.t / 9, blink = c.t < 2.5 && Math.sin(t * 22) > 0
     if (!blink) {

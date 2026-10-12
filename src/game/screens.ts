@@ -9,6 +9,7 @@ import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, r
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
 import { BOOST } from './sim'
+import { IAP } from './iap'
 import { adsLeft } from './ads'
 import { TRAIN, tl, trainCost, buyTrain, trainAffordable } from './sim'
 import { LB, refresh, chooseName, nameChosen, nameOptions, shuffleNames, playerName, playerId } from './leaderboard'
@@ -40,7 +41,7 @@ export const HUB_SECTIONS: { id: string; label: string; col: string; tiles: stri
   { id: 'battle', label: 'Battle', col: '#ff6a5a', tiles: ['raid', 'auto', 'weekly', 'stats'] },
   { id: 'grow', label: 'Grow', col: '#ff9a3a', tiles: ['train', 'skills', 'gear', 'kennel', 'rebirth'] },
   { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['boost', 'quests', 'login', 'spin', 'pass', 'ach'] },
-  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'tour', 'help', 'privacy'] },
+  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'noads', 'savedata', 'tour', 'help', 'privacy'] },
 ]
 const tileLive = (id: string) => { const tl = TILES.find(x => x.id === id); return !!tl && unlocked(id) && !!tl.badge?.() }
 const sectionBadge = (sec: { tiles: string[] }) => sec.tiles.some(tileLive)
@@ -124,6 +125,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'train': drawTrain(ctx); break
     case 'spin': drawSpin(ctx); break
     case 'boost': drawBoost(ctx); break
+    case 'noads': drawNoAds(ctx); break
     default: drawHub(ctx, t)
   }
 }
@@ -639,3 +641,20 @@ function drawBoost(ctx: Ctx) {
 }
 registerTile({ id: 'boost', label: 'Pack Boost', sub: () => G.boostT > 0 ? mmss(G.boostT) + ' left' : '+50% gold, +25% damage', icon: 'bolt', col: '#b58cf0', badge: () => G.boostT <= 0 && adsLeft() > 0 })
 registerTile({ id: 'privacy', label: 'Privacy & Support', sub: () => 'Policy, contact', icon: 'shield', col: '#7f929a' })
+
+// ================= Remove Ads (in-app purchase, phone app only) =================
+function drawNoAds(ctx: Ctx) {
+  panel(ctx, 'Remove Ads')
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = '400 15px ' + FONT; ctx.fillStyle = G.noAds ? '#52d273' : '#ffd84a'; ctx.fillText(G.noAds ? 'Ads are off. Thank you!' : 'Keep every reward, skip every ad', W / 2, 90)
+  const lines = ['Pack Boost, Lucky Spin, double rewards:', 'you still get them, with no ad to watch.', 'One purchase, yours for good on this account.']
+  ctx.font = '400 13px ' + FONT; ctx.fillStyle = '#c9d8d0'; lines.forEach((l, i) => ctx.fillText(l, W / 2, 140 + i * 22))
+  const can = IAP.status === 'ready' && !G.noAds, busy = IAP.status === 'busy' || IAP.status === 'loading'
+  const label = G.noAds ? 'Purchased' : IAP.status === 'unavailable' ? 'Available in the app' : busy ? 'Please wait...' : 'Remove ads' + (IAP.price ? '  ' + IAP.price : '')
+  button(ctx, 'iap_buy', W / 2 - 110, 240, 220, 52, { top: can ? '#ffcf4a' : '#5a666d', bot: can ? '#e8841a' : '#39434a', label, size: 15, disabled: !can })
+  button(ctx, 'iap_restore', W / 2 - 90, 308, 180, 40, { top: '#5ab8ff', bot: '#2a73c4', label: 'Restore purchase', size: 13, disabled: IAP.status !== 'ready' })
+  ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#9fb5aa'; if (IAP.msg) ctx.fillText(IAP.msg, W / 2, 374)
+  if (IAP.status === 'unavailable') { ctx.fillStyle = '#7f929a'; ctx.fillText('Purchases work in the Android and iPhone app.', W / 2, 400) }
+}
+registerTile({ id: 'noads', label: 'Remove Ads', sub: () => G.noAds ? 'Active' : 'Keep rewards, skip ads', icon: 'shield', col: '#ffb347' })
+registerTile({ id: 'savedata', label: 'Save Data', sub: () => 'Backup and restore', icon: 'gem', col: '#52d2c9' })
