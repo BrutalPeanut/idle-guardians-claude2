@@ -111,21 +111,40 @@ export function updateFx(dt: number) {
 
 // ---------- drawing helpers (shared chibi recipe: big head, bold outline, 2-tone cel shade) ----------
 const mix2 = (a: string, b: string, k: number) => { const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16); return '#' + [0, 1, 2].map(i => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0')).join('') }
-function blob(ctx: Ctx, x: number, y: number, rx: number, ry: number, fill: string, shade: string | null) {
-  ctx.fillStyle = fill; ctx.strokeStyle = OUT; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.283); ctx.fill(); ctx.stroke();
-  if (shade) { ctx.save(); ctx.clip(); ctx.fillStyle = shade; ctx.beginPath(); ctx.ellipse(x + rx * 0.25, y + ry * 0.35, rx * 1.1, ry * 0.8, 0, 0, 6.283); ctx.fill(); ctx.restore(); ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.283); ctx.stroke(); }
+const shadeHex = (c: string, k: number) => c[0] === '#' && c.length === 7 ? (k >= 0 ? mix2(c, '#ffffff', k) : mix2(c, '#000000', -k)) : c
+/** A shaded volume: light from the upper left, a darker core and a softer outline tinted by the fill. `fuzz` pokes hair ticks past the edge so fur reads as fur. */
+function blob(ctx: Ctx, x: number, y: number, rx: number, ry: number, fill: string, shade: string | null, fuzz = 0) {
+  const hex = fill[0] === '#' && fill.length === 7 && fill !== '#fff' && fill !== '#ffffff'
+  if (fuzz > 0 && hex) { ctx.strokeStyle = shadeHex(fill, -0.12); ctx.lineWidth = 1.3; ctx.lineCap = 'round'; ctx.beginPath(); for (let k = 0; k < fuzz; k++) { const a = (k / fuzz) * 6.283 + Math.sin(k * 12.9 + rx) * 0.2, d = 0.9 + 0.5 * Math.abs(Math.sin(k * 7.3 + ry)), ca = Math.cos(a), sa = Math.sin(a); ctx.moveTo(x + ca * rx * 0.94, y + sa * ry * 0.94); ctx.lineTo(x + ca * (rx + 1.4 * d) + sa * 0.5, y + sa * (ry + 1.4 * d) - ca * 0.5) } ctx.stroke(); ctx.lineCap = 'butt' }
+  let f: string | CanvasGradient = fill
+  if (hex) { const gr = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.5, Math.min(rx, ry) * 0.1, x, y, Math.max(rx, ry) * 1.08); gr.addColorStop(0, shadeHex(fill, 0.3)); gr.addColorStop(0.5, fill); gr.addColorStop(1, shadeHex(fill, -0.24)); f = gr }
+  ctx.fillStyle = f; ctx.strokeStyle = hex ? mix2(shadeHex(fill, -0.6), OUT, 0.5) : OUT; ctx.lineWidth = 1.7
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.283); ctx.fill(); ctx.stroke()
+  if (shade) { ctx.save(); ctx.clip(); ctx.globalAlpha = 0.5; ctx.fillStyle = shade; ctx.beginPath(); ctx.ellipse(x + rx * 0.25, y + ry * 0.35, rx * 1.1, ry * 0.8, 0, 0, 6.283); ctx.fill(); ctx.restore() }
+  if (hex && Math.min(rx, ry) > 3.5) { ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.ellipse(x - rx * 0.32, y - ry * 0.52, rx * 0.34, ry * 0.16, -0.5, 0, 6.283); ctx.fill() }   // sky light
 }
+/** Per-dog motion memory: speed (for the run cycle and lean), hit flinch and a gait phase. */
+const DS: Record<string, { x: number; y: number; t: number; hp: number; run: number; step: number; fl: number }> = {}
+const DYN = { run: 0, step: 0 }
+const pawX = (sd: number) => DYN.run * Math.cos(DYN.step + (sd < 0 ? 0 : Math.PI)) * 2.4
+const pawY = (sd: number) => DYN.run * Math.max(0, Math.sin(DYN.step + (sd < 0 ? 0 : Math.PI))) * 3.4
 /** Rudy and Cooper are drawn larger so the strike team reads at a glance. Feet stay anchored. */
 const dogScale = (i: number) => i === 0 ? 1.45 : i === 1 ? 1.32 : 1
 function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing: boolean, tgt: Enemy | undefined) {
-  const bob = Math.sin(t * 6 + x) * 1.2
-  y += bob
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 15, g.look === 'cooper' ? 10.5 : 12.5, 4, 0, 0, 6.283); ctx.fill()
-  const look = tgt ? Math.sign(tgt.x - x) : 0
+  const gi = GUARDIANS.indexOf(g), st = DS[g.n] ?? (DS[g.n] = { x, y, t, hp: G.hp[gi] ?? 1, run: 0, step: 0, fl: 0 })
+  const dt = Math.min(0.1, Math.max(0.001, t - st.t)), vx = (x - st.x) / dt, vy = (y - st.y) / dt, sp = t - st.t > 0.25 ? 0 : Math.hypot(vx, vy)
+  st.run += (Math.min(1, sp / 70) - st.run) * 0.25; st.step += dt * (6 + st.run * 8); st.x = x; st.y = y; st.t = t
+  if (gi >= 0 && G.hp[gi] < st.hp - 0.01) st.fl = 0.28; st.hp = G.hp[gi] ?? st.hp; st.fl = Math.max(0, st.fl - dt)
+  DYN.run = st.run; DYN.step = st.step
+  const breath = Math.sin(t * 2.6 + x) * 0.014, hop = Math.abs(Math.sin(st.step)) * st.run * 2.2, flinch = st.fl > 0 ? Math.sin(st.fl * 70) * 1.6 * (st.fl / 0.28) : 0
+  const look = tgt ? Math.sign(tgt.x - x) : 0, lean = Math.max(-0.2, Math.min(0.2, vx * 0.0028)) + (firing ? -look * 0.07 : 0) + Math.sin(st.step) * 0.035 * st.run
+  y += Math.sin(t * 6 + x) * 0.5 * (1 - st.run) - hop
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.26 - hop * 0.03) + ')'; ctx.beginPath(); ctx.ellipse(x, y + 15 + hop, (g.look === 'cooper' ? 10.5 : 12.5) * (1 - hop * 0.04), 4, 0, 0, 6.283); ctx.fill()
+  ctx.save(); ctx.translate(x + flinch - (firing ? look * 1.2 : 0), y + 15); ctx.rotate(lean); ctx.scale(1 - breath * 0.6 + (st.fl > 0 ? 0.05 : 0), 1 + breath + hop * 0.01 - (st.fl > 0 ? 0.04 : 0)); ctx.translate(-x, -(y + 15))
   if (g.look === 'rudy') drawRudy(ctx, g, x, y, t, look)
   else if (g.look === 'cooper') drawCooper(ctx, g, x, y, t, look)
   else drawPlainDog(ctx, g, x, y, look, t)
+  ctx.restore()
   if (firing) { ctx.fillStyle = 'rgba(255,240,150,.8)'; ctx.beginPath(); ctx.arc(x + (tgt && tgt.x < x ? -12 : 12), y + 4, 4, 0, 6.283); ctx.fill() }
 }
 function collar(ctx: Ctx, x: number, y: number, col: string, tag: boolean) {
@@ -148,11 +167,11 @@ export function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: 
   if (b === 'Beagle') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(x + 14.2, y - 1 + wag); ctx.lineTo(x + 14, y - 5 + wag); ctx.stroke() } // white tip
   ctx.restore()
   // ---- body + legs ----
-  blob(ctx, x, y + 6, b === 'Dachshund' ? 12.5 : 9, b === 'Dachshund' ? 6.8 : 8, g.fur, g.shade)
+  blob(ctx, x, y + 6, b === 'Dachshund' ? 12.5 : 9, b === 'Dachshund' ? 6.8 : 8, g.fur, g.shade, b === 'Husky' || b === 'Corgi' ? 14 : 6)
   if (b === 'Dalmatian') { ctx.fillStyle = '#2a2a2e'; for (const [dx, dy, r] of [[-4, 4, 1.6], [3, 7, 1.9], [5, 2, 1.2], [-1, 10, 1.3]]) { ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, 6.283); ctx.fill() } }
   if (b === 'Husky' || b === 'Beagle' || b === 'Corgi' || b === 'Shiba Inu' || b === 'Bulldog') blob(ctx, x, y + 9.5, 4.2, 5, '#f7f1e6', null)           // white chest
   const legCol = b === 'Beagle' || b === 'Husky' ? '#f7f1e6' : g.fur
-  blob(ctx, x - 6, y + 14, b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade); blob(ctx, x + 6, y + 14, b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade)
+  blob(ctx, x - 6 + pawX(-1), y + 14 - pawY(-1), b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade); blob(ctx, x + 6 + pawX(+1), y + 14 - pawY(+1), b === 'Corgi' || b === 'Dachshund' ? 3 : 3.5, 3, legCol, g.shade)
   ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.9; for (const sx of [-1, 1]) for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 6 + k * 1.2, y + 14.4); ctx.lineTo(x + sx * 6 + k * 1.2, y + 16.2); ctx.stroke() } // toe lines
   // ---- back ears (drop ears sit behind the head) ----
   const earFloppy = b === 'Beagle' || b === 'Dalmatian' || b === 'Black Lab' || b === 'Dachshund'
@@ -163,7 +182,7 @@ export function drawPlainDog(ctx: Ctx, g: Guardian, x: number, y: number, look: 
   }
   // ---- head ----
   const wide = b === 'Bulldog' ? 13.2 : 12
-  blob(ctx, x, y - 4, wide, 11, g.fur, g.shade)
+  blob(ctx, x, y - 4, wide, 11, g.fur, g.shade, b === 'Husky' || b === 'Corgi' || b === 'Shiba Inu' ? 14 : 5)
   // erect / folded ears sit on top of the head
   if (b === 'Husky' || b === 'Shiba Inu' || b === 'Corgi') {
     const big = b === 'Corgi' ? 1.25 : 1, tipDark = b === 'Husky'
@@ -234,15 +253,15 @@ function helmet(ctx: Ctx, x: number, y: number, hw: number, strapped: boolean, t
 function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
   const wag = Math.sin(t * 9 + x) * 3
   blob(ctx, x + 12 + wag * 0.4, y + 3 + wag * 0.3, 7.5, 4.4, g.shade, g.ear)                         // feathered tail plume
-  blob(ctx, x, y + 6, 10.5, 8.8, g.fur, g.shade)                                                    // body
+  blob(ctx, x, y + 6, 10.5, 8.8, g.fur, g.shade, 16)                                                    // body
   blob(ctx, x, y + 9.5, 7, 5.2, '#fbeccb', null)                                                    // fluffy chest ruff
   for (const dx of [-5, 0, 5]) blob(ctx, x + dx, y + 12, 2.6, 2.2, '#fbeccb', null)                 // feathering tufts
-  blob(ctx, x - 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5, y + 14.5, 4.2, 3.3, g.fur, g.shade) // paws
+  blob(ctx, x - 6.5 + pawX(-1), y + 14.5 - pawY(-1), 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5 + pawX(+1), y + 14.5 - pawY(+1), 4.2, 3.3, g.fur, g.shade) // paws
   for (const sx of [-1, 1]) {                                                                       // soft droopy golden ears
     ctx.fillStyle = g.ear; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
     ctx.beginPath(); ctx.moveTo(x + sx * 8, y - 12); ctx.quadraticCurveTo(x + sx * 18, y - 11, x + sx * 15.5, y + 3); ctx.quadraticCurveTo(x + sx * 12, y + 5, x + sx * 9.5, y - 1); ctx.closePath(); ctx.fill(); ctx.stroke()
   }
-  blob(ctx, x, y - 4.5, 14.2, 12.8, g.fur, g.shade)                                                   // big round head
+  blob(ctx, x, y - 4.5, 14.2, 12.8, g.fur, g.shade, 18)                                                   // big round head
   for (const a of [3.05, 0.1, 2.4, 0.75]) blob(ctx, x + Math.cos(a) * 12.9, y - 4.5 + Math.sin(a) * 11.6, 3.4, 2.8, g.fur, null)   // soft fluffy cheek tufts (scruffy but friendly)
   blob(ctx, x, y + 1.8, 6, 4.2, '#fffaf0', null)                                                  // light muzzle
   ctx.fillStyle = 'rgba(255,130,120,.55)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9.6, y - 0.2, 3.2, 2.1, 0, 0, 6.283); ctx.fill() } // rosy cheeks
@@ -266,14 +285,14 @@ function drawCooper(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look
   const wag = Math.sin(t * 8 + x) * 3
   ctx.strokeStyle = OUT; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + 7, y + 9); ctx.quadraticCurveTo(x + 15, y + 8 + wag, x + 15, y + 1 + wag); ctx.stroke() // whip tail
   ctx.strokeStyle = g.fur; ctx.lineWidth = 2.4; ctx.stroke(); ctx.lineCap = 'butt'
-  blob(ctx, x, y + 6, 8.3, 8.6, g.fur, g.shade)                                                     // lean body
+  blob(ctx, x, y + 6, 8.3, 8.6, g.fur, g.shade, 8)                                                     // lean body
   blob(ctx, x, y + 9, 4, 5.2, '#f7f1e6', null)                                                      // white chest patch
-  blob(ctx, x - 5.5, y + 14.5, 3.1, 3, g.fur, g.shade); blob(ctx, x + 5.5, y + 14.5, 3.1, 3, g.fur, g.shade)
+  blob(ctx, x - 5.5 + pawX(-1), y + 14.5 - pawY(-1), 3.1, 3, g.fur, g.shade); blob(ctx, x + 5.5 + pawX(+1), y + 14.5 - pawY(+1), 3.1, 3, g.fur, g.shade)
   ctx.save(); ctx.translate(x, y - 4); ctx.rotate(-0.14)                                            // head tilt
   ctx.fillStyle = g.ear; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
   ctx.beginPath(); ctx.moveTo(-11, -3); ctx.lineTo(-10.5, -12.5); ctx.quadraticCurveTo(-6, -14, -3, -8.5); ctx.closePath(); ctx.fill(); ctx.stroke() // perked rose ear
   ctx.beginPath(); ctx.moveTo(3, -9); ctx.lineTo(13, -11); ctx.lineTo(11.5, -2); ctx.closePath(); ctx.fill(); ctx.stroke()    // folded ear
-  blob(ctx, 0, 0, 11.6, 10.6, g.fur, g.shade)                                                       // head
+  blob(ctx, 0, 0, 11.6, 10.6, g.fur, g.shade, 10)                                                       // head
   blob(ctx, 0, 4.2, 6.8, 5, '#4a3329', null)                                                        // dark boxy muzzle
   ctx.fillStyle = '#16100d'; ctx.beginPath(); ctx.ellipse(0, 2.4, 3, 2.1, 0, 0, 6.283); ctx.fill()  // nose
   ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, 4.4); ctx.lineTo(0, 6); ctx.moveTo(-3, 7); ctx.quadraticCurveTo(0, 8.4, 3, 7); ctx.stroke()
@@ -369,10 +388,111 @@ function drawDragon(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: boo
   }
   ctx.restore()
 }
+
+const ZSKIN = [['#8ccf6e', '#64a84c'], ['#a3b8a0', '#74897a'], ['#8fb4bd', '#628a96'], ['#b2c46e', '#8a9a48']]
+const ZSHIRT = ['#44557a', '#7a4a3a', '#5a5f66', '#8a3a3a']
+/** Shambling zombie: hunched, forward-reaching arms that swing out of step, stepping legs, one cloudy eye, hanging jaw, torn clothes. Variant per enemy. */
+function drawZombie(ctx: Ctx, e: Enemy, t: number, x: number, y: number, s: number, fl: boolean) {
+  const v = Math.floor(e.wob * 977) % 4, [sk, sh] = ZSKIN[v], cl = ZSHIRT[Math.floor(e.wob * 31) % 4], ph = GAIT.ph, mv = GAIT.mv
+  const F = (c: string) => fl ? '#fff' : c, sw = Math.sin(ph), k = s
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  // legs
+  for (const sd of [-1, 1]) { const q = Math.sin(ph + (sd < 0 ? 0 : Math.PI)) * mv, hx = x + sd * 3.4 * k, fx = hx + q * 2.2 * k, fy = y + (12 - Math.max(0, q) * 2.4) * k
+    ctx.strokeStyle = OUT; ctx.lineWidth = 5.2 * k; ctx.beginPath(); ctx.moveTo(hx, y + 5.5 * k); ctx.lineTo(hx + sd * 0.8 * k + q * 1.2 * k, y + 9 * k); ctx.lineTo(fx, fy); ctx.stroke()
+    ctx.strokeStyle = F('#3b4252'); ctx.lineWidth = 3.4 * k; ctx.stroke()
+    ctx.fillStyle = F('#2b2420'); ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(fx + sd * 0.6 * k, fy + 0.6 * k, 3.1 * k, 1.7 * k, 0, 0, 6.283); ctx.fill(); ctx.stroke() }
+  // back arm
+  const arm = (sd: number, front: boolean) => { const q = Math.sin(ph * 0.9 + (sd < 0 ? 0 : 2.4) + e.wob), sx = x + sd * 8.2 * k, sy = y - 0.5 * k, ex = x + sd * (10.5 + q) * k, ey = y + (3.5 - q * 1.5) * k, hx = x + sd * (7.5 - q * 1.2) * k, hy = y + (-5.5 - q * 2 - (mv > 0.5 ? 1 : 0)) * k
+    ctx.strokeStyle = OUT; ctx.lineWidth = 4.6 * k; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke()
+    ctx.strokeStyle = F(front ? sk : sh); ctx.lineWidth = 3 * k; ctx.stroke()
+    ctx.fillStyle = F(front ? sk : sh); ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(hx, hy, 2.2 * k, 0, 6.283); ctx.fill(); ctx.stroke()
+    if (!fl) { ctx.strokeStyle = '#2a2a1a'; ctx.lineWidth = 0.9; for (const f of [-1, 0, 1]) { ctx.beginPath(); ctx.moveTo(hx + f * 1, hy - 1.6 * k); ctx.lineTo(hx + f * 1.7, hy - 3.4 * k); ctx.stroke() } } }
+  arm(-1, false)
+  // torso with torn shirt and exposed ribs
+  blob(ctx, x, y + 2.6 * k, 8.6 * k, 8 * k, F(cl), null)
+  if (!fl) {
+    ctx.fillStyle = shadeHex(cl, -0.35); ctx.beginPath(); ctx.moveTo(x - 8 * k, y + 8 * k); for (let q = 0; q <= 5; q++) ctx.lineTo(x - 8 * k + q * 3.2 * k, y + (q % 2 ? 11.6 : 9.4) * k); ctx.lineTo(x + 8 * k, y + 8 * k); ctx.closePath(); ctx.fill()
+    ctx.save(); ctx.beginPath(); ctx.ellipse(x, y + 2.6 * k, 8.6 * k, 8 * k, 0, 0, 6.283); ctx.clip()
+    ctx.fillStyle = '#5a1618'; ctx.beginPath(); ctx.ellipse(x + 2.6 * k, y + 3.2 * k, 3.3 * k, 4 * k, 0.3, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = '#d9d2b8'; ctx.lineWidth = 1 * k; for (let q = 0; q < 3; q++) { ctx.beginPath(); ctx.moveTo(x + 0.2 * k, y + (1.4 + q * 1.7) * k); ctx.quadraticCurveTo(x + 2.6 * k, y + (0.6 + q * 1.7) * k, x + 5 * k, y + (1.6 + q * 1.7) * k); ctx.stroke() }
+    ctx.fillStyle = 'rgba(120,20,20,.5)'; ctx.beginPath(); ctx.ellipse(x - 4 * k, y + 6 * k, 2.4 * k, 1.6 * k, 0.3, 0, 6.283); ctx.fill(); ctx.restore()
+  }
+  // head: forward-hung, slow bob and tilt
+  const hb = Math.sin(ph * 0.5 + e.wob) * 0.6 * k, tilt = Math.sin(t * 1.3 + e.wob) * 0.12 + (sw * 0.06 * mv), hx = x + 1.2 * k, hy = y - 7.6 * k + hb
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(tilt)
+  blob(ctx, 0, 0, 8.4 * k, 8 * k, F(sk), null)
+  if (!fl) {
+    ctx.fillStyle = ['#3d5a2a', '#2e2a26', '#6b5a3a', '#241f24'][v]; ctx.strokeStyle = OUT; ctx.lineWidth = 0.8; for (const [px, py, w, h] of [[-5.5, -6.6, 3, 4.6], [-1.5, -8, 3, 5], [3, -7.6, 3.2, 4.4], [6, -4.5, 2, 3.4]]) { ctx.beginPath(); ctx.moveTo(px * k - w * k * 0.5, py * k + 1.4 * k); ctx.lineTo(px * k + 0.3 * k, py * k - h * k); ctx.lineTo(px * k + w * k * 0.5, py * k + 1.4 * k); ctx.fill() }   // patchy hair
+    ctx.fillStyle = '#d6cdb0'; ctx.beginPath(); ctx.ellipse(-5.2 * k, -3.6 * k, 2.4 * k, 2 * k, 0.4, 0, 6.283); ctx.fill(); ctx.strokeStyle = '#6a2020'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.ellipse(-5.2 * k, -3.6 * k, 2.4 * k, 2 * k, 0.4, 0, 6.283); ctx.stroke()      // exposed skull patch
+    ctx.fillStyle = 'rgba(80,40,90,.35)'; ctx.beginPath(); ctx.ellipse(4.6 * k, 1.6 * k, 3 * k, 2.2 * k, 0, 0, 6.283); ctx.fill()                                                                                     // bruise
+    for (const [ex, er, big] of [[-3.1, 2.3, 1], [3.4, 1.8, 0]]) { ctx.fillStyle = '#1a1210'; ctx.beginPath(); ctx.ellipse(ex * k, -1.6 * k, (er + 1.1) * k, (er + 1.3) * k, 0, 0, 6.283); ctx.fill()                       // sunken sockets
+      ctx.fillStyle = big ? '#e9e8d0' : '#f4f0dc'; ctx.beginPath(); ctx.arc(ex * k, -1.4 * k, er * k, 0, 6.283); ctx.fill()
+      ctx.strokeStyle = '#b02a2a'; ctx.lineWidth = 0.6; for (const a of [0.5, 2.1, 3.8, 5.2]) { ctx.beginPath(); ctx.moveTo(ex * k + Math.cos(a) * er * k, -1.4 * k + Math.sin(a) * er * k); ctx.lineTo(ex * k + Math.cos(a) * er * 0.45 * k, -1.4 * k + Math.sin(a) * er * 0.45 * k); ctx.stroke() }
+      ctx.fillStyle = big ? '#8a8f58' : '#1a1210'; ctx.beginPath(); ctx.arc((ex + Math.sin(t * 2 + ex) * 0.4) * k, -1.2 * k, (big ? 0.9 : 1.1) * k, 0, 6.283); ctx.fill() }
+    ctx.strokeStyle = shadeHex(sh, -0.3); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-5.6 * k, -4.8 * k); ctx.lineTo(-1.6 * k, -4.4 * k); ctx.moveTo(1.8 * k, -4.2 * k); ctx.lineTo(5.6 * k, -5 * k); ctx.stroke()      // heavy brows
+    ctx.fillStyle = '#1a1210'; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sd * 0.7 * k, 1.8 * k, 0.5 * k, 0.9 * k, 0, 0, 6.283); ctx.fill() }                                                       // missing-nose slits
+    const jaw = 1.6 + (Math.sin(t * 3 + e.wob) + 1) * 0.9 + mv * 0.6
+    ctx.fillStyle = '#2a0c0c'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-4 * k, 4.2 * k); ctx.quadraticCurveTo(0, (4.6 + jaw * 2.2) * k, 4.2 * k, 4 * k); ctx.quadraticCurveTo(0, 3.2 * k, -4 * k, 4.2 * k); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#e1d9b4'; for (const [tx, th] of [[-3, 1.4], [-1.4, 1.9], [0.6, 1.5], [2.4, 1.9], [3.6, 1.2]]) { ctx.beginPath(); ctx.moveTo((tx - 0.7) * k, 3.8 * k); ctx.lineTo(tx * k, (3.8 + th) * k); ctx.lineTo((tx + 0.7) * k, 3.8 * k); ctx.fill() }
+    ctx.fillStyle = 'rgba(150,200,90,.7)'; ctx.beginPath(); ctx.ellipse(2.4 * k, (5.4 + jaw * 1.6 + Math.sin(t * 4) * 0.5) * k, 0.55 * k, (1 + Math.sin(t * 4) * 0.4) * k, 0, 0, 6.283); ctx.fill()                         // drool
+  }
+  ctx.restore()
+  arm(1, true)
+  ctx.lineCap = 'butt'
+}
+/** Combat robot: plated body with a scanning visor, hydraulic legs and swinging pistons, venting steam, and sparks when badly damaged. */
+function drawRobot(ctx: Ctx, e: Enemy, t: number, x: number, y: number, s: number, fl: boolean) {
+  const F = (c: string) => fl ? '#fff' : c, k = s, ph = GAIT.ph, mv = GAIT.mv, hurt = e.hp < e.max * 0.4
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  // legs: thigh piston + shin + flat foot
+  for (const sd of [-1, 1]) { const q = Math.sin(ph + (sd < 0 ? 0 : Math.PI)) * mv, hx = x + sd * 4 * k, kx = hx + q * 1.4 * k, fx = hx + q * 2.6 * k, fy = y + (12.4 - Math.max(0, q) * 2.2) * k
+    ctx.strokeStyle = OUT; ctx.lineWidth = 5 * k; ctx.beginPath(); ctx.moveTo(hx, y + 5 * k); ctx.lineTo(kx, y + 9 * k); ctx.lineTo(fx, fy); ctx.stroke()
+    ctx.strokeStyle = F('#5b6b7c'); ctx.lineWidth = 3.2 * k; ctx.stroke(); ctx.strokeStyle = F('#aebdcb'); ctx.lineWidth = 1 * k; ctx.beginPath(); ctx.moveTo(hx, y + 5 * k); ctx.lineTo(kx, y + 9 * k); ctx.stroke()
+    ctx.fillStyle = F('#3a4551'); ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.roundRect(fx - 3.6 * k, fy - 0.4 * k, 7.2 * k, 2.8 * k, 1 * k); ctx.fill(); ctx.stroke() }
+  // arms swing opposite the legs
+  const arm = (sd: number) => { const q = Math.sin(ph + (sd < 0 ? Math.PI : 0)) * mv, sx = x + sd * 11.6 * k, sy = y - 1 * k, hx = x + sd * (13.4 + q * 0.6) * k, hy = y + (7 + q * 3) * k
+    ctx.strokeStyle = OUT; ctx.lineWidth = 4.6 * k; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke(); ctx.strokeStyle = F('#8394a5'); ctx.lineWidth = 2.8 * k; ctx.stroke()
+    ctx.fillStyle = F('#4a5663'); ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.roundRect(hx - 2.6 * k, hy - 1.4 * k, 5.2 * k, 4.4 * k, 1.2 * k); ctx.fill(); ctx.stroke() }
+  arm(-1); arm(1)
+  // torso plate + chest vents
+  const tg = ctx.createLinearGradient(x - 9 * k, y - 4 * k, x + 9 * k, y + 8 * k); tg.addColorStop(0, fl ? '#fff' : '#c4d1de'); tg.addColorStop(0.5, fl ? '#fff' : '#8fa3b8'); tg.addColorStop(1, fl ? '#fff' : '#5b6d80')
+  ctx.fillStyle = tg; ctx.strokeStyle = OUT; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.roundRect(x - 9.4 * k, y - 4.4 * k, 18.8 * k, 14 * k, 3.4 * k); ctx.fill(); ctx.stroke()
+  if (!fl) {
+    ctx.fillStyle = '#2d3640'; for (let q = 0; q < 3; q++) { ctx.beginPath(); ctx.roundRect(x - 5.4 * k, y + (0.6 + q * 2.6) * k, 10.8 * k, 1.4 * k, 0.5 * k); ctx.fill() }
+    ctx.fillStyle = hurt ? '#ff5a3a' : '#5be0ff'; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * (hurt ? 14 : 5) + e.wob); ctx.beginPath(); ctx.arc(x - 6.6 * k, y + 7.4 * k, 1.2 * k, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1
+    ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(x - 9 * k, y + 5.2 * k); ctx.lineTo(x + 9 * k, y + 5.2 * k); ctx.stroke()
+    ctx.fillStyle = '#7a8a9a'; for (const [rx, ry] of [[-7.4, -2.6], [7.4, -2.6], [-7.4, 8], [7.4, 8]]) { ctx.beginPath(); ctx.arc(x + rx * k, y + ry * k, 0.8 * k, 0, 6.283); ctx.fill() }
+    if (hurt) { ctx.strokeStyle = '#1a1f26'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x + 2 * k, y - 4 * k); ctx.lineTo(x + 4 * k, y + 0 * k); ctx.lineTo(x + 2.4 * k, y + 3 * k); ctx.stroke() }
+  }
+  // head: visor with scanning eye, antenna
+  const hb = Math.sin(ph) * 0.5 * k * mv
+  ctx.save(); ctx.translate(0, hb)
+  const hg = ctx.createLinearGradient(x - 8 * k, y - 16 * k, x + 8 * k, y - 4 * k); hg.addColorStop(0, fl ? '#fff' : '#d3dde8'); hg.addColorStop(1, fl ? '#fff' : '#7c8ea1')
+  ctx.fillStyle = hg; ctx.strokeStyle = OUT; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.roundRect(x - 8 * k, y - 15.4 * k, 16 * k, 12 * k, 4 * k); ctx.fill(); ctx.stroke()
+  ctx.fillStyle = F('#14181d'); ctx.beginPath(); ctx.roundRect(x - 6.4 * k, y - 11.8 * k, 12.8 * k, 4.6 * k, 2.2 * k); ctx.fill()
+  if (!fl) { const ex = Math.sin(t * 2.4 + e.wob) * 3.6 * k; const eg = ctx.createRadialGradient(x + ex, y - 9.5 * k, 0, x + ex, y - 9.5 * k, 5 * k); eg.addColorStop(0, '#ffeeee'); eg.addColorStop(0.3, hurt ? '#ffb02a' : '#ff4a3a'); eg.addColorStop(1, 'rgba(255,60,40,0)'); ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(x + ex, y - 9.5 * k, 5 * k, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#4a5663'; ctx.beginPath(); ctx.roundRect(x - 4 * k, y - 6.4 * k, 8 * k, 2.2 * k, 0.8 * k); ctx.fill(); ctx.strokeStyle = '#2a323b'; ctx.lineWidth = 0.8; for (let q = -2; q <= 2; q++) { ctx.beginPath(); ctx.moveTo(x + q * 1.5 * k, y - 6.3 * k); ctx.lineTo(x + q * 1.5 * k, y - 4.3 * k); ctx.stroke() }
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(x - 4 * k, y - 14 * k, 3.2 * k, 0.9 * k, -0.2, 0, 6.283); ctx.fill() }
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x + 3 * k, y - 15.4 * k); ctx.lineTo(x + 4.6 * k + Math.sin(t * 6 + e.wob) * 0.8 * k, y - 19.4 * k); ctx.stroke()
+  ctx.fillStyle = F('#ffd04a'); ctx.beginPath(); ctx.arc(x + 4.6 * k + Math.sin(t * 6 + e.wob) * 0.8 * k, y - 20 * k, 1.8 * k, 0, 6.283); ctx.fill(); ctx.stroke()
+  ctx.restore()
+  if (!fl) {
+    for (let q = 0; q < 2; q++) { const u = (t * 0.9 + q * 0.5 + e.wob) % 1; ctx.fillStyle = 'rgba(220,230,240,' + (0.35 * (1 - u)) + ')'; ctx.beginPath(); ctx.arc(x - 7 * k + q * 2 * k, y - 4 * k - u * 9 * k, (1.2 + u * 2.2) * k, 0, 6.283); ctx.fill() }
+    if (hurt && Math.sin(t * 23 + e.wob) > 0.6) { ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 1.2; ctx.beginPath(); const sx = x + Math.sin(t * 40) * 6 * k, sy = y - 2 * k; ctx.moveTo(sx, sy); ctx.lineTo(sx + 3 * k, sy - 3 * k); ctx.lineTo(sx + 1 * k, sy - 2 * k); ctx.lineTo(sx + 4 * k, sy - 6 * k); ctx.stroke() }
+  }
+  ctx.lineCap = 'butt'
+}
+const ES = new WeakMap<Enemy, { x: number; y: number; t: number; vx: number; ph: number }>()
+const GAIT = { ph: 0, mv: 0 }
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
-  const s = e.r / 11, wob = Math.sin(t * 7 + e.wob) * 1.5, x = e.x, y = e.y + wob;
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 11 * s, 10 * s, 3.5 * s, 0, 0, 6.283); ctx.fill();
+  const st = ES.get(e) ?? { x: e.x, y: e.y, t, vx: 0, ph: e.wob }, dtE = Math.max(0.001, Math.min(0.1, t - st.t))
+  st.vx += (((e.x - st.x) / dtE) - st.vx) * 0.2; const mv = Math.min(1, Math.hypot(e.x - st.x, e.y - st.y) / dtE / 30)
+  st.ph += dtE * (4 + mv * 5); st.x = e.x; st.y = e.y; st.t = t; ES.set(e, st); GAIT.ph = st.ph; GAIT.mv = e.dug ? 0 : Math.max(0.25, mv)
+  const s = e.r / 11, wob = e.dug ? Math.sin(t * 2 + e.wob) * 0.6 : Math.abs(Math.sin(st.ph)) * -1.8 * GAIT.mv, x = e.x, y = e.y + wob;
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, e.y + 11 * s, 10 * s, 3.5 * s, 0, 0, 6.283); ctx.fill();
   const fl = e.flash > 0;
+  const lean = e.dug ? 0 : Math.max(-0.22, Math.min(0.22, st.vx * 0.008)) + Math.sin(st.ph) * 0.07 * GAIT.mv + (fl ? -0.12 : 0)
+  ctx.save(); ctx.translate(x, e.y + 11 * s); ctx.rotate(lean); ctx.scale(fl ? 1.06 : 1, fl ? 0.94 : 1); ctx.translate(-x, -(e.y + 11 * s))
   if (e.kind === 'boss' && e.drake !== undefined) { drawDragon(ctx, e, t, x, y, fl) }
   else if (e.kind === 'gunner' || e.kind === 'mortar') {
     const hot = e.kind === 'mortar' ? e.cd < 0.7 : e.cd < 0.35
@@ -388,47 +508,9 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
       ctx.fillStyle = '#c9a63a'; ctx.strokeStyle = OUT; ctx.lineWidth = 0.9; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.roundRect(x + k * 3.6 * s - 1.2 * s, y + 6 * s, 2.4 * s, 4 * s, 0.6 * s); ctx.fill(); ctx.stroke() }   // ammo belt
     }
     if (e.kind === 'gunner') { ctx.fillStyle = '#3a414b'; ctx.beginPath(); ctx.roundRect(x - 3, y + 2 * s, 6, 14 * s, 2); ctx.fill(); ctx.stroke(); if (hot) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x, y + 16 * s, 3.5, 0, 6.283); ctx.fill() } }
-  } else if (e.kind === 'robot') {
-    blob(ctx, x, y + 5 * s, 9 * s, 7 * s, fl ? '#fff' : '#8fa3b8', fl ? null : '#6a7d92');
-    ctx.fillStyle = fl ? '#fff' : '#a9bbcf'; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 11 * s, y - 14 * s, 22 * s, 18 * s, 5 * s); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ff5a4a'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s, y - 6 * s, 3 * s, 0, 6.283); ctx.fill(); ctx.stroke(); }
-    ctx.beginPath(); ctx.moveTo(x, y - 14 * s); ctx.lineTo(x, y - 19 * s); ctx.stroke(); ctx.fillStyle = '#ffd04a'; ctx.beginPath(); ctx.arc(x, y - 20 * s, 2 * s, 0, 6.283); ctx.fill(); ctx.stroke();
-    if (!fl) {
-      ctx.fillStyle = 'rgba(255,208,74,' + (0.25 + 0.2 * Math.sin(t * 9 + e.wob)) + ')'; ctx.beginPath(); ctx.arc(x, y - 20 * s, 4.6 * s, 0, 6.283); ctx.fill()                                                // antenna glow
-      ctx.fillStyle = '#ffe0dc'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sx * 5 * s - 0.8, y - 7 * s, 1 * s, 0, 6.283); ctx.fill() }                                                    // eye glint
-      ctx.fillStyle = '#4a5663'; ctx.beginPath(); ctx.roundRect(x - 5 * s, y - 1.2 * s, 10 * s, 3.4 * s, 1 * s); ctx.fill(); ctx.strokeStyle = '#2a323b'; ctx.lineWidth = 0.9; for (let k = -3; k <= 3; k++) { ctx.beginPath(); ctx.moveTo(x + k * 1.3 * s, y - 1 * s); ctx.lineTo(x + k * 1.3 * s, y + 1.8 * s); ctx.stroke() }   // grille mouth
-      ctx.fillStyle = '#7a8a9a'; for (const [rx, ry] of [[-9, -12], [9, -12], [-9, 2], [9, 2]]) { ctx.beginPath(); ctx.arc(x + rx * s, y + ry * s, 0.9 * s, 0, 6.283); ctx.fill() }                          // rivets
-      ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 11 * s, y - 9 * s); ctx.lineTo(x + 11 * s, y - 9 * s); ctx.stroke()                                         // panel seam
-      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.ellipse(x - 5 * s, y - 12 * s, 3.6 * s, 1.1 * s, -0.2, 0, 6.283); ctx.fill()                                                         // metal sheen
-      ctx.fillStyle = '#5b6b7c'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.6; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.roundRect(x + sx * 12.4 * s - 2 * s, y - 3 * s, 4 * s, 8 * s, 1.6 * s); ctx.fill(); ctx.stroke() }       // shoulder pistons
-    }
-  } else {
-    const skin = e.kind === 'boss' ? '#8f6bbf' : '#8ccf6e', sh = e.kind === 'boss' ? '#6f4f9a' : '#64a84c';
-    blob(ctx, x, y + 5 * s, 8 * s, 7 * s, fl ? '#fff' : '#5a6f9a', null);
-    blob(ctx, x - 9 * s, y + 3 * s, 3 * s, 6 * s, fl ? '#fff' : skin, null); blob(ctx, x + 9 * s, y + 3 * s, 3 * s, 6 * s, fl ? '#fff' : skin, null); // reaching arms
-    blob(ctx, x, y - 4 * s, 11 * s, 10 * s, fl ? '#fff' : skin, fl ? null : sh);
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.arc(x - 4 * s, y - 5 * s, 3.4 * s, 0, 6.283); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(x + 4.5 * s, y - 5 * s, 2.6 * s, 0, 6.283); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(x - 4 * s, y - 4.5 * s, 1.4 * s, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(x + 4.5 * s, y - 4.5 * s, 1.2 * s, 0, 6.283); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(x - 4 * s, y + 1 * s); ctx.lineTo(x + 4 * s, y + 1.5 * s); ctx.stroke();
-    if (!fl) {
-      const bossK = e.kind === 'boss'
-      ctx.fillStyle = '#e8e2c0'; for (const k of [-2.6, -0.9, 0.9, 2.6]) { ctx.beginPath(); ctx.moveTo(x + (k - 0.7) * s, y + 1.2 * s); ctx.lineTo(x + k * s, y + 2.8 * s); ctx.lineTo(x + (k + 0.7) * s, y + 1.4 * s); ctx.fill() }   // jagged teeth
-      ctx.strokeStyle = '#b02a2a'; ctx.lineWidth = 0.8; for (const [ex, ey] of [[-4, -5], [4.5, -5]]) for (const a of [0.6, 2.2, 3.9]) { ctx.beginPath(); ctx.moveTo(x + ex * s + Math.cos(a) * 1.5 * s, y + ey * s + Math.sin(a) * 1.5 * s); ctx.lineTo(x + ex * s + Math.cos(a) * 3 * s, y + ey * s + Math.sin(a) * 3 * s); ctx.stroke() }   // bloodshot veins
-      ctx.strokeStyle = sh; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 9 * s, y - 9 * s); ctx.lineTo(x - 6 * s, y - 7 * s); ctx.moveTo(x - 8 * s, y - 7 * s); ctx.lineTo(x - 7 * s, y - 9.2 * s); ctx.stroke()                     // stitched scar
-      ctx.fillStyle = bossK ? '#3a2250' : '#3d5a2a'; for (const hx of [-5, -1.5, 2, 5.5]) { ctx.beginPath(); ctx.moveTo(x + (hx - 1.3) * s, y - 13 * s); ctx.lineTo(x + (hx + 0.3) * s, y - 17.4 * s + Math.sin(t * 6 + hx) * 0.6); ctx.lineTo(x + (hx + 1.6) * s, y - 13 * s); ctx.fill() }          // wispy hair tufts
-      ctx.fillStyle = '#44557a'; ctx.beginPath(); ctx.moveTo(x - 8 * s, y + 9 * s); for (let k = 0; k <= 4; k++) ctx.lineTo(x - 8 * s + k * 4 * s, y + (k % 2 ? 12.4 : 10.4) * s); ctx.lineTo(x + 8 * s, y + 9 * s); ctx.closePath(); ctx.fill()               // torn shirt hem
-      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 3 * s, y + 4 * s); ctx.lineTo(x - 1 * s, y + 7 * s); ctx.moveTo(x + 3 * s, y + 5 * s); ctx.lineTo(x + 2 * s, y + 8.5 * s); ctx.stroke()                                      // rips
-      ctx.fillStyle = 'rgba(160,30,30,.55)'; ctx.beginPath(); ctx.ellipse(x + 5 * s, y + 7 * s, 2 * s, 1.4 * s, 0.4, 0, 6.283); ctx.fill()                                                                                     // stain
-      if (bossK) {
-        ctx.fillStyle = '#d9cfa0'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.6
-        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 6 * s, y - 12 * s); ctx.quadraticCurveTo(x + sx * 12 * s, y - 15 * s, x + sx * 11 * s, y - 22 * s); ctx.quadraticCurveTo(x + sx * 8 * s, y - 16 * s, x + sx * 3.5 * s, y - 13 * s); ctx.closePath(); ctx.fill(); ctx.stroke() }             // horns
-        ctx.fillStyle = 'rgba(255,60,60,' + (0.45 + 0.25 * Math.sin(t * 8)) + ')'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(x + (sx < 0 ? -4 : 4.5) * s, y - 5 * s, 4.6 * s, 0, 6.283); ctx.fill() }   // glowing eyes
-        ctx.fillStyle = '#c9a63a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 6 * s, y - 13.4 * s); for (let k = 0; k < 4; k++) { ctx.lineTo(x + (-6 + k * 4 + 2) * s, y - 18.4 * s); ctx.lineTo(x + (-6 + (k + 1) * 4) * s, y - 13.4 * s) } ctx.closePath(); ctx.fill(); ctx.stroke()  // crown
-      }
-    }
-  }
+  } else if (e.kind === 'robot') { drawRobot(ctx, e, t, x, y, s, fl)
+  } else { drawZombie(ctx, e, t, x, y, s, fl) }
+  ctx.restore()
   if (e.hp < e.max || e.kind === 'boss') {
     const bw = e.r * 2.2; ctx.fillStyle = OUT; ctx.fillRect(x - bw / 2 - 1, y - e.r - 15, bw + 2, 5);
     ctx.fillStyle = e.kind === 'boss' ? '#c04aff' : '#ff4a4a'; ctx.fillRect(x - bw / 2, y - e.r - 14, bw * Math.max(0, e.hp / e.max), 3);
