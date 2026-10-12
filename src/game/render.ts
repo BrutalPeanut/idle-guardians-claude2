@@ -124,23 +124,24 @@ function blob(ctx: Ctx, x: number, y: number, rx: number, ry: number, fill: stri
   if (hex && Math.min(rx, ry) > 3.5) { ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.ellipse(x - rx * 0.32, y - ry * 0.52, rx * 0.34, ry * 0.16, -0.5, 0, 6.283); ctx.fill() }   // sky light
 }
 /** Per-dog motion memory: speed (for the run cycle and lean), hit flinch and a gait phase. */
-const DS: Record<string, { x: number; y: number; t: number; hp: number; run: number; step: number; fl: number }> = {}
+const DS: Record<string, { x: number; y: number; t: number; hp: number; run: number; step: number; fl: number; lean: number; rec: number }> = {}
 const DYN = { run: 0, step: 0 }
 const pawX = (sd: number) => DYN.run * Math.cos(DYN.step + (sd < 0 ? 0 : Math.PI)) * 2.4
 const pawY = (sd: number) => DYN.run * Math.max(0, Math.sin(DYN.step + (sd < 0 ? 0 : Math.PI))) * 3.4
 /** Rudy and Cooper are drawn larger so the strike team reads at a glance. Feet stay anchored. */
 const dogScale = (i: number) => i === 0 ? 1.45 : i === 1 ? 1.32 : 1
 function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing: boolean, tgt: Enemy | undefined) {
-  const gi = GUARDIANS.indexOf(g), st = DS[g.n] ?? (DS[g.n] = { x, y, t, hp: G.hp[gi] ?? 1, run: 0, step: 0, fl: 0 })
+  const gi = GUARDIANS.indexOf(g), st = DS[g.n] ?? (DS[g.n] = { x, y, t, hp: G.hp[gi] ?? 1, run: 0, step: 0, fl: 0, lean: 0, rec: 0 })
   const dt = Math.min(0.1, Math.max(0.001, t - st.t)), vx = (x - st.x) / dt, vy = (y - st.y) / dt, sp = t - st.t > 0.25 ? 0 : Math.hypot(vx, vy)
   st.run += (Math.min(1, sp / 70) - st.run) * 0.25; st.step += dt * (6 + st.run * 8); st.x = x; st.y = y; st.t = t
   if (gi >= 0 && G.hp[gi] < st.hp - 0.01) st.fl = 0.28; st.hp = G.hp[gi] ?? st.hp; st.fl = Math.max(0, st.fl - dt)
   DYN.run = st.run; DYN.step = st.step
-  const breath = Math.sin(t * 2.6 + x) * 0.014, hop = Math.abs(Math.sin(st.step)) * st.run * 2.2, flinch = st.fl > 0 ? Math.sin(st.fl * 70) * 1.6 * (st.fl / 0.28) : 0
-  const look = tgt ? Math.sign(tgt.x - x) : 0, lean = Math.max(-0.2, Math.min(0.2, vx * 0.0028)) + (firing ? -look * 0.07 : 0) + Math.sin(st.step) * 0.035 * st.run
+  const breath = Math.sin(t * 2.6 + x) * 0.014, hop = Math.abs(Math.sin(st.step)) * st.run * 2.2, flinch = st.fl > 0 ? Math.sin(st.fl * 50) * 0.8 * (st.fl / 0.28) : 0
+  const look = tgt ? Math.sign(tgt.x - x) : 0, rawLean = sp < 10 ? 0 : Math.max(-0.16, Math.min(0.16, vx * 0.0024)); st.lean += (rawLean - st.lean) * 0.1
+  const lean = st.lean + Math.sin(st.step) * 0.02 * st.run
   y += Math.sin(t * 6 + x) * 0.5 * (1 - st.run) - hop
   ctx.fillStyle = 'rgba(0,0,0,' + (0.26 - hop * 0.03) + ')'; ctx.beginPath(); ctx.ellipse(x, y + 15 + hop, (g.look === 'cooper' ? 10.5 : 12.5) * (1 - hop * 0.04), 4, 0, 0, 6.283); ctx.fill()
-  ctx.save(); ctx.translate(x + flinch - (firing ? look * 1.2 : 0), y + 15); ctx.rotate(lean); ctx.scale(1 - breath * 0.6 + (st.fl > 0 ? 0.05 : 0), 1 + breath + hop * 0.01 - (st.fl > 0 ? 0.04 : 0)); ctx.translate(-x, -(y + 15))
+  ctx.save(); ctx.translate(x + flinch, y + 15); ctx.rotate(lean); ctx.scale(1 - breath * 0.6 + (st.fl > 0 ? 0.05 : 0), 1 + breath + hop * 0.01 - (st.fl > 0 ? 0.04 : 0)); ctx.translate(-x, -(y + 15))
   if (g.look === 'rudy') drawRudy(ctx, g, x, y, t, look)
   else if (g.look === 'cooper') drawCooper(ctx, g, x, y, t, look)
   else drawPlainDog(ctx, g, x, y, look, t)
@@ -316,7 +317,8 @@ function drawHeld(ctx: Ctx, lvl: number, gx: number, gy: number, tgt: Enemy | un
   const dx = tgt ? tgt.x - gx : 1, dy = tgt ? tgt.y - cy : 0, flip = dx < 0
   const ang = Math.max(-0.4, Math.min(0.4, Math.atan2(dy, Math.abs(dx)) * 0.5)) // keep the weapon below the face
   ctx.save(); ctx.translate(gx + (flip ? -3 : 3), cy); ctx.scale(flip ? -1 : 1, 1); ctx.rotate(ang)
-  ctx.translate(firing ? 3 : 7, 0)
+  const ds = DS[g.n]; if (ds) ds.rec += ((firing ? 1 : 0) - ds.rec) * 0.12
+  ctx.translate(7 - 2 * (ds ? ds.rec : 0), 0)
   drawWeaponIcon(ctx, lvl, 0, 0, 0.66)
   for (const px of [-5, 5]) { ctx.fillStyle = g.fur; ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, 2.6, 3.2, 0, 6.283); ctx.fill(); ctx.stroke() }
   ctx.restore()
