@@ -401,7 +401,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * GUN_MUL * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * gunMul() * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -451,6 +451,8 @@ export const NADE_TARGETS = 5
 export const BOOST = { dur: 600, cap: 1800, gold: 0.5, dmg: 0.25 }
 export const startBoost = () => { G.boostT = Math.min(BOOST.cap, G.boostT + BOOST.dur); save() }
 export const GUN_MUL = 7
+/** Guns ramp up with the stage: modest early (so the first stages are a fight), full strength by stage ~26. */
+const gunMul = () => 1.5 + (GUN_MUL - 1.5) * Math.min(1, Math.max(0, (G.stage - 1) / 25))
 /** Size of the biggest bunch of enemies a grenade would catch. */
 export function bestClump() {
   const live = G.enemies.filter(e => e.hp > 0); let bc = 0
