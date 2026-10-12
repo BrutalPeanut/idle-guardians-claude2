@@ -181,10 +181,11 @@ export function drawGear(ctx: Ctx, t: number) {
   const n = unlockedGuardians(G.stage)
   if (R.gearDog >= n) R.gearDog = 0
   for (let k = 0; k < 3; k++) {
-    const x = 16 + k * 112, c = G.chests[k]
-    button(ctx, 'chest_' + k, x, 52, 104, 44, { top: c ? '#34444e' : '#252f36', bot: c ? '#1d2a31' : '#1b2328' })
-    chestIcon(ctx, x + 24, 72, 0.75, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 46, 66); ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c + (c ? '  OPEN' : ''), x + 46, 82)
+    const x = 16 + k * 80, c = G.chests[k]
+    button(ctx, 'chest_' + k, x, 52, 76, 44, { top: c ? '#34444e' : '#252f36', bot: c ? '#1d2a31' : '#1b2328' })
+    chestIcon(ctx, x + 19, 72, 0.6, k); ctx.textAlign = 'left'; ctx.fillStyle = c ? '#fff' : '#7f929a'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(CHEST_NAMES[k].split(' ')[0], x + 38, 66); ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = c ? CHEST_COLS[k] : '#7f929a'; ctx.fillText('x' + c, x + 38, 82)
   }
+  { const tot = G.chests[0] + G.chests[1] + G.chests[2]; button(ctx, 'chest_all', 256, 52, 88, 44, { top: tot ? '#52d273' : '#3a4850', bot: tot ? '#25994a' : '#26323a', disabled: !tot, label: tot ? 'OPEN ALL' : 'NO CHESTS', size: tot ? 13 : 10 }) }
   for (let i = 0; i < n; i++) button(ctx, 'gt_' + i, 16 + i * 84, 106, 78, 28, { top: i === R.gearDog ? '#ffb347' : '#3a4850', bot: i === R.gearDog ? '#e0731a' : '#26323a', label: GUARDIANS[i].n, size: 12 })
   const dog = dogId(R.gearDog)
   SLOTS.forEach((sl, k) => { const x = 16 + k * 112, it = G.gear.find(g => g.on === dog && g.slot === sl) ?? null; R.btns['slot_' + k] = { x, y: 142, w: 104, h: 74 }; itemCard(ctx, x, 142, 104, 74, it, false, sl.toUpperCase()) })
@@ -205,8 +206,24 @@ export function drawGear(ctx: Ctx, t: number) {
     button(ctx, 'sellsel', sel.on < 0 ? 250 : 150, py + 48, sel.on < 0 ? 94 : 194, 34, { top: '#e0b24a', bot: '#9a6a18', label: 'Sell ' + fmt(sellValue(sel)), size: 12 })
   } else { ctx.textAlign = 'center'; ctx.fillStyle = '#9fb5aa'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Tap an item to compare, or let the pack pick:', W / 2, py + 22); button(ctx, 'gear_auto', 70, py + 36, 220, 40, { top: '#52d273', bot: '#25994a', label: 'AUTO-EQUIP BEST', size: 14 }) }
   if (R.reveal) drawReveal(ctx, t)
+  if (R.summary) drawSummary(ctx)
 }
 
+/** Result of OPEN ALL: every item in one grid, best first, with a one-tap auto-equip. */
+function drawSummary(ctx: Ctx) {
+  const sm = R.summary; if (!sm) return
+  R.btns = {}; ctx.fillStyle = 'rgba(2,4,6,.985)'; ctx.fillRect(0, 0, W, H)
+  const F = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd84a'; ctx.font = '400 22px ' + F; ctx.fillText(sm.chests + ' chest' + (sm.chests > 1 ? 's' : '') + ' opened', W / 2, 40)
+  const items = sm.ids.map(itemOf).filter((x): x is Item => !!x)
+  const counts = [0, 0, 0, 0]; items.forEach(i => counts[i.rar]++)
+  ctx.font = '400 12px ' + F; let lx = W / 2 - 150; for (let r = 3; r >= 0; r--) if (counts[r]) { ctx.textAlign = 'left'; ctx.fillStyle = RARITY[r].col; const tx = counts[r] + ' ' + RARITY[r].n; ctx.fillText(tx, lx, 66); lx += ctx.measureText(tx).width + 14 }
+  items.forEach((it, k) => { const x = 16 + (k % 4) * 84, y = 86 + Math.floor(k / 4) * 62; itemCard(ctx, x, y, 76, 56, it, false, '') })
+  const rows = Math.ceil(items.length / 4), by = Math.min(470, 86 + rows * 62 + 14)
+  if (sm.sold > 0) { ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a'; ctx.font = '400 12px ' + F; ctx.fillText('Inventory full: extra items sold for ' + fmt(sm.sold) + ' gold', W / 2, by - 2) }
+  button(ctx, 'sum_equip', 50, by + 14, 260, 46, { top: '#52d273', bot: '#25994a', label: 'AUTO-EQUIP BEST', size: 15 })
+  button(ctx, 'sum_done', 90, by + 68, 180, 38, { top: '#5b6c75', bot: '#3a4850', label: 'Done', size: 13 })
+}
 function drawReveal(ctx: Ctx, t: number) {
   const rv = R.reveal; if (!rv) return
   R.btns = {}; rv.t += 1 / 60
@@ -268,6 +285,16 @@ export function screenButton(k: string): boolean {
   if (k.startsWith('sb_')) { R.skillTab = +k.slice(3); return true }
   if (k.startsWith('sk_')) { if (!buySkill(k.slice(3))) G.banner = { text: pointsLeft() < 1 ? 'No Paw Points left' : 'Maxed', sub: pointsLeft() < 1 ? 'Reach new stages or Rebirth to earn more' : undefined, t: 1.2 }; else Audio_.ui(); return true }
   if (k === 'respec') { if (respec()) G.banner = { text: 'Skills reset', t: 1.2 }; else G.banner = { text: 'Need ' + RESPEC_GEMS + ' gems', t: 1.2 }; return true }
+  if (k === 'chest_all') {
+    const ids: number[] = []; let sold = 0, chests = 0
+    for (const tier of [2, 1, 0]) while (G.chests[tier] > 0) { const r = openChest(tier); if (!r) break; chests++; if (r.sold) sold += r.sold; else ids.push(r.item.id) }
+    if (!chests) { G.banner = { text: 'No chests', sub: 'Chests drop from bosses, login streaks and raids', t: 1.4 }; return true }
+    ids.sort((a, b) => (itemOf(b)?.rar ?? 0) - (itemOf(a)?.rar ?? 0)); R.summary = { ids, sold, chests }; R.sel = -1
+    if (ids.some(i => (itemOf(i)?.rar ?? 0) >= 2)) Audio_.fanfare(); else Audio_.coins()
+    return true
+  }
+  if (k === 'sum_equip') { const m = autoEquip(); G.banner = { text: m ? 'GEAR UPDATED' : 'Already the best set', t: 1.3 }; R.summary = null; return true }
+  if (k === 'sum_done') { R.summary = null; return true }
   if (k.startsWith('chest_')) {
     const r = openChest(+k.slice(6)); if (r) { R.reveal = { id: r.sold ? -1 : r.item.id, tier: +k.slice(6), sold: r.sold, phase: 0, t: 0 }; if (r.item.rar >= 2) R.reveal.t = 0; Audio_.ui() } else G.banner = { text: 'No chests', sub: 'Chests drop from bosses, login streaks and raids', t: 1.4 }
     return true
