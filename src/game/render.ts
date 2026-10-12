@@ -3,7 +3,7 @@ import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unloc
 import type { Guardian } from './data'
 import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
-import { G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
+import { baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -789,7 +789,7 @@ export function render(ctx: Ctx, t: number) {
 
   if (!G.raid) { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 9px ' + FONT; outText(ctx, 'Next: ' + nextGoal(G.best), 16, 96, '#ffe9a0', 2.5) }
   button(ctx, 'help', 214, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', label: '?', size: 17 })
-  button(ctx, 'speed', 252, 8, 62, 34, { label: (G.speed * (G.rebirths > 0 ? 2 : 1)) + 'x', size: 15, top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
+  button(ctx, 'speed', 252, 8, 62, 34, { label: (G.speed * baseSpeed()) + 'x', size: 15, top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 318, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
   { // stardust chip: permanent currency; tap to open Rebirth (glows when a rebirth would pay out)
     const sx = 216, sw = 134, can = rebirthGain(G.stage) > 0, pulse = can ? 0.5 + 0.5 * Math.sin(t * 5) : 0

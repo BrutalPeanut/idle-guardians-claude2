@@ -132,8 +132,8 @@ export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.fac
 export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper') + 0.15 * pk('lucky'))
 /** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
 export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
-/** Prestige perk: once you have rebirthed, the game always runs at 2x; the manual 2x button multiplies on top (4x). */
-export const baseSpeed = () => (G.rebirths > 0 ? 2 : 1)
+/** Prestige perk: once you have rebirthed, stages you have already passed (below your best) run at 2x; your frontier stage stays 1x; the manual 2x button multiplies on top (4x). */
+export const baseSpeed = () => (G.rebirths > 0 && G.stage < G.best ? 2 : 1)
 export const starMul = () => 1 + STAR_BONUS * G.stardust
 export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
 // ---- daily quests ----
