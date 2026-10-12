@@ -4,7 +4,7 @@
  * build can unlock this for free. On the phone, the entitlement is re-checked with RevenueCat at start-up, so a hand-edited save
  * cannot keep ads off.
  */
-import { G, save, GEM_PACKS } from './sim'
+import { G, save, GEM_PACKS, STARTER_GEMS, STARTER_BOOST_S, BOOST } from './sim'
 import { RC_KEYS, RC_ENTITLEMENT } from './config'
 import { track } from './telemetry'
 
@@ -17,7 +17,7 @@ interface PurchasesApi {
   restorePurchases: () => Promise<{ customerInfo?: CustomerInfo }>
   getCustomerInfo: () => Promise<{ customerInfo?: CustomerInfo }>
 }
-export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg> }
+export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg>, starter: null as Pkg | null }
 const pkgFor = (pk: Pkg[], key: string) => pk.find(p => p.identifier === key || p.product?.identifier === key || (p.product?.identifier ?? '').endsWith(key) || p.identifier.endsWith(key))
 let api: PurchasesApi | null = null
 
@@ -41,7 +41,7 @@ export async function initPurchases() {
     apply((await api.getCustomerInfo()).customerInfo)
     const off = await api.getOfferings(), pk = off.current?.availablePackages ?? []
     IAP.pkg = pkgFor(pk, 'noads') ?? (pk.length === 1 ? pk[0] : null); for (const g of GEM_PACKS) { const f = pkgFor(pk, g.key); if (f) IAP.gems[g.key] = f }
-    IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
+    IAP.starter = pkgFor(pk, 'starter') ?? null; IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
   } catch { IAP.status = 'unavailable' }
 }
 export async function buyNoAds() {
@@ -60,6 +60,21 @@ export async function restoreBuys() {
 }
 
 /** Gem packs are consumables: gems are granted on the device the moment the store confirms the purchase. */
+/** The starter offer shows only where it can be bought (the phone app), and only once. */
+export const starterShowing = () => G.starterDue && !G.starterSeen && !G.noAds && IAP.starter !== null
+export function skipStarter() { G.starterSeen = true; G.starterDue = false; save() }
+/** Starter bundle: Remove Ads (via the no_ads entitlement on the product), 350 gems and 10 minutes of boost. Once per player. */
+export async function buyStarter() {
+  const pkg = IAP.starter
+  if (!api || !pkg || IAP.status === 'busy') return
+  IAP.status = 'busy'; IAP.msg = ''; track('starter_buy_tap')
+  try {
+    const r = await api.purchasePackage({ aPackage: pkg }); apply(r.customerInfo)
+    G.gems += STARTER_GEMS; G.boostT = Math.min(BOOST.cap, G.boostT + STARTER_BOOST_S); G.starterSeen = true; G.starterDue = false; save(); track('starter_bought')
+    IAP.msg = 'Starter pack claimed. Thank you!'
+  } catch { IAP.msg = 'Purchase cancelled.' }
+  IAP.status = 'ready'
+}
 export async function buyGems(key: string) {
   const g = GEM_PACKS.find(x => x.key === key), pkg = IAP.gems[key]
   if (!api || !g || !pkg || IAP.status === 'busy') return

@@ -88,7 +88,7 @@ interface State {
   /** Rewarded-ad usage today (see ads.ts) and the No-Ads purchase flag. */
   ads: { day: string; used: number }; noAds: boolean
   /** Shop: daily counters for the free ad offers (kept apart from the general ad cap so No-Ads owners cannot farm them). */
-  shop: { day: string; chest: number; gems: number }
+  shop: { day: string; chest: number; gems: number }; starterSeen: boolean; starterDue: boolean
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   boostT: number; frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number; tankT: number; tankCd: number; panicT: number; panicCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -118,7 +118,7 @@ export const G: State = {
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], missiles: [], cover: [], hazards: [], events: [], t: 0,
   fail: 0, failStage: 0, wipe: null, reviveStage: 0, reinforce: false, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, shop: { day: '', chest: 0, gems: 0 }, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
+  boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, starterSeen: false, starterDue: false, shop: { day: '', chest: 0, gems: 0 }, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
   stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, life: {}, achClaimed: [], pass: { s: 0, xp: 0, claimed: 0 }, spin: { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
@@ -139,6 +139,8 @@ export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max
 // ---- daily quests ----
 /** Roll a fresh set when the local date changes. */
 // ---- shop ----
+/** Starter bundle: one-time offer shown when a player first reaches this stage. */
+export const STARTER_STAGE = 11, STARTER_GEMS = 350, STARTER_BOOST_S = 600
 export const SHOP = { chestAds: 3, gemAds: 3, gemAdAmt: 5, cost: { chest1: 25, chest2: 70, boost: 30, raid: 20 } as Record<string, number> }
 export const GEM_PACKS = [{ key: 'gems_s', gems: 60, name: 'Handful', tag: '' }, { key: 'gems_m', gems: 350, name: 'Pouch', tag: 'POPULAR' }, { key: 'gems_l', gems: 900, name: 'Treasure', tag: 'BEST VALUE' }]
 function rollShop() { const d = dayKey(); if (G.shop.day !== d) G.shop = { day: d, chest: 0, gems: 0 } }
@@ -305,7 +307,7 @@ export const isBoss = (s: number) => s % 10 === 0
 let bakAt = 0
 export function save() {
   try { if (Date.now() - bakAt > 120000) { const prev = localStorage.getItem('ig_save'); if (prev) { localStorage.setItem('ig_save_bak', prev); bakAt = Date.now() } } } catch { /* storage unavailable */ }
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
@@ -317,7 +319,7 @@ export function load() {
     const num = (v: unknown, d: number) => typeof v === 'number' && Number.isFinite(v) ? v : d
     const arr = <T,>(v: unknown, d: T[]) => Array.isArray(v) ? v as T[] : d
     const benchOk = arr<number | null>(s.bench, []).length === 8 ? s.bench : (() => { const b: (number | null)[] = new Array(8).fill(null); arr<number | null>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = v }); return b })()
-    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, starterSeen: !!s.ss, shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
@@ -741,7 +743,9 @@ export function update(dtReal: number) {
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages'); addPassXp(isBoss(cleared) ? PASS_XP_GAIN.boss : PASS_XP_GAIN.stage); if (isBoss(cleared)) track('bosses')
     if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0); G.coins += Math.round((4 + Math.floor(cleared / 5)) * (1 + cp('coins'))); clanContribute(12) } else clanContribute(3)
-    G.stage++; G.best = Math.max(G.best, G.stage); G.reinforce = false; startStage()
+    G.stage++; G.best = Math.max(G.best, G.stage); G.reinforce = false
+    if (G.stage === STARTER_STAGE && !G.starterSeen && !G.noAds) G.starterDue = true // the one-time starter bundle offer (see starterOffer)
+    startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
     save()
   }

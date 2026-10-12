@@ -1,6 +1,7 @@
 import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
+import { starterShowing, buyStarter, skipStarter } from './iap'
 import { WALL_WIPES, regroupFree, revivePack, reinforceRegroup, BOOST, baseSpeed, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
@@ -9,7 +10,7 @@ import { openSaveData } from './savedata'
 import { buyNoAds, restoreBuys, initPurchases } from './iap'
 import { initTelemetry, track as tele } from './telemetry'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
-import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawWipe, drawRebirth, drawQuests, drawAd } from './render'
+import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawWipe, drawStarter, drawRebirth, drawQuests, drawAd } from './render'
 import { Audio_ } from './audio'
 
 /** Boots the game on a canvas; returns a disposer. */
@@ -39,6 +40,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const p = pt(ev); R.hint = 0
     if (adState.play) { const r = R.btns.ad_done; if (r && adState.play.done && inR(p, r)) { R.pressed = 'ad_done'; mode = 'btn'; Audio_.ui() } return }
     if (G.away) { for (const k of ['welcome', 'welcome_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
+    if (starterShowing()) { for (const k of ['starter_buy', 'starter_skip']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (G.wipe) { for (const k of ['wipe_regroup', 'wipe_revive', 'wipe_reinf_ad', 'wipe_reinf_gems']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (G.pick) { for (const k of ['pick0', 'pick1', 'pick2', 'reroll', 'reroll_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.tourAsk || R.tour !== null) { for (const k in R.btns) if (inR(p, R.btns[k])) { R.pressed = k; mode = 'btn'; Audio_.ui() } return }
@@ -73,6 +75,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'raid_ad') { if (R.screen === 'raid') adGate(showRewardedAd('raid', () => { G.raidInfo.extra++; G.banner = { text: '+1 Raid attempt', t: 1.4 } })) }
     else if (k === 'spin_ad') { if (R.screen === 'spin' && !R.spinAnim) adGate(showRewardedAd('spin', () => { if (spinsLeft().ad) startSpin(true) })) }
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }
+    else if (k === 'starter_buy') { void buyStarter() }
+    else if (k === 'starter_skip') { skipStarter() }
     else if (k === 'wipe_regroup') { if (G.wipe) regroupFree() }
     else if (k === 'wipe_revive') { if (G.wipe && G.reviveStage !== G.stage) adGate(showRewardedAd('revive', () => { if (revivePack()) track2('wipe_revive') })) }
     else if (k === 'wipe_reinf_ad') { if (G.wipe && G.wipe.fails >= WALL_WIPES) adGate(showRewardedAd('reinforce', () => { if (reinforceRegroup('ad')) track2('wipe_reinforce_ad') })) }
@@ -128,13 +132,13 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
     try {
-      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick && !G.wipe) { const k = Math.max(1, Math.round(G.speed * baseSpeed() / 2)); for (let j = 0; j < k; j++) update(1 / 60 / k) } acc -= 1 / 60 }
+      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick && !G.wipe && !starterShowing()) { const k = Math.max(1, Math.round(G.speed * baseSpeed() / 2)); for (let j = 0; j < k; j++) update(1 / 60 / k) } acc -= 1 / 60 }
       drainEvents(); updateFx(dt)
     } catch (e) { acc = 0; if (errs++ < 5) console.error('sim error', e) }
     try {
       ctx.setTransform(ctx.canvas.width / 360, 0, 0, ctx.canvas.height / 640, 0, 0); ctx.globalAlpha = 1; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
       render(ctx, T)
-      if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (G.wipe) drawWipe(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
+      if (adState.play) drawAd(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (starterShowing()) drawStarter(ctx, T); else if (G.wipe) drawWipe(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
     } catch (e) {
       if (errs++ < 5) console.error('render error', e)
       R.screen = null; R.quests = false; R.rebirth = false; R.help = false; R.tour = null; R.tourAsk = false
