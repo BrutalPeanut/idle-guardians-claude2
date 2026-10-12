@@ -14,3 +14,7 @@ export const ADMOB_LIVE = { android: '', ios: '' }
 export const ADMOB_TEST = { android: 'ca-app-pub-3940256099942544/5224354917', ios: 'ca-app-pub-3940256099942544/1712485313' }
 /** Extra safety net for live builds: AdMob test-device IDs (printed in the Android log as "Use RequestConfiguration...setTestDeviceIds"). Real units then serve test ads on these phones. */
 export const ADMOB_TEST_DEVICES: string[] = []
+
+/** Public pages used by the in-game Privacy & Support tile and by the store listings. */
+export const SITE_URL = 'https://brutalpeanut.github.io/idle-guardians-claude2/'
+export const PRIVACY_URL = SITE_URL + 'privacy.html'

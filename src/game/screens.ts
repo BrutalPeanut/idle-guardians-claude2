@@ -40,7 +40,7 @@ export const HUB_SECTIONS: { id: string; label: string; col: string; tiles: stri
   { id: 'battle', label: 'Battle', col: '#ff6a5a', tiles: ['raid', 'auto', 'weekly', 'stats'] },
   { id: 'grow', label: 'Grow', col: '#ff9a3a', tiles: ['train', 'skills', 'gear', 'kennel', 'rebirth'] },
   { id: 'rewards', label: 'Rewards', col: '#52d273', tiles: ['boost', 'quests', 'login', 'spin', 'pass', 'ach'] },
-  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'tour', 'help'] },
+  { id: 'more', label: 'More', col: '#5ab8ff', tiles: ['rank', 'clan', 'tour', 'help', 'privacy'] },
 ]
 const tileLive = (id: string) => { const tl = TILES.find(x => x.id === id); return !!tl && unlocked(id) && !!tl.badge?.() }
 const sectionBadge = (sec: { tiles: string[] }) => sec.tiles.some(tileLive)
@@ -638,3 +638,4 @@ function drawBoost(ctx: Ctx) {
   ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Optional. Ads only ever run when you tap this.', W / 2, 394)
 }
 registerTile({ id: 'boost', label: 'Pack Boost', sub: () => G.boostT > 0 ? mmss(G.boostT) + ' left' : '+50% gold, +25% damage', icon: 'bolt', col: '#b58cf0', badge: () => G.boostT <= 0 && adsLeft() > 0 })
+registerTile({ id: 'privacy', label: 'Privacy & Support', sub: () => 'Policy, contact', icon: 'shield', col: '#7f929a' })

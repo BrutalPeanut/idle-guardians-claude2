@@ -1,0 +1,8 @@
+{
+  "appId": "com.CHANGEME.woofwars",
+  "appName": "Woof Wars",
+  "webDir": "capdist",
+  "server": { "androidScheme": "https" },
+  "android": { "backgroundColor": "#10181e" },
+  "ios": { "backgroundColor": "#10181e" }
+}

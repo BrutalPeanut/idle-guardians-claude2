@@ -28,7 +28,7 @@ export function showRewardedAd(reason: string, grant: () => void): 'ok' | 'cap' 
 
 // ---- real ads (only inside the Capacitor phone app) ----
 interface Cap { isNativePlatform?: () => boolean; getPlatform?: () => string; registerPlugin?: (n: string) => unknown }
-interface AdMobApi { initialize: (o: object) => Promise<void>; prepareRewardVideoAd: (o: object) => Promise<unknown>; showRewardVideoAd: () => Promise<unknown> }
+interface AdMobApi { requestConsentInfo?: () => Promise<{ status?: string; isConsentFormAvailable?: boolean; canRequestAds?: boolean }>; showConsentForm?: () => Promise<{ canRequestAds?: boolean }>; initialize: (o: object) => Promise<void>; prepareRewardVideoAd: (o: object) => Promise<unknown>; showRewardVideoAd: () => Promise<unknown> }
 let adInit: Promise<void> | null = null
 /** The AdMob plugin, or null on the web (the game then uses the fake TEST AD, which can never touch a real ad network). */
 function nativeAdMob(): { api: AdMobApi; platform: 'android' | 'ios' } | null {
@@ -47,7 +47,11 @@ function startNativeAd(n: { api: AdMobApi; platform: 'android' | 'ios' }, reason
   const fail = () => { adState.play = null; adState.lastEnd = Date.now() - ADS.cooldownS * 500; G.banner = { text: 'Ad not available', sub: 'Try again in a bit', t: 1.6 } }
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 120000))
   const run = (async () => {
-    adInit ??= n.api.initialize({ initializeForTesting: !ADS_LIVE, testingDevices: ADMOB_TEST_DEVICES })
+    // consent first (Google's UMP message: shown only where the law requires it), then initialise, then request an ad
+    adInit ??= (async () => {
+      try { const info = await n.api.requestConsentInfo?.(); if (info?.isConsentFormAvailable && info.status === 'REQUIRED') await n.api.showConsentForm?.() } catch { /* no consent form configured yet: carry on with test ads */ }
+      await n.api.initialize({ initializeForTesting: !ADS_LIVE, testingDevices: ADMOB_TEST_DEVICES })
+    })()
     await adInit
     await n.api.prepareRewardVideoAd({ adId: adUnitId(n.platform), isTesting: !ADS_LIVE || adsAreTest(n.platform) })
     await n.api.showRewardVideoAd() // resolves with the reward item only once the reward is earned
