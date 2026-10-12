@@ -5,7 +5,7 @@ import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
 import { G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
-import { drawCover, drawHazard, drawEBullets, drawShells, drawStatus, drawHold, coverDust } from './coverRender'
+import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
 import { Audio_ } from './audio'
 import { BLESSINGS } from './blessings'
@@ -25,7 +25,7 @@ export type Ctx = CanvasRenderingContext2D
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -500,6 +500,48 @@ function fireAura(ctx: Ctx, x: number, y: number, sc: number, t: number, fade: n
   for (let i = 0; i < 6; i++) { const u = (t * 1.3 + i / 6) % 1, ex = x + Math.sin(i * 5.1 + t * 3) * 12 * sc, ey = y + (4 - u * 30) * sc; ctx.fillStyle = 'rgba(255,' + (150 + i * 15) + ',60,' + (1 - u) + ')'; ctx.beginPath(); ctx.arc(ex, ey, (1.8 - u) * sc, 0, 6.283); ctx.fill() }
   ctx.restore()
 }
+
+/** Feral Hound: a gaunt, fast zombie dog. Rapid four-leg sprint, red eyes, bared fangs, speed streaks behind it. */
+function drawHound(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: boolean) {
+  const k = e.r / 8.5, ph = GAIT.ph * 1.8, F = (c: string) => fl ? '#fff' : c
+  ctx.save(); ctx.translate(x, y + 2); ctx.scale(k, k); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  if (!fl) { ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1; for (const sx of [-6, 0, 6]) { ctx.beginPath(); ctx.moveTo(sx, -12 - ((t * 9 + sx) % 3)); ctx.lineTo(sx, -19 - ((t * 9 + sx) % 3)); ctx.stroke() } }
+  for (const [lx, ly, off] of [[-5, 7, 0], [5, 7, Math.PI], [-4.2, 2.5, Math.PI], [4.2, 2.5, 0]] as [number, number, number][]) { const q = Math.sin(ph + off) * 3; ctx.strokeStyle = OUT; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(lx, ly - 2); ctx.lineTo(lx + (lx < 0 ? -1 : 1) * 1.2, ly + 2 + q); ctx.stroke(); ctx.strokeStyle = F('#6d6a5e'); ctx.lineWidth = 2; ctx.stroke() }
+  ctx.beginPath(); ctx.moveTo(0, 8); ctx.quadraticCurveTo(7 + Math.sin(t * 14) * 3, 13, 5, 17); ctx.strokeStyle = OUT; ctx.lineWidth = 3.4; ctx.stroke(); ctx.strokeStyle = F('#6d6a5e'); ctx.lineWidth = 1.8; ctx.stroke()
+  blob(ctx, 0, 2.5, 6.4, 8.4, F('#85826f'), null)
+  if (!fl) { ctx.strokeStyle = 'rgba(30,20,16,.5)'; ctx.lineWidth = 0.9; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-4.4, 0 + i * 2.2); ctx.quadraticCurveTo(0, 1 + i * 2.2, 4.4, 0 + i * 2.2); ctx.stroke() }
+    ctx.fillStyle = 'rgba(120,20,20,.55)'; ctx.beginPath(); ctx.ellipse(2.6, 5.4, 1.8, 1.3, 0.4, 0, 6.283); ctx.fill() }
+  for (const sx of [-1, 1]) { ctx.fillStyle = F('#4c493f'); ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(sx * 3.4, -8.4); ctx.lineTo(sx * 7.6, -13.2); ctx.lineTo(sx * 6.2, -6.4); ctx.closePath(); ctx.fill(); ctx.stroke() }
+  blob(ctx, 0, -5.6, 5.8, 5.2, F('#8f8c78'), null)
+  blob(ctx, 0, -2.2, 3.6, 3, F('#a7a48d'), null)
+  if (!fl) {
+    ctx.fillStyle = '#2a0a0a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(0, -0.4 + Math.sin(t * 16) * 0.5, 3, 1.7 + Math.abs(Math.sin(t * 16)) * 0.6, 0, 0, 6.283); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#f2ecd0'; for (const fx of [-2.2, 2.2]) { ctx.beginPath(); ctx.moveTo(fx - 0.7, -1.2); ctx.lineTo(fx, 1.2); ctx.lineTo(fx + 0.7, -1.2); ctx.fill() }
+    for (const sx of [-1, 1]) { ctx.fillStyle = '#ff3a2a'; ctx.beginPath(); ctx.moveTo(sx * 1.4, -6.4); ctx.lineTo(sx * 4.6, -7.6); ctx.lineTo(sx * 4, -4.8); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,60,40,.35)'; ctx.beginPath(); ctx.arc(sx * 3.2, -6, 3.4, 0, 6.283); ctx.fill() }
+  }
+  ctx.restore(); ctx.lineCap = 'butt'
+}
+/** Missile Bot: slow, armoured, tracked. Two shoulder pods glow before a launch, so you have a moment to get out of the way. */
+function drawLauncher(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: boolean) {
+  const k = e.r / 14, charge = e.cd < 0.9 && e.cd > 0, F = (c: string) => fl ? '#fff' : c, roll = GAIT.ph * 2
+  ctx.save(); ctx.translate(x, y + 4); ctx.scale(k, k); ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  for (const sx of [-1, 1]) { ctx.fillStyle = F('#3b4048'); ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(sx * 9 - 5, 4, 10, 15, 4); ctx.fill(); ctx.stroke()
+    if (!fl) { ctx.strokeStyle = '#1f2328'; ctx.lineWidth = 1.2; for (let i = 0; i < 4; i++) { const yy = 6 + ((i * 3.6 + roll * 3) % 12); ctx.beginPath(); ctx.moveTo(sx * 9 - 4, yy); ctx.lineTo(sx * 9 + 4, yy); ctx.stroke() } } }
+  const bg = ctx.createLinearGradient(-13, -8, 13, 12); bg.addColorStop(0, fl ? '#fff' : '#9aa77a'); bg.addColorStop(0.55, fl ? '#fff' : '#6b7a52'); bg.addColorStop(1, fl ? '#fff' : '#454f36')
+  ctx.fillStyle = bg; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-12.5, -7, 25, 21, 5); ctx.fill(); ctx.stroke()
+  if (!fl) { ctx.fillStyle = '#e0b02a'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(-9 + i * 4.2, 9); ctx.lineTo(-6.6 + i * 4.2, 9); ctx.lineTo(-8.4 + i * 4.2, 13); ctx.lineTo(-10.8 + i * 4.2, 13); ctx.fill() }   // hazard stripes
+    ctx.fillStyle = '#7a8a9a'; for (const [rx, ry] of [[-10, -5], [10, -5], [-10, 11], [10, 11]]) { ctx.beginPath(); ctx.arc(rx, ry, 1, 0, 6.283); ctx.fill() } }
+  for (const sx of [-1, 1]) { ctx.save(); ctx.translate(sx * 11, -7); ctx.rotate(sx * 0.35)
+    ctx.fillStyle = F('#4a525c'); ctx.beginPath(); ctx.roundRect(-5, -15, 10, 17, 3); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = fl ? '#fff' : charge ? '#ffe45a' : '#ff7a2a'; for (const q of [-2, 2]) { ctx.beginPath(); ctx.arc(q, -13, 2.1, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (charge && !fl) { ctx.fillStyle = 'rgba(255,200,60,' + (0.3 + 0.3 * Math.sin(t * 40)) + ')'; ctx.beginPath(); ctx.arc(0, -13, 7, 0, 6.283); ctx.fill() }
+    ctx.restore() }
+  ctx.fillStyle = F('#aab4a0'); ctx.beginPath(); ctx.roundRect(-7, -15, 14, 10, 4); ctx.fill(); ctx.stroke()
+  if (!fl) { const ex = Math.sin(t * 1.8 + e.wob) * 2.4; ctx.fillStyle = '#14181d'; ctx.beginPath(); ctx.roundRect(-5.4, -12.6, 10.8, 4.4, 2); ctx.fill()
+    const eg = ctx.createRadialGradient(ex, -10.4, 0, ex, -10.4, 4); eg.addColorStop(0, '#fff2d0'); eg.addColorStop(0.35, charge ? '#ffd84a' : '#ff5a3a'); eg.addColorStop(1, 'rgba(255,80,40,0)'); ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(ex, -10.4, 4, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(5, -15); ctx.lineTo(7, -20); ctx.stroke(); ctx.fillStyle = '#c9d0c0'; ctx.beginPath(); ctx.ellipse(7, -21, 3.2, 1.4, Math.sin(t * 3) * 0.6, 0, 6.283); ctx.fill() }
+  ctx.restore(); ctx.lineCap = 'butt'
+}
 const ES = new WeakMap<Enemy, { x: number; y: number; t: number; vx: number; ph: number }>()
 const GAIT = { ph: 0, mv: 0 }
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
@@ -526,6 +568,8 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
       ctx.fillStyle = '#c9a63a'; ctx.strokeStyle = OUT; ctx.lineWidth = 0.9; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.roundRect(x + k * 3.6 * s - 1.2 * s, y + 6 * s, 2.4 * s, 4 * s, 0.6 * s); ctx.fill(); ctx.stroke() }   // ammo belt
     }
     if (e.kind === 'gunner') { ctx.fillStyle = '#3a414b'; ctx.beginPath(); ctx.roundRect(x - 3, y + 2 * s, 6, 14 * s, 2); ctx.fill(); ctx.stroke(); if (hot) { ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x, y + 16 * s, 3.5, 0, 6.283); ctx.fill() } }
+  } else if (e.kind === 'runner') { drawHound(ctx, e, t, x, y, fl)
+  } else if (e.kind === 'launcher') { drawLauncher(ctx, e, t, x, y, fl)
   } else if (e.kind === 'robot') { drawRobot(ctx, e, t, x, y, s, fl)
   } else { drawZombie(ctx, e, t, x, y, s, fl) }
   ctx.restore()
@@ -669,7 +713,7 @@ export function render(ctx: Ctx, t: number) {
     ctx.fillStyle = '#4b5a3a'; ctx.strokeStyle = OUT; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y - hgt, 5.5, 0, 6.283); ctx.fill(); ctx.stroke()
     ctx.fillStyle = '#ffd84a'; ctx.fillRect(x - 1.5, y - hgt - 8, 3, 3)
   }
-  drawShells(ctx, G.shells, t); drawEBullets(ctx, G.ebullets);
+  drawShells(ctx, G.shells, t); drawMissiles(ctx, G.missiles, t); drawEBullets(ctx, G.ebullets);
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); drawStatus(ctx, gp.x, gp.y - (dogScale(i) - 1) * 30, G.status[i]) }
   for (let i = 0; i < n; i++) { // floating health bar over each guardian
     const gp = guardianPos(i), f = Math.max(0, G.hp[i] / G.mhp[i]), w = 26 + (dogScale(i) - 1) * 24, yo = 28 + (dogScale(i) - 1) * 30
@@ -774,7 +818,8 @@ export function render(ctx: Ctx, t: number) {
   ctx.fillStyle = OUT; ctx.fillRect(0, BENCH.y - 26, W, 2.5); ctx.fillStyle = '#ffd84a'; ctx.globalAlpha = 0.85; ctx.fillRect(0, BENCH.y - 23.5, W, 1.5); ctx.globalAlpha = 1
   ctx.textAlign = 'left'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; outText(ctx, 'ARMORY · drag to merge', 8, BENCH.y - 11, '#c9dcd2', 3)
   { const gy = BENCH.y - 21, rdy = questReady(), pl = rdy ? 0.5 + 0.5 * Math.sin(t * 5) : 0
-    glass(ctx, 206, gy, 62, 18, 9); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+    button(ctx, 'nav_shop', 206, gy, 62, 18, { top: '#2a3d4b', bot: '#142029' }); ctx.save(); ctx.translate(218, gy + 9); ctx.scale(0.8, 0.8); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+    ctx.fillStyle = '#52d273'; ctx.beginPath(); ctx.arc(258, gy + 9, 6, 0, 6.283); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(255, gy + 8.2, 6, 1.6); ctx.fillRect(257.2, gy + 6, 1.6, 6)
     ctx.textAlign = 'left'; ctx.fillStyle = '#d6f2ff'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('' + G.gems, 229, gy + 9.5)
     { const gOn = unlocked('gear'), ch = G.chests[0] + G.chests[1] + G.chests[2], nd = Math.min(4, 2 + Math.floor(G.stage / 5))
       const spare = G.gear.some(it => it.on < 0 && Array.from({ length: nd }, (_, i) => i).some(i => !G.gear.some(w => w.on === dogId(i) && w.slot === it.slot)))

@@ -14,7 +14,7 @@ import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
-export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number }
+export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number }
 /** Boss dragons: 0 Magma Wyrm (fire barrage), 1 Frost Drake (ice nova), 2 Storm Wyvern (lightning strikes), 3 Plague Drake (spits venom, calls a brood). */
 export const DRAKES = [{ name: 'MAGMA WYRM', cast: 'FIRE BARRAGE', col: '#ff7a2a' }, { name: 'FROST DRAKE', cast: 'ICE NOVA', col: '#8fe0ff' }, { name: 'STORM WYVERN', cast: 'LIGHTNING', col: '#ffe45a' }, { name: 'PLAGUE DRAKE', cast: 'BROOD CALL', col: '#9be04a' }] as const
 export const drakeFor = (stage: number) => (Math.floor(stage / 10) - 1 + 400) % 4
@@ -22,6 +22,8 @@ export interface AutoCfg { on: boolean; shield: boolean; frenzy: boolean; nade: 
 export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string; gi: number }
 export interface EBullet { x: number; y: number; vx: number; vy: number; dmg: number; life: number; pass: number }
 export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number; col?: string }
+/** Missile fired by a Missile Bot: flies straight at where a dog WAS when it launched, so moving away dodges it; your cover blocks it. */
+export interface Missile { x: number; y: number; vx: number; vy: number; tx: number; ty: number; life: number; dmg: number; r: number }
 export interface Nade { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
 export interface Stats { dealt: number[]; nade: number; flank: number; taken: number[]; shield: number; cover: number }
 export const newStats = (): Stats => ({ dealt: [0, 0, 0, 0], nade: 0, flank: 0, taken: [0, 0, 0, 0], shield: 0, cover: 0 })
@@ -74,7 +76,7 @@ interface State {
   skills: Record<string, number>; best: number
   /** Support squad centre (guardians 2+). Follows the pack, or stays planted at `hold`. */
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
-  enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
+  enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; missiles: Missile[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   fail: number; failStage: number; spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
   nades: Nade[]; nadeCd: number
   /** Blessing stacks (id -> count) and a pending 3-way pick (ids) that pauses the game until chosen. */
@@ -85,6 +87,8 @@ interface State {
   gems: number; daily: Daily
   /** Rewarded-ad usage today (see ads.ts) and the No-Ads purchase flag. */
   ads: { day: string; used: number }; noAds: boolean
+  /** Shop: daily counters for the free ad offers (kept apart from the general ad cap so No-Ads owners cannot farm them). */
+  shop: { day: string; chest: number; gems: number }
   /** Active abilities: remaining effect time (t) and cooldown (cd), in sim seconds. */
   boostT: number; frenzyT: number; frenzyCd: number; shieldT: number; shieldCd: number; tankT: number; tankCd: number; panicT: number; panicCd: number
   banner: Banner | null; kills: number; combo: number; comboT: number
@@ -110,9 +114,9 @@ const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike te
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
-  enemies: [], shots: [], ebullets: [], shells: [], cover: [], hazards: [], events: [], t: 0,
+  enemies: [], shots: [], ebullets: [], shells: [], missiles: [], cover: [], hazards: [], events: [], t: 0,
   fail: 0, failStage: 0, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
-  boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
+  boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, shop: { day: '', chest: 0, gems: 0 }, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
   stash: 0, lastSeen: Date.now(), away: null, owned: [2, 3], squad: [2, 3], coins: 0, life: {}, achClaimed: [], pass: { s: 0, xp: 0, claimed: 0 }, spin: { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true }, autoT: 0, nadeTaught: false, clan: null, raid: null, raidInfo: { day: '', used: 0, extra: 0, best: 0 },
 }
 /**
@@ -130,6 +134,20 @@ export const starMul = () => 1 + STAR_BONUS * G.stardust
 export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
 // ---- daily quests ----
 /** Roll a fresh set when the local date changes. */
+// ---- shop ----
+export const SHOP = { chestAds: 3, gemAds: 3, gemAdAmt: 5, cost: { chest1: 25, chest2: 70, boost: 30, raid: 20 } as Record<string, number> }
+export const GEM_PACKS = [{ key: 'gems_s', gems: 60, name: 'Handful', tag: '' }, { key: 'gems_m', gems: 350, name: 'Pouch', tag: 'POPULAR' }, { key: 'gems_l', gems: 900, name: 'Treasure', tag: 'BEST VALUE' }]
+function rollShop() { const d = dayKey(); if (G.shop.day !== d) G.shop = { day: d, chest: 0, gems: 0 } }
+export const shopLeft = (kind: 'chest' | 'gems') => { rollShop(); return Math.max(0, (kind === 'chest' ? SHOP.chestAds : SHOP.gemAds) - G.shop[kind]) }
+export function shopClaim(kind: 'chest' | 'gems') { rollShop(); if (shopLeft(kind) <= 0) return false; G.shop[kind]++; if (kind === 'chest') addChest(0); else G.gems += SHOP.gemAdAmt; save(); return true }
+/** Spend gems: a chest, a Pack Boost (+10 min) or an extra Boss Raid attempt. */
+export function shopBuy(item: 'chest1' | 'chest2' | 'boost' | 'raid'): boolean {
+  const c = SHOP.cost[item]; if (G.gems < c) return false
+  if (item === 'boost' && G.boostT >= BOOST.cap) return false
+  G.gems -= c
+  if (item === 'chest1') addChest(1); else if (item === 'chest2') addChest(2); else if (item === 'boost') startBoost(); else G.raidInfo.extra++
+  save(); return true
+}
 export function ensureDaily() { const d = dayKey(); if (G.daily.day !== d) G.daily = rollDaily(d) }
 export function track(id: string, n = 1) {
   G.life[id] = (G.life[id] ?? 0) + n
@@ -279,7 +297,7 @@ export const isBoss = (s: number) => s % 10 === 0
 let bakAt = 0
 export function save() {
   try { if (Date.now() - bakAt > 120000) { const prev = localStorage.getItem('ig_save'); if (prev) { localStorage.setItem('ig_save_bak', prev); bakAt = Date.now() } } } catch { /* storage unavailable */ }
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
@@ -291,14 +309,14 @@ export function load() {
     const num = (v: unknown, d: number) => typeof v === 'number' && Number.isFinite(v) ? v : d
     const arr = <T,>(v: unknown, d: T[]) => Array.isArray(v) ? v as T[] : d
     const benchOk = arr<number | null>(s.bench, []).length === 8 ? s.bench : (() => { const b: (number | null)[] = new Array(8).fill(null); arr<number | null>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = v }); return b })()
-    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0 }, spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     applySquad(); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
 
 export function startStage() {
   const s = G.stage, rules = rulesFor(s), L = buildLayout(s, hpScale)
-  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0; G.tankT = 0; G.panicT = 0
+  G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.missiles.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0; G.tankT = 0; G.panicT = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
   for (const c of G.cover) if (c.side === 'player') { c.hp *= 1 + 0.08 * sk('bunker'); c.max *= 1 + 0.08 * sk('bunker') }
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
@@ -312,17 +330,25 @@ export function startStage() {
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
+const seenKinds = new Set<string>()
+/** Stage 7+: packs of fast, fragile Feral Hounds. Stage 11+: slow Missile Bots that stop at range and fire dodgeable missiles. */
 function spawnEnemy() {
-  const s = G.stage, boss = isBoss(s) && G.spawned === 0
-  const robot = s >= 6 && Math.random() < 0.35
-  const hp = hpScale(s) * (boss ? 14 : 1) * rnd(0.9, 1.15) * (robot ? 1.4 : 1)
-  G.enemies.push({
-    x: rnd(ARENA.x0 + 20, ARENA.x1 - 20), y: ARENA.y0 - 10, hp, max: hp,
-    spd: (boss ? 16 : rnd(22, 34)) * (robot ? 0.8 : 1), r: boss ? 24 : robot ? 13 : 11,
-    kind: boss ? 'boss' : robot ? 'robot' : 'zombie', flash: 0, wob: Math.random() * 6, dmg: (4 + s * 1.3) * (boss ? 3 : 1), cd: 0,
-    ...(boss ? { drake: drakeFor(s), ab: 3.5 } : {}),
-  })
-  G.spawned++
+  const s = G.stage, boss = isBoss(s) && G.spawned === 0, roll = Math.random()
+  const launcher = !boss && s >= 11 && roll < 0.1, runner = !boss && !launcher && s >= 7 && roll < 0.1 + 0.2
+  const robot = !boss && !launcher && !runner && s >= 6 && Math.random() < 0.35
+  const kind: Enemy['kind'] = boss ? 'boss' : launcher ? 'launcher' : runner ? 'runner' : robot ? 'robot' : 'zombie'
+  const hp = hpScale(s) * (boss ? 14 : launcher ? 2 : runner ? 0.32 : 1) * rnd(0.9, 1.15) * (robot ? 1.4 : 1)
+  const n = runner ? 1 + Math.floor(Math.random() * 3) : 1, x0 = rnd(ARENA.x0 + 30, ARENA.x1 - 30)
+  for (let k = 0; k < n; k++) {
+    G.enemies.push({
+      x: runner ? Math.max(ARENA.x0 + 10, Math.min(ARENA.x1 - 10, x0 + rnd(-26, 26))) : rnd(ARENA.x0 + 20, ARENA.x1 - 20), y: ARENA.y0 - 10 - (runner ? k * 8 : 0), hp, max: hp,
+      spd: boss ? 16 : launcher ? 15 : runner ? rnd(64, 80) : rnd(22, 34) * (robot ? 0.8 : 1), r: boss ? 24 : launcher ? 14 : runner ? 8 : robot ? 13 : 11,
+      kind, flash: 0, wob: Math.random() * 6, dmg: (4 + s * 1.3) * (boss ? 3 : runner ? 0.8 : 1), cd: launcher ? rnd(2.2, 3.4) : 0,
+      ...(boss ? { drake: drakeFor(s), ab: 3.5 } : {}),
+    })
+    G.spawned++
+  }
+  if ((runner || launcher) && !seenKinds.has(kind)) { seenKinds.add(kind); G.banner = runner ? { text: 'FERAL HOUNDS', sub: 'Fast, but fragile', t: 1.6 } : { text: 'MISSILE BOT', sub: 'Move away or hide behind cover', t: 1.8 } }
 }
 
 export function sortedWeapons() { return (G.bench.filter(v => v !== null) as number[]).sort((a, b) => b - a) }
@@ -353,7 +379,7 @@ function bossCast(e: Enemy, dt: number, n: number) {
 
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
-  const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'gunner' ? 1.5 : 1
+  const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'launcher' ? 2.5 : e.kind === 'gunner' ? 1.5 : e.kind === 'runner' ? 0.6 : 1
   const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + cp('gold') + goldGear() + 0.04 * sk('gold') + 0.04 * tl('fortune') + (wm('gold') ? 0.3 : 0) + (G.boostT > 0 ? BOOST.gold : 0)) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
 }
@@ -582,6 +608,18 @@ export function update(dtReal: number) {
       }
       continue
     }
+    if (e.kind === 'launcher') { // Missile Bot: walks to range, plants, fires a slow straight missile at a dog's current spot
+      let ld = 1e9; for (const c of centers) ld = Math.min(ld, Math.hypot(c.x - e.x, c.y - e.y))
+      if (ld > 190) { let tgt2 = centers[0], d2 = 1e9; for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < d2) { d2 = d; tgt2 = c } }; const sl = ehz === 'mud' ? 0.45 : 1; e.x += (tgt2.x - e.x) / d2 * e.spd * sl * dt; e.y += (tgt2.y - e.y) / d2 * e.spd * sl * dt }
+      else if ((e.cd -= dt) <= 0) {
+        const li: number[] = []; for (let k = 0; k < n; k++) if (alive(k)) li.push(k)
+        if (li.length) { const gp = guardianPos(li[Math.floor(Math.random() * li.length)]), dx = gp.x - e.x, dy = gp.y - e.y, dd = Math.hypot(dx, dy) || 1, sp = 150
+          G.missiles.push({ x: e.x, y: e.y + 6, vx: dx / dd * sp, vy: dy / dd * sp, tx: gp.x, ty: gp.y, life: 4, dmg: 8 + G.stage * 1.7, r: 40 }); G.events.push({ type: 'mortar_fire', x: e.x, y: e.y }) }
+        e.cd = rnd(3.6, 4.8)
+      }
+      for (const c of G.cover) if (c.hp > 0) { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
+      e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y)); continue
+    }
     // melee: chase the nearest of (strike team / pack) and (planted support squad); cover does NOT stop melee damage
     let tgt = centers[0], td = Math.hypot(centers[0].x - e.x, centers[0].y - e.y)
     for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < td) { td = d; tgt = c } }
@@ -623,6 +661,17 @@ export function update(dtReal: number) {
     G.events.push({ type: 'dmg', x: g.tx, y: g.ty - 14, v: total, crit: false, kill: false, blast: true })
   }
   G.nades = G.nades.filter(g => g.t < g.dur)
+
+  // ---- missiles: fly straight; cover blocks them; they explode where the dog WAS, so keep moving ----
+  for (const m of G.missiles) {
+    const px = m.x, py = m.y; m.x += m.vx * dt; m.y += m.vy * dt; m.life -= dt
+    let boom = m.life <= 0 || Math.hypot(m.tx - m.x, m.ty - m.y) < 8 || (m.x - m.tx) * m.vx + (m.y - m.ty) * m.vy > 0
+    for (const c of G.cover) if (!boom && c.side === 'player' && c.hp > 0 && segRect(px, py, m.x, m.y, c)) { boom = true; hitCover(c, m.dmg, m.x, m.y) }
+    if (!boom) continue
+    m.life = -1; G.events.push({ type: 'boom', x: m.x, y: m.y, r: m.r, col: '#ff6a3a' })
+    for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - m.x, gp.y - m.y) < m.r) { hurt(i, m.dmg * 0.5 * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(m.dmg * 0.5 * aura) }) } }
+  }
+  G.missiles = G.missiles.filter(m => m.life > 0)
 
   // ---- mortar shells: telegraphed, arc OVER cover; spread out or move to dodge ----
   for (const s of G.shells) {
@@ -766,7 +815,7 @@ function endRaid() {
   const r = G.raid!, tier = raidTier(r.dmg), coins = Math.round((tier >= 0 ? RAID.coins[tier] : 2) * (1 + cp('coins'))), chest = tier >= 0 ? RAID.chest[tier] : -1
   G.coins += coins; if (chest >= 0) addChest(chest)
   const best = r.dmg > G.raidInfo.best; if (best) G.raidInfo.best = r.dmg
-  r.result = { tier, dmg: r.dmg, coins, chest, best }; G.enemies.length = 0; G.shells.length = 0; G.ebullets.length = 0
+  r.result = { tier, dmg: r.dmg, coins, chest, best }; G.enemies.length = 0; G.shells.length = 0; G.missiles.length = 0; G.ebullets.length = 0
   track('raids'); addPassXp(PASS_XP_GAIN.raid); clanContribute(Math.round(10 + 25 * Math.min(2, r.dmg / raidBase())), r.dmg)
   G.events.push({ type: 'raid_end' }); save()
 }

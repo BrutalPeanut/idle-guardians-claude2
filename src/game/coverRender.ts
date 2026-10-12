@@ -1,7 +1,7 @@
 // Drawing for cover, hazards, enemy fire telegraphs and status icons. Same chibi recipe: bold outline, 2-tone, light from top-left.
 import { HAZARD_SQUASH } from './cover'
 import type { Cover, CoverKind, Hazard } from './cover'
-import type { EBullet, Shell, Status } from './sim'
+import type { EBullet, Missile, Shell, Status } from './sim'
 
 type Ctx = CanvasRenderingContext2D
 const OL = '#241810'
@@ -96,6 +96,24 @@ export function drawEBullets(ctx: Ctx, bs: EBullet[]) {
     ctx.fillStyle = '#ff6a4a'; ctx.beginPath(); ctx.roundRect(-8, -2, 12, 4, 2); ctx.fill(); ctx.fillStyle = '#fff0c0'; ctx.beginPath(); ctx.roundRect(-3, -1, 6, 2, 1); ctx.fill(); ctx.restore() }
 }
 /** Mortar telegraph: ground ring fills as the shell comes down so players can read it and move. */
+/** Missiles: a pulsing target ring where it will land, a smoke trail, and the rocket itself. */
+export function drawMissiles(ctx: Ctx, ms: Missile[], t: number) {
+  for (const m of ms) {
+    const ry = m.r * HAZARD_SQUASH, pulse = 0.55 + 0.4 * Math.sin(t * 16)
+    ctx.fillStyle = 'rgba(255,60,40,.12)'; ctx.beginPath(); ctx.ellipse(m.tx, m.ty, m.r, ry, 0, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,90,60,' + pulse + ')'; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.ellipse(m.tx, m.ty, m.r, ry, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([])
+    ctx.beginPath(); ctx.moveTo(m.tx - 7, m.ty); ctx.lineTo(m.tx + 7, m.ty); ctx.moveTo(m.tx, m.ty - 5); ctx.lineTo(m.tx, m.ty + 5); ctx.stroke()
+    const a = Math.atan2(m.vy, m.vx), sp = Math.hypot(m.vx, m.vy) || 1
+    const g = ctx.createLinearGradient(m.x, m.y, m.x - m.vx / sp * 30, m.y - m.vy / sp * 30); g.addColorStop(0, 'rgba(255,200,120,.8)'); g.addColorStop(1, 'rgba(120,110,100,0)')
+    ctx.strokeStyle = g; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - m.vx / sp * 30, m.y - m.vy / sp * 30); ctx.stroke(); ctx.lineCap = 'butt'
+    ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(a)
+    ctx.fillStyle = '#d6dbe0'; ctx.strokeStyle = OL; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.roundRect(-7, -2.4, 12, 4.8, 2); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#ff4a30'; ctx.beginPath(); ctx.moveTo(5, -2.4); ctx.lineTo(10, 0); ctx.lineTo(5, 2.4); ctx.closePath(); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#555c66'; ctx.beginPath(); ctx.moveTo(-7, -2.4); ctx.lineTo(-10, -5); ctx.lineTo(-4, -2.4); ctx.moveTo(-7, 2.4); ctx.lineTo(-10, 5); ctx.lineTo(-4, 2.4); ctx.fill()
+    ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.ellipse(-10 - Math.random() * 3, 0, 4, 2, 0, 0, 6.283); ctx.fill()
+    ctx.restore()
+  }
+}
 export function drawShells(ctx: Ctx, ss: Shell[], t: number) {
   for (const s of ss) {
     if (s.t < 0 && s.col) continue
