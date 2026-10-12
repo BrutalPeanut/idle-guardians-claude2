@@ -111,7 +111,7 @@ export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 
 const REVIVE_T = 12
 const reviveTime = () => Math.max(5, REVIVE_T - sk('recov'))
 /** Guns only engage enemies this close (px), so a wave is seen walking in before it is shot. */
-const FIRE_RANGE = 185
+const FIRE_RANGE = 170
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
@@ -296,7 +296,7 @@ export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 const diffRamp = (s: number) => Math.min(1, Math.max(0, (s - 1) / 11)) // gentle first stages, full toughness from stage 12
 export const DIFF = { hp: 4.5, dmg: 1.8, count: 1.4, spd: 1.3 }
 export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = (s: number) => 1.1 + (DIFF.count - 1.1) * diffRamp(s), dSpd = (s: number) => 1 + (DIFF.spd - 1) * diffRamp(s), dDmg = (s: number) => 1.2 + (DIFF.dmg - 1.2) * diffRamp(s)
-export const hpScale = (s: number) => dHp(s) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
+export const hpScale = (s: number) => dHp(s) * Math.pow(1.04, Math.max(0, s - 12)) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
