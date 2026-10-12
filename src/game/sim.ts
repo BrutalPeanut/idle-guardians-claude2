@@ -421,7 +421,7 @@ const dogPower = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.power : 1) 
 export const cp = (k: string) => clanPerk(G.clan, k)
 const dogArmor = (i: number) => (pk('guard') ? 0.92 : 1) * (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
 /** Extra bite on every enemy hit against a guardian (melee, bullets, missiles, shells): damage lands on single dogs, so they have to be kept alive. */
-const hitMul = () => 1.5 + 1.5 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
+const hitMul = () => 2.2 + 2.3 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
 function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
