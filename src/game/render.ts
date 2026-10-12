@@ -18,13 +18,14 @@ import { drawWeaponIcon } from './weaponIcons'
 
 interface Part { x: number; y: number; vx?: number; vy?: number; col?: string; t: number; life: number; sz?: number; ring?: boolean; r?: number }
 interface Floater { x: number; y: number; v: number | string; cover?: boolean; flank?: boolean; crit?: boolean; kill?: boolean; blast?: boolean; gold?: boolean; hurt?: boolean; big?: boolean; t: number }
+interface Blast { x: number; y: number; r: number; t: number; life: number; col?: string; seed: number }
 interface Rect { x: number; y: number; w: number; h: number }
 export type Ctx = CanvasRenderingContext2D
 // Renderer: reads G, drains G.events into particles / floating numbers. Never invents damage.
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, gearDog: 0, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -44,7 +45,7 @@ export function drainEvents() {
       R.floats.push({ x: e.x, y: e.y - 22, v: '+' + e.gold, gold: true, t: 0 });
       if (e.gold > 0) for (let k = 0, n = e.kind === 'boss' ? 9 : 2; k < n && R.coinsFly.length < 60; k++) R.coinsFly.push({ x: e.x + rnd(-8, 8), y: e.y + rnd(-8, 8), sx: e.x, sy: e.y, t: -k * 0.04, dur: rnd(0.55, 0.8) });
       if (e.kind === 'boss') { R.flash = 0.6; R.shake = 10; }
-    } else if (e.type === 'boom') { Audio_.boom(); burst(e.x, e.y, e.col ?? '#ff9a3a', 22, 180); R.parts.push({ ring: true, x: e.x, y: e.y, r: e.r, t: 0, life: 0.3 }); }
+    } else if (e.type === 'boom') { Audio_.boom(); burst(e.x, e.y, e.col ?? '#ff9a3a', 22, 180); R.parts.push({ ring: true, x: e.x, y: e.y, r: e.r, t: 0, life: 0.3 }); R.blasts.push({ x: e.x, y: e.y, r: Math.max(34, e.r), t: 0, life: 0.75, col: e.col, seed: Math.random() * 100 }); R.scorch.push({ x: e.x, y: e.y, r: e.r, t: 0 }); if (R.scorch.length > 14) R.scorch.shift(); R.shake = Math.max(R.shake, Math.min(9, e.r / 9)); R.flash = Math.max(R.flash, 0.12); }
     else if (e.type === 'pack_hit') R.floats.push({ x: e.x, y: e.y, v: '-' + e.v, hurt: true, t: 0 });
     else if (e.type === 'cover_hit') { Audio_.hit(); burst(e.x, e.y, coverDust(e.kind), 4, 70); if (!(G.t - (R.coverT[e.id] ?? -9) < 0.35)) { R.coverT[e.id] = G.t; R.floats.push({ x: e.x, y: e.y - 6, v: Math.ceil(e.v), cover: true, t: 0 }) } }
     else if (e.type === 'boss_cast') { R.shake = Math.max(R.shake, 4); R.floats.push({ x: e.x, y: e.y - 44, v: e.name, hurt: true, t: 0 }); burst(e.x, e.y - 10, e.col, 12, 120) }
@@ -100,7 +101,9 @@ function burst(x: number, y: number, col: string, n: number, sp: number) {
 
 export function updateFx(dt: number) {
   for (const p of R.parts) { p.t += dt; if (!p.ring) { p.x += p.vx! * dt; p.y += p.vy! * dt; p.vx! *= 0.92; p.vy! *= 0.92; } }
-  R.parts = R.parts.filter(p => p.t < p.life);
+  R.parts = R.parts.filter(p => p.t < p.life)
+  for (const b of R.blasts) b.t += dt
+  R.blasts = R.blasts.filter(b => b.t < b.life); for (const c of R.scorch) c.t += dt; R.scorch = R.scorch.filter(c => c.t < 6)
   for (const c of R.coinsFly) { c.t += dt; if (c.t >= c.dur) R.goldBump = 0.18 }
   R.coinsFly = R.coinsFly.filter(c => c.t < c.dur); R.goldBump = Math.max(0, R.goldBump - dt)
   for (const f of R.floats) { f.t += dt; f.y -= 28 * dt; }
@@ -621,6 +624,7 @@ export function render(ctx: Ctx, t: number) {
   for (const h of G.hazards) drawHazard(ctx, h, t);
   if (G.hold) drawHold(ctx, G.hold.x, G.hold.y, t);
   // sort-by-y entities
+  for (const c of R.scorch) { const a = Math.min(0.4, (6 - c.t) / 6 * 0.45); const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, c.r * 0.6); g.addColorStop(0, 'rgba(15,10,8,' + a + ')'); g.addColorStop(1, 'rgba(15,10,8,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r * 0.6, c.r * 0.42, 0, 0, 6.283); ctx.fill() }
   const ents: { y: number; d: () => void }[] = [];
   for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
   for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
@@ -658,6 +662,22 @@ export function render(ctx: Ctx, t: number) {
     const gp = guardianPos(i), f = Math.max(0, G.hp[i] / G.mhp[i]), w = 26 + (dogScale(i) - 1) * 24, yo = 28 + (dogScale(i) - 1) * 30
     ctx.fillStyle = 'rgba(0,0,0,.6)'; rr(ctx, gp.x - w / 2, gp.y - yo, w, 5, 2.5); ctx.fill()
     if (f > 0) { ctx.fillStyle = f > 0.35 ? '#5be07f' : '#ff6a5a'; rr(ctx, gp.x - w / 2 + 0.5, gp.y - yo + 0.5, Math.max(2, (w - 1) * f), 4, 2); ctx.fill() }
+  }
+  for (const b of R.blasts) { // explosion: flash, expanding fireball, shockwave, rising smoke, flying sparks
+    const k = b.t / b.life, eo = 1 - Math.pow(1 - Math.min(1, k * 2.4), 3), r = b.r, hue = b.col
+    ctx.save()
+    for (let i = 0; i < 7; i++) { const a = b.seed + i * 0.9, d = 0.25 + 0.5 * ((i * 37) % 10) / 10, sk = Math.max(0, k - 0.28 - i * 0.015); if (sk <= 0) continue
+      const px = b.x + Math.cos(a) * r * d * (0.4 + sk), py = b.y + Math.sin(a) * r * d * 0.6 * (0.4 + sk) - sk * r * 0.7, pr = r * (0.16 + 0.22 * sk)
+      ctx.fillStyle = 'rgba(' + (hue ? '70,60,70' : '58,48,42') + ',' + 0.38 * (1 - k) * Math.min(1, sk * 6) + ')'; ctx.beginPath(); ctx.arc(px, py, pr, 0, 6.283); ctx.fill() }
+    if (k < 0.7) { const fr = r * (0.4 + 0.8 * eo), a = 1 - k / 0.7, g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, fr)
+      g.addColorStop(0, 'rgba(255,255,235,' + a + ')'); g.addColorStop(0.35, hue ? hue + 'ee' : 'rgba(255,200,70,' + a * 0.95 + ')'); g.addColorStop(0.75, hue ? hue + '88' : 'rgba(255,100,30,' + a * 0.7 + ')'); g.addColorStop(1, 'rgba(120,30,10,0)')
+      ctx.globalAlpha = hue ? a : 1; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(b.x, b.y, fr, fr * 0.9, 0, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1 }
+    if (k < 0.14) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - k / 0.14) * 0.9 + ')'; ctx.beginPath(); ctx.arc(b.x, b.y, r * 0.42, 0, 6.283); ctx.fill() }
+    ctx.strokeStyle = 'rgba(255,235,190,' + (1 - k) * 0.85 + ')'; ctx.lineWidth = 1 + 5 * (1 - k); ctx.beginPath(); ctx.ellipse(b.x, b.y, r * (0.25 + 0.95 * eo), r * (0.25 + 0.95 * eo) * 0.7, 0, 0, 6.283); ctx.stroke()
+    ctx.lineCap = 'round'; ctx.lineWidth = 2
+    for (let i = 0; i < 14; i++) { const a = b.seed * 3 + i * 0.449, sp = r * (0.8 + ((i * 53) % 10) / 10 * 0.7), d = sp * eo, g2 = k * k * r * 0.5, len = 7 * (1 - k)
+      const x1 = b.x + Math.cos(a) * d, y1 = b.y + Math.sin(a) * d * 0.7 + g2; ctx.strokeStyle = 'rgba(' + (i % 3 ? '255,210,100' : '255,140,50') + ',' + (1 - k) + ')'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - Math.cos(a) * len, y1 - Math.sin(a) * len * 0.7); ctx.stroke() }
+    ctx.restore()
   }
   for (const p of R.parts) {
     if (p.ring) { ctx.strokeStyle = 'rgba(255,200,90,' + (1 - p.t / p.life) + ')'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, p.r! * (p.t / p.life), 0, 6.283); ctx.stroke(); }
