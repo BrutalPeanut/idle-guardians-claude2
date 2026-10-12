@@ -401,7 +401,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * gunMul() * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * gunMul() * (GUN_EQ[i] ?? 1) * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -444,14 +444,18 @@ export const NADE = { cd: 12, r: 64, dur: 0.75 }
 /** Gun damage multiplier (x2.33 vs before) and grenade sizing. Tuned so guns do roughly 65-85% of damage at every stage and the grenade is a strong assist. */
 export const NADE_DMG = 0.03 // only used before any gun damage has been measured (first seconds of a session): fraction of one enemy's HP
 /** Grenade damage per enemy caught = this many seconds of the pack's recent gun DPS. Anchoring it to gun output (not enemy HP) keeps the grenade at roughly a quarter to a third of damage at any stage. */
-export const NADE_SECONDS = 0.7
+export const NADE_SECONDS = 0.8
 /** A grenade deals at most this many enemies' worth of damage per throw, however many it catches, so it can't dominate against huge hordes. */
 export const NADE_TARGETS = 5
+/** A direct hit on a small group still counts as at least this many enemies' worth, so the grenade stays a meaningful ability even in thin waves. */
+export const NADE_MIN = 3
 /** Pack Boost: a player-chosen rewarded-ad buff. 10 minutes of +50% gold and +25% gun damage; watching again adds time up to a 30 minute cap. */
 export const BOOST = { dur: 600, cap: 1800, gold: 0.5, dmg: 0.25 }
 export const startBoost = () => { G.boostT = Math.min(BOOST.cap, G.boostT + BOOST.dur); save() }
 export const GUN_MUL = 7
 /** Guns ramp up with the stage: modest early (so the first stages are a fight), full strength by stage ~26. */
+/** Squad equalizer: the top gun would otherwise carry nearly all damage. Each dog's gun is pulled toward the squad's average power by this exponent (0 = off, 1 = everyone equal), so merging still pays but supports stay relevant. */
+const GUN_EQ_K = 0.85, GUN_EQ: number[] = [1, 1, 1, 1]
 const gunMul = () => 1.5 + (GUN_MUL - 1.5) * Math.min(1, Math.max(0, (G.stage - 1) / 25))
 /** Size of the biggest bunch of enemies a grenade would catch. */
 export function bestClump() {
@@ -534,6 +538,8 @@ export function update(dtReal: number) {
 
   // ---- guardians: status, targeting, auto-flank, fire ----
   const ws = sortedWeapons()
+  { const dp = (w: number | undefined) => w === undefined ? 0 : WEAPONS[w].dmg * (WEAPONS[w].pellets || 1) * WEAPONS[w].rate, arm = Array.from({ length: n }, (_, i) => dp(ws[i])).filter(v => v > 0), mean = arm.reduce((a, b) => a + b, 0) / Math.max(1, arm.length)
+    for (let i = 0; i < 4; i++) GUN_EQ[i] = dp(ws[i]) > 0 ? Math.pow(mean / dp(ws[i]), GUN_EQ_K) : 1 }
   for (let i = 0; i < n; i++) {
     const st = G.status[i]; st.flank = 0; st.cover = false
     if (!alive(i)) { G.flankOff[i] = 0; continue }
@@ -657,7 +663,7 @@ export function update(dtReal: number) {
     g.t += dt
     if (g.t < g.dur) continue
     G.events.push({ type: 'boom', x: g.tx, y: g.ty, r: g.r }); let total = 0
-    const caught = G.enemies.filter(o => o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5).length, spread = Math.min(1, NADE_TARGETS / Math.max(1, caught)) // big bunches share the blast: damage is capped at NADE_TARGETS worth
+    const caught = G.enemies.filter(o => o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5).length, spread = Math.min(1, NADE_TARGETS / Math.max(1, caught)) * Math.max(1, NADE_MIN / Math.max(1, caught)) // big bunches share the blast: damage is capped at NADE_TARGETS worth
     for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - g.tx, o.y - g.ty) < g.r + o.r * 0.5) { const d = (o.kind === 'boss' ? g.dmg * 0.6 : g.dmg) * spread; total += d; G.stats.nade += d; o.hp -= d; o.flash = 0.12; if (o.hp <= 0) killReward(o) }
     for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && Math.hypot(c.x - g.tx, c.y - g.ty) < g.r + c.w / 2) hitCover(c, g.dmg * 0.5, c.x, c.y)
     G.events.push({ type: 'dmg', x: g.tx, y: g.ty - 14, v: total, crit: false, kill: false, blast: true })
