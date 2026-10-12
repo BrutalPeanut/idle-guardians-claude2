@@ -8,7 +8,10 @@ import { joinClan, leaveClan, clanPool, claimMilestone, claimClanGift, canClanGi
 import { G, questReady, dogId, buyDog, setSquad, pk, RAID, raidBase, raidLeft, raidTier, startRaid, closeRaid } from './sim'
 import { R, button, rr, icons, fmt, OUT, plate, outText, FONT } from './render'
 import type { Ctx } from './render'
-import { BOOST } from './sim'
+import { BOOST, SHOP, GEM_PACKS, shopLeft, shopClaim, shopBuy, startBoost, raidLeft as raidLeft2 } from './sim'
+import { showRewardedAd } from './ads'
+import { buyGems } from './iap'
+import { track as tele } from './telemetry'
 import { IAP } from './iap'
 import { adsLeft } from './ads'
 import { TRAIN, tl, trainCost, buyTrain, trainAffordable } from './sim'
@@ -41,7 +44,7 @@ export function panel(ctx: Ctx, title: string, back = true) {
 export const HUB_SECTIONS: { id: string; label: string; col: string; main: string[]; minor: string[]; tiles: string[] }[] = ([
   { id: 'battle', label: 'Battle', col: '#ff6a5a', main: ['raid', 'auto', 'weekly'], minor: ['stats'] },
   { id: 'grow', label: 'Grow', col: '#ff9a3a', main: ['gear', 'train', 'skills', 'kennel'], minor: ['rebirth'] },
-  { id: 'rewards', label: 'Rewards', col: '#52d273', main: ['boost', 'quests', 'login', 'spin'], minor: ['pass', 'ach'] },
+  { id: 'rewards', label: 'Rewards', col: '#52d273', main: ['shop', 'boost', 'quests', 'login', 'spin'], minor: ['pass', 'ach'] },
   { id: 'more', label: 'More', col: '#5ab8ff', main: ['rank', 'clan', 'help'], minor: ['noads', 'savedata', 'tour', 'privacy'] },
 ] as { id: string; label: string; col: string; main: string[]; minor: string[] }[]).map(x => ({ ...x, tiles: [...x.main, ...x.minor] }))
 const MINOR_LABEL: Record<string, string> = { privacy: 'Privacy', savedata: 'Save Data', noads: 'No Ads', tour: 'Tour', help: 'Help', weekly: 'Weekly', stats: 'Stats', pass: 'Season Pass', ach: 'Awards', rebirth: 'Rebirth' }
@@ -147,6 +150,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'rank': drawRank(ctx); break
     case 'train': drawTrain(ctx); break
     case 'spin': drawSpin(ctx); break
+    case 'shop': drawShop(ctx); break
     case 'boost': drawBoost(ctx); break
     case 'noads': drawNoAds(ctx); break
     default: drawHub(ctx, t)
@@ -254,6 +258,7 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  if (k.startsWith('shop_') && shopButton(k)) return true
   if (k.startsWith('cj_')) { const d = CLANS[+k.slice(3)]; if (joinClan(d.id)) { G.banner = { text: 'Joined ' + d.name, sub: 'Contribute by clearing stages and raiding', t: 1.8 }; Audio_.fanfare() } else G.banner = { text: 'Reach stage ' + d.req, sub: 'to join ' + d.name, t: 1.4 }; return true }
   if (k === 'ct_0' || k === 'ct_1') { R.clanTab = +k.slice(3); return true }
   if (k.startsWith('cm_')) { if (claimMilestone(+k.slice(3))) { G.banner = { text: 'Clan reward claimed', sub: MILESTONES[+k.slice(3)].text, t: 1.6 }; Audio_.coins() } return true }
@@ -676,6 +681,70 @@ export function drawTrain(ctx: Ctx) {
   ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; outText(ctx, 'You have ' + fmt(G.gold) + ' gold', W / 2, 482, '#ffd84a', 3)
 }
 registerTile({ id: 'train', label: 'Training', sub: () => trainAffordable() ? 'Upgrade ready!' : 'Spend your gold', icon: 'bolt', col: '#ff9a3a', badge: () => trainAffordable() })
+
+
+// ================= Shop: free offers (ads), gem packs (real money), gem spending =================
+const shopOffers = () => (shopLeft('chest') > 0 ? 1 : 0) + (shopLeft('gems') > 0 ? 1 : 0)
+function shopRow(ctx: Ctx, y: number, icon: string, col: string, title: string, sub: string, key: string, label: string, ok: boolean, bcol = '#52d273') {
+  plate(ctx, 16, y, W - 32, 66, 14, 'rgba(34,52,64,.75)', 'rgba(12,20,26,.75)')
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(46, y + 33, 21, 0, 6.283); ctx.fill()
+  ctx.save(); ctx.translate(46, y + 33); ctx.scale(1.7, 1.7); icons[icon]?.(ctx, 0, 0, col); ctx.restore()
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '400 15px ' + FONT; ctx.fillStyle = '#fff'; ctx.fillText(title, 78, y + 24)
+  ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#aebfb6'; ctx.fillText(sub, 78, y + 44)
+  button(ctx, key, W - 128, y + 13, 104, 40, { top: ok ? bcol : '#5a666d', bot: ok ? mix(bcol, '#101820', 0.45) : '#39434a', label, size: 12, disabled: !ok })
+}
+function drawShop(ctx: Ctx) {
+  panel(ctx, 'Shop')
+  const tab = R.shopTab ?? 0, names = ['Free', 'Gems', 'Spend'], cols = ['#52d273', '#5ab8ff', '#ffb347']
+  const tg = 6, tw = (W - 32 - tg * 2) / 3
+  names.forEach((nm, i) => { const x = 16 + i * (tw + tg), on = i === tab
+    button(ctx, 'shop_tab' + i, x, 54, tw, 36, on ? { top: mix(cols[i], '#ffffff', 0.15), bot: mix(cols[i], '#101820', 0.35), label: nm, size: 14 } : { top: '#4a5c66', bot: '#2a3840', label: nm, size: 13 })
+    if (i === 0 && !on && shopOffers() + (G.boostT < BOOST.cap && adsLeft() > 0 ? 1 : 0) > 0) { ctx.fillStyle = '#ff5a46'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x + tw - 8, 62, 6, 0, 6.283); ctx.fill(); ctx.stroke() } })
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#d6f2ff'; ctx.font = '400 13px ' + FONT; ctx.fillText('Your gems: ' + G.gems, W / 2, 106)
+  const ad = G.noAds ? 'FREE' : 'Watch ad', adsOk = G.noAds || adsLeft() > 0
+  if (tab === 0) {
+    shopRow(ctx, 120, 'bolt', '#d9c4ff', 'Pack Boost', '10 min, +50% gold, +25% dmg', 'shop_ad_boost', G.boostT >= BOOST.cap ? 'Full' : ad, adsOk && G.boostT < BOOST.cap, '#b58cf0')
+    shopRow(ctx, 192, 'collar', '#ffd9a0', 'Free Chest', 'Wooden chest · ' + shopLeft('chest') + ' left', 'shop_ad_chest', shopLeft('chest') > 0 ? ad : 'Done', adsOk && shopLeft('chest') > 0, '#e0a02a')
+    shopRow(ctx, 264, 'gem', '#6fd6ff', 'Gem Pouch', '+' + SHOP.gemAdAmt + ' gems · ' + shopLeft('gems') + ' left', 'shop_ad_gems', shopLeft('gems') > 0 ? ad : 'Done', adsOk && shopLeft('gems') > 0, '#3aa0e0')
+    shopRow(ctx, 336, 'sword', '#ff9a8a', 'Raid Attempt', '+1 Boss Raid try · ' + raidLeft2() + ' left', 'shop_ad_raid', ad, adsOk, '#e0564a')
+    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText(G.noAds ? 'Ads are off: offers are free, daily limits still apply.' : 'Optional. Ads only run when you tap. ' + adsLeft() + ' left today.', W / 2, 420)
+  } else if (tab === 1) {
+    const can = IAP.status === 'ready'
+    GEM_PACKS.forEach((g, i) => {
+      const y = 120 + i * 92, pk = IAP.gems[g.key], price = pk?.product?.priceString ?? ''
+      plate(ctx, 16, y, W - 32, 80, 14, 'rgba(34,52,64,.75)', 'rgba(12,20,26,.75)')
+      ctx.save(); ctx.translate(50, y + 40); ctx.scale(2.4 + i * 0.4, 2.4 + i * 0.4); icons.gem(ctx, 0, 0, '#6fd6ff'); ctx.restore()
+      ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 20px ' + FONT; ctx.fillText(g.gems + ' gems', 92, y + 30)
+      ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#aebfb6'; ctx.fillText(g.name, 92, y + 54)
+      if (g.tag) { ctx.fillStyle = '#ffd84a'; rr(ctx, W - 132, y - 7, 90, 16, 8); ctx.fill(); ctx.fillStyle = '#3a2a00'; ctx.textAlign = 'center'; ctx.font = '400 10px ' + FONT; ctx.fillText(g.tag, W - 87, y + 1.5) }
+      const ok = can && !!pk
+      button(ctx, 'shop_gems_' + g.key.slice(5), W - 128, y + 20, 104, 42, { top: ok ? '#ffcf4a' : '#5a666d', bot: ok ? '#e8841a' : '#39434a', label: ok ? (price || 'Buy') : 'In the app', size: 14, disabled: !ok })
+    })
+    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = IAP.msg ? '#d6f2ff' : '#7f929a'
+    ctx.fillText(IAP.msg || (IAP.status === 'unavailable' ? 'Gem packs are sold in the Android and iPhone app.' : 'One-time purchases. Gems never expire.'), W / 2, 404)
+  } else {
+    const r = (y: number, icon: string, col: string, title: string, sub: string, key: string, cost: number, ok: boolean) => shopRow(ctx, y, icon, col, title, sub, key, '' + cost + ' gems', G.gems >= cost && ok, '#3aa0e0')
+    r(120, 'collar', '#e8e8f0', 'Silver Chest', 'Better gear odds than wood', 'shop_buy_chest1', SHOP.cost.chest1, true)
+    r(192, 'collar', '#ffd84a', 'Golden Chest', 'The best gear odds', 'shop_buy_chest2', SHOP.cost.chest2, true)
+    r(264, 'bolt', '#d9c4ff', 'Pack Boost', '+10 min of boost', 'shop_buy_boost', SHOP.cost.boost, G.boostT < BOOST.cap)
+    r(336, 'sword', '#ff9a8a', 'Raid Attempt', '+1 Boss Raid try', 'shop_buy_raid', SHOP.cost.raid, true)
+    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Earn gems from quests, spins and achievements.', W / 2, 420)
+  }
+  button(ctx, 'nav_noads', 16, 478, W - 32, 52, G.noAds ? { top: '#3f5a46', bot: '#26382b', label: 'Ads removed. Thank you!', size: 13 } : { top: '#ffcf4a', bot: '#e8841a', label: 'Remove ads for good', size: 15, sub: IAP.price || undefined })
+}
+registerTile({ id: 'shop', label: 'Shop', sub: () => shopOffers() ? shopOffers() + ' free offer' + (shopOffers() > 1 ? 's' : '') : 'Gems, chests, boosts', icon: 'gem', col: '#ffb347', badge: () => shopOffers() > 0 || (G.boostT < BOOST.cap && adsLeft() > 0) })
+function shopButton(k: string): boolean {
+  const gate = (r: string) => { if (r === 'cap') G.banner = { text: 'No ads left today', sub: 'Back tomorrow', t: 1.4 }; else if (r === 'cooldown') G.banner = { text: 'Ad not ready yet', sub: 'Try again in a moment', t: 1.4 } }
+  if (k.startsWith('shop_tab')) { R.shopTab = +k.slice(8); tele('shop_tab', { t: R.shopTab }); return true }
+  if (k === 'shop_ad_boost') { if (G.boostT < BOOST.cap) gate(showRewardedAd('shop_boost', () => { startBoost(); tele('shop_ad', { k: 'boost' }); G.banner = { text: 'PACK BOOST', sub: '+10 minutes', t: 1.6 } })); return true }
+  if (k === 'shop_ad_chest') { if (shopLeft('chest') > 0) gate(showRewardedAd('shop_chest', () => { if (shopClaim('chest')) { tele('shop_ad', { k: 'chest' }); G.banner = { text: 'FREE CHEST', sub: 'Open it in Gear', t: 1.6 }; Audio_.coins() } })); return true }
+  if (k === 'shop_ad_gems') { if (shopLeft('gems') > 0) gate(showRewardedAd('shop_gems', () => { if (shopClaim('gems')) { tele('shop_ad', { k: 'gems' }); G.banner = { text: '+' + SHOP.gemAdAmt + ' gems', t: 1.4 }; Audio_.coins() } })); return true }
+  if (k === 'shop_ad_raid') { gate(showRewardedAd('shop_raid', () => { G.raidInfo.extra++; tele('shop_ad', { k: 'raid' }); G.banner = { text: '+1 Raid attempt', t: 1.4 } })); return true }
+  if (k.startsWith('shop_buy_')) { const it = k.slice(9) as 'chest1' | 'chest2' | 'boost' | 'raid'; if (shopBuy(it)) { tele('shop_spend', { k: it }); G.banner = { text: 'Purchased', t: 1.2 }; Audio_.coins() } else G.banner = { text: G.gems < SHOP.cost[it] ? 'Not enough gems' : 'Already full', t: 1.2 }; return true }
+  if (k.startsWith('shop_gems_')) { void buyGems('gems_' + k.slice(10)); return true }
+  return false
+}
 
 // ================= Pack Boost (rewarded ad buff) =================
 const mmss = (sec: number) => Math.floor(sec / 60) + ':' + String(Math.floor(sec % 60)).padStart(2, '0')

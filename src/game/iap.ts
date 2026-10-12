@@ -4,12 +4,12 @@
  * build can unlock this for free. On the phone, the entitlement is re-checked with RevenueCat at start-up, so a hand-edited save
  * cannot keep ads off.
  */
-import { G, save } from './sim'
+import { G, save, GEM_PACKS } from './sim'
 import { RC_KEYS, RC_ENTITLEMENT } from './config'
 import { track } from './telemetry'
 
 interface CustomerInfo { entitlements?: { active?: Record<string, unknown> } }
-interface Pkg { identifier: string; product?: { priceString?: string } }
+interface Pkg { identifier: string; product?: { identifier?: string; priceString?: string } }
 interface PurchasesApi {
   configure: (o: { apiKey: string }) => Promise<void>
   getOfferings: () => Promise<{ current?: { availablePackages?: Pkg[] } }>
@@ -17,7 +17,8 @@ interface PurchasesApi {
   restorePurchases: () => Promise<{ customerInfo?: CustomerInfo }>
   getCustomerInfo: () => Promise<{ customerInfo?: CustomerInfo }>
 }
-export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null }
+export const IAP = { status: 'idle' as 'idle' | 'loading' | 'ready' | 'busy' | 'unavailable', price: '', msg: '', pkg: null as Pkg | null, gems: {} as Record<string, Pkg> }
+const pkgFor = (pk: Pkg[], key: string) => pk.find(p => p.identifier === key || p.product?.identifier === key || (p.product?.identifier ?? '').endsWith(key) || p.identifier.endsWith(key))
 let api: PurchasesApi | null = null
 
 function native(): { api: PurchasesApi; key: string } | null {
@@ -38,7 +39,8 @@ export async function initPurchases() {
   try {
     api = n.api; await api.configure({ apiKey: n.key })
     apply((await api.getCustomerInfo()).customerInfo)
-    const off = await api.getOfferings(); IAP.pkg = off.current?.availablePackages?.[0] ?? null
+    const off = await api.getOfferings(), pk = off.current?.availablePackages ?? []
+    IAP.pkg = pkgFor(pk, 'noads') ?? (pk.length === 1 ? pk[0] : null); for (const g of GEM_PACKS) { const f = pkgFor(pk, g.key); if (f) IAP.gems[g.key] = f }
     IAP.price = IAP.pkg?.product?.priceString ?? ''; IAP.status = IAP.pkg ? 'ready' : 'unavailable'
   } catch { IAP.status = 'unavailable' }
 }
@@ -54,5 +56,15 @@ export async function restoreBuys() {
   IAP.status = 'busy'; IAP.msg = ''
   try { const r = await api.restorePurchases(); apply(r.customerInfo); IAP.msg = owns(r.customerInfo) ? 'Restored. Ads are off.' : 'No purchase found to restore.' }
   catch { IAP.msg = 'Could not restore. Try again.' }
+  IAP.status = 'ready'
+}
+
+/** Gem packs are consumables: gems are granted on the device the moment the store confirms the purchase. */
+export async function buyGems(key: string) {
+  const g = GEM_PACKS.find(x => x.key === key), pkg = IAP.gems[key]
+  if (!api || !g || !pkg || IAP.status === 'busy') return
+  IAP.status = 'busy'; IAP.msg = ''; track('gems_buy_tap', { k: key })
+  try { await api.purchasePackage({ aPackage: pkg }); G.gems += g.gems; save(); track('gems_bought', { k: key }); IAP.msg = '+' + g.gems + ' gems. Thank you!' }
+  catch { IAP.msg = 'Purchase cancelled.' }
   IAP.status = 'ready'
 }
