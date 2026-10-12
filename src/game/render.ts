@@ -487,6 +487,19 @@ function drawRobot(ctx: Ctx, e: Enemy, t: number, x: number, y: number, s: numbe
   }
   ctx.lineCap = 'butt'
 }
+/** Cooper's Panic mode: he is literally on fire. Flame tongues lick up his body with a few drifting embers; blinks out as the effect ends. */
+function fireAura(ctx: Ctx, x: number, y: number, sc: number, t: number, fade: number) {
+  ctx.save(); ctx.globalAlpha = fade
+  for (let i = 0; i < 11; i++) {
+    const d = (i - 5) / 5, bx = x + d * 13 * sc, by = y + (7 - Math.abs(d) * 3 - Math.sin(i) * 1.5) * sc
+    const h = (16 + 12 * Math.abs(Math.sin(t * 12 + i * 1.9)) + (i === 5 ? 7 : 0)) * sc * (1 - Math.abs(d) * 0.2), w = (4.2 - Math.abs(d) * 1.2) * sc, sway = Math.sin(t * 9 + i * 2.3) * 2.4 * sc
+    const g = ctx.createLinearGradient(bx, by, bx, by - h); g.addColorStop(0, 'rgba(255,230,120,0.95)'); g.addColorStop(0.45, 'rgba(255,140,30,0.9)'); g.addColorStop(1, 'rgba(210,40,20,0)')
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(bx - w, by); ctx.quadraticCurveTo(bx - w * 0.8 + sway * 0.4, by - h * 0.55, bx + sway, by - h); ctx.quadraticCurveTo(bx + w * 0.8 + sway * 0.4, by - h * 0.55, bx + w, by); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = 'rgba(255,250,200,0.7)'; ctx.beginPath(); ctx.moveTo(bx - w * 0.4, by); ctx.quadraticCurveTo(bx + sway * 0.4, by - h * 0.45, bx + sway * 0.6, by - h * 0.62); ctx.quadraticCurveTo(bx + w * 0.4, by - h * 0.3, bx + w * 0.4, by); ctx.closePath(); ctx.fill()
+  }
+  for (let i = 0; i < 6; i++) { const u = (t * 1.3 + i / 6) % 1, ex = x + Math.sin(i * 5.1 + t * 3) * 12 * sc, ey = y + (4 - u * 30) * sc; ctx.fillStyle = 'rgba(255,' + (150 + i * 15) + ',60,' + (1 - u) + ')'; ctx.beginPath(); ctx.arc(ex, ey, (1.8 - u) * sc, 0, 6.283); ctx.fill() }
+  ctx.restore()
+}
 const ES = new WeakMap<Enemy, { x: number; y: number; t: number; vx: number; ph: number }>()
 const GAIT = { ph: 0, mv: 0 }
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
@@ -632,7 +645,7 @@ export function render(ctx: Ctx, t: number) {
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1
     if (G.hp[i] > 0 && G.shieldT > 0) { const k = G.shieldT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, rr0 = 22 * dogScale(i); ctx.fillStyle = 'rgba(110,190,255,' + 0.18 * k + ')'; ctx.strokeStyle = 'rgba(170,225,255,' + 0.9 * k + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, rr0, 0, 6.283); ctx.fill(); ctx.stroke() }
     if (G.hp[i] > 0 && i === 0 && G.tankT > 0) { const k = G.tankT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1; ctx.strokeStyle = 'rgba(150,235,160,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(90,200,110,' + 0.16 * k + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, 26 * dogScale(i), 0, 6.283); ctx.fill(); ctx.stroke() }
-    if (G.hp[i] > 0 && i === 1 && G.panicT > 0) { const k = G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, p = 1 + 0.08 * Math.sin(t * 22); ctx.strokeStyle = 'rgba(255,90,80,' + 0.95 * k + ')'; ctx.fillStyle = 'rgba(255,60,50,' + 0.2 * k + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(gp.x + Math.sin(t * 40) * 0.8, gp.y + 2, 24 * dogScale(i) * p, 0, 6.283); ctx.fill(); ctx.stroke() }
+    if (G.hp[i] > 0 && i === 1 && G.panicT > 0) fireAura(ctx, gp.x, gp.y, dogScale(i), t, G.panicT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1)
     if (G.hp[i] > 0 && G.frenzyT > 0) { ctx.fillStyle = 'rgba(255,190,60,' + (0.25 + 0.15 * Math.sin(t * 18)) + ')'; ctx.beginPath(); ctx.ellipse(gp.x, gp.y + 15, 16 * dogScale(i), 6, 0, 0, 6.283); ctx.fill() } } }); }
   ents.sort((a, b) => a.y - b.y).forEach(o => { ctx.save(); try { o.d() } catch (e) { if (!R.errLogged) { R.errLogged = true; console.error("entity draw", e); trackError(String(e), "entity draw") } } ctx.restore() });
   if (G.crate) { // supply crate: bobbing chest with a shrinking timer ring; tap it
