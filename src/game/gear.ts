@@ -41,3 +41,7 @@ export function rollItem(id: number, tier: number, lvl: number, bonus = 0, rand:
   const subs = pool.slice(0, rar === 2 ? 1 : rar === 3 ? 2 : 0).map(st => ({ stat: st, val: roll(st, SUB_MUL) }))
   return { id, slot, rar: rar as Item['rar'], lvl, stat, val: roll(stat, 1), ...(subs.length ? { subs } : {}), on: -1 }
 }
+
+/** Rough worth of an item for auto-equip: each stat weighted by how much it moves a fight. */
+const W: Record<Stat, number> = { dmg: 1, crit: 1.4, rate: 1, hp: 0.5, gold: 0.25, cdmg: 0.45, steal: 60, guard: 1.1, boss: 0.5 }
+export const itemScore = (it: Item) => Object.keys(W).reduce((a, k) => a + statVal(it, k as Stat) * W[k as Stat], 0)
