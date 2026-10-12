@@ -5,6 +5,9 @@ import { BOOST, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyW
 import { drawScreen, screenButton, startSpin } from './screens'
 import { drawTour, drawTourAsk, tourButton, tourSeen } from './tour'
 import { PRIVACY_URL } from './config'
+import { openSaveData } from './savedata'
+import { buyNoAds, restoreBuys, initPurchases } from './iap'
+import { initTelemetry } from './telemetry'
 import { showRewardedAd, tickAd, finishAd, adState } from './ads'
 import { R, benchRect, drainEvents, updateFx, render, drawHelp, drawWelcome, drawPick, drawRebirth, drawQuests, drawAd } from './render'
 import { Audio_ } from './audio'
@@ -13,7 +16,7 @@ import { Audio_ } from './audio'
 export function startGame(cv: HTMLCanvasElement): () => void {
   const ctx = cv.getContext('2d')!
   ctx.scale(cv.width / W, cv.height / H)
-  load(); startStage()
+  load(); startStage(); initTelemetry(); void initPurchases()
   if (!tourSeen() && G.stage <= 2 && G.bought === 0) R.tourAsk = true // asked once, new players only
   accrueAway() // time since the last visit fills the stash (capped); opens the welcome-back card
 
@@ -63,6 +66,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'collect' || k === 'welcome') { if (collectStash() === 0) G.banner = { text: 'Stash is empty', sub: 'It fills while you play and while you are away', t: 1.4 } }
     else if (k === 'ad_done') finishAd()
     else if (k === 'boost_ad') { if (R.screen === 'boost' && G.boostT < BOOST.cap) adGate(showRewardedAd('boost', () => { startBoost(); G.banner = { text: 'PACK BOOST', sub: '+50% gold, +25% damage', t: 1.6 } })) }
+    else if (k === 'iap_buy') { if (R.screen === 'noads') void buyNoAds() }
+    else if (k === 'iap_restore') { if (R.screen === 'noads') void restoreBuys() }
     else if (k === 'raid_ad') { if (R.screen === 'raid') adGate(showRewardedAd('raid', () => { G.raidInfo.extra++; G.banner = { text: '+1 Raid attempt', t: 1.4 } })) }
     else if (k === 'spin_ad') { if (R.screen === 'spin' && !R.spinAnim) adGate(showRewardedAd('spin', () => { if (spinsLeft().ad) startSpin(true) })) }
     else if (k === 'welcome_ad') { if (G.away) adGate(showRewardedAd('stash2x', () => { collectStash(2) })) }
@@ -72,7 +77,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     else if (k === 'scr_x') R.screen = null
     else if (k === 'scr_close') R.screen = R.screen === 'hub' ? null : 'hub'
     else if (k.startsWith('hub_tab')) R.hubTab = +k.slice(7)
-    else if (k.startsWith('nav_')) { const id = k.slice(4); if (!unlocked(id)) G.banner = { text: 'Unlocks at stage ' + unlockStage(id), sub: 'Keep climbing!', t: 1.4 }; else if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'privacy') { try { window.open(PRIVACY_URL, '_blank', 'noopener') } catch { /* blocked */ } } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
+    else if (k.startsWith('nav_')) { const id = k.slice(4); if (!unlocked(id)) G.banner = { text: 'Unlocks at stage ' + unlockStage(id), sub: 'Keep climbing!', t: 1.4 }; else if (id === 'quests') { ensureDaily(); R.screen = null; R.quests = true } else if (id === 'rebirth') { R.screen = null; R.rebirth = true } else if (id === 'savedata') { openSaveData() } else if (id === 'privacy') { try { window.open(PRIVACY_URL, '_blank', 'noopener') } catch { /* blocked */ } } else if (id === 'tour') { R.screen = null; R.tour = 0 } else if (id === 'help') { R.screen = null; R.help = true } else R.screen = id }
     else if (k === 'q_close') R.quests = false
     else if (k.startsWith('qc')) { if (claimQuest(+k.slice(2))) Audio_.coins() }
     else if (k === 'reroll') { if (!rerollBlessings()) G.banner = { text: 'Need ' + REROLL_COST + ' gems', sub: 'Earn gems from daily quests', t: 1.4 } }
