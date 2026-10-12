@@ -98,13 +98,14 @@ export function drawEBullets(ctx: Ctx, bs: EBullet[]) {
 /** Mortar telegraph: ground ring fills as the shell comes down so players can read it and move. */
 export function drawShells(ctx: Ctx, ss: Shell[], t: number) {
   for (const s of ss) {
-    const p = Math.min(1, s.t / s.dur), ry = s.r * HAZARD_SQUASH
+    if (s.t < 0 && s.col) continue
+    const p = Math.max(0, Math.min(1, s.t / s.dur)), ry = s.r * HAZARD_SQUASH, cl = s.col ?? ''
     ctx.fillStyle = 'rgba(255,70,50,' + (0.10 + 0.16 * p) + ')'; ctx.beginPath(); ctx.ellipse(s.tx, s.ty, s.r, ry, 0, 0, 6.283); ctx.fill()
-    ctx.strokeStyle = 'rgba(255,90,70,' + (0.55 + 0.4 * Math.sin(t * 14)) + ')'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(s.tx, s.ty, s.r, ry, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([])
+    ctx.strokeStyle = cl || 'rgba(255,90,70,' + (0.55 + 0.4 * Math.sin(t * 14)) + ')'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(s.tx, s.ty, s.r, ry, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([])
     ctx.fillStyle = 'rgba(255,120,90,.55)'; ctx.beginPath(); ctx.ellipse(s.tx, s.ty, s.r * p, ry * p, 0, 0, 6.283); ctx.fill()
     const x = s.x + (s.tx - s.x) * p, y = s.y + (s.ty - s.y) * p - Math.sin(Math.PI * p) * 90
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(s.x + (s.tx - s.x) * p, s.y + (s.ty - s.y) * p, 5, 2.5, 0, 0, 6.283); ctx.fill()
-    ctx.fillStyle = '#2b2b33'; ctx.strokeStyle = OL; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#ff9a3a'; ctx.beginPath(); ctx.arc(x - 1.5, y - 1.5, 1.6, 0, 6.283); ctx.fill()
+    ctx.fillStyle = cl || '#2b2b33'; ctx.strokeStyle = OL; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, cl ? 6 : 5, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = cl ? '#fff' : '#ff9a3a'; ctx.beginPath(); ctx.arc(x - 1.5, y - 1.5, 1.6, 0, 6.283); ctx.fill()
   }
 }
 

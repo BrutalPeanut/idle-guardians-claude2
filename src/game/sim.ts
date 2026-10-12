@@ -14,11 +14,14 @@ import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
-export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number }
+export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number }
+/** Boss dragons: 0 Magma Wyrm (fire barrage), 1 Frost Drake (ice nova), 2 Storm Wyvern (lightning strikes), 3 Plague Drake (spits venom, calls a brood). */
+export const DRAKES = [{ name: 'MAGMA WYRM', cast: 'FIRE BARRAGE', col: '#ff7a2a' }, { name: 'FROST DRAKE', cast: 'ICE NOVA', col: '#8fe0ff' }, { name: 'STORM WYVERN', cast: 'LIGHTNING', col: '#ffe45a' }, { name: 'PLAGUE DRAKE', cast: 'BROOD CALL', col: '#9be04a' }] as const
+export const drakeFor = (stage: number) => (Math.floor(stage / 10) - 1 + 400) % 4
 export interface AutoCfg { on: boolean; shield: boolean; frenzy: boolean; nade: boolean; tank: boolean; panic: boolean }
 export interface Shot { x: number; y: number; vx: number; vy: number; w: number; dmg: number; crit: boolean; flank: 0 | 1 | 2; life: number; tgt: Enemy | null; kind: WeaponKind; col: string; gi: number }
 export interface EBullet { x: number; y: number; vx: number; vy: number; dmg: number; life: number; pass: number }
-export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
+export interface Shell { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number; col?: string }
 export interface Nade { x: number; y: number; tx: number; ty: number; t: number; dur: number; r: number; dmg: number }
 export interface Stats { dealt: number[]; nade: number; flank: number; taken: number[]; shield: number; cover: number }
 export const newStats = (): Stats => ({ dealt: [0, 0, 0, 0], nade: 0, flank: 0, taken: [0, 0, 0, 0], shield: 0, cover: 0 })
@@ -29,12 +32,13 @@ export type GEvent =
   | { type: 'hit'; x: number; y: number; col: string }
   | { type: 'dmg'; x: number; y: number; v: number; crit: boolean; kill: boolean; blast?: boolean; flank?: boolean }
   | { type: 'kill'; x: number; y: number; kind: Enemy['kind']; gold: number }
-  | { type: 'boom'; x: number; y: number; r: number }
+  | { type: 'boom'; x: number; y: number; r: number; col?: string }
   | { type: 'pack_hit'; x: number; y: number; v: number }
   | { type: 'merge'; slot: number; level: number }
   | { type: 'unlock'; level: number; newEra: boolean }
   | { type: 'stage_clear'; stage: number; gold: number }
   | { type: 'cover_hit'; id: number; x: number; y: number; v: number; kind: Cover['kind'] }
+  | { type: 'boss_cast'; x: number; y: number; name: string; col: string }
   | { type: 'cover_break'; x: number; y: number; w: number; kind: Cover['kind'] }
   | { type: 'efire'; x: number; y: number }
   | { type: 'mortar_fire'; x: number; y: number }
@@ -302,6 +306,7 @@ function spawnEnemy() {
     x: rnd(ARENA.x0 + 20, ARENA.x1 - 20), y: ARENA.y0 - 10, hp, max: hp,
     spd: (boss ? 16 : rnd(22, 34)) * (robot ? 0.8 : 1), r: boss ? 24 : robot ? 13 : 11,
     kind: boss ? 'boss' : robot ? 'robot' : 'zombie', flash: 0, wob: Math.random() * 6, dmg: (4 + s * 1.3) * (boss ? 3 : 1), cd: 0,
+    ...(boss ? { drake: drakeFor(s), ab: 3.5 } : {}),
   })
   G.spawned++
 }
@@ -314,6 +319,23 @@ export function guardianPos(i: number) { const b = baseGuardianPos(i); return { 
 const hazardAt = (x: number, y: number): HazardKind | null => { for (const h of G.hazards) if (inHazard(h, x, y)) return h.kind; return null }
 const blocked = (ax: number, ay: number, bx: number, by: number) => { for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && segRect(ax, ay, bx, by, c)) return c; return null }
 const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.coverId && c.hp > 0)
+
+/** A boss dragon's signature move. Everything is telegraphed (shell rings) so it can be dodged by moving; raid bosses cast slower. Enrages under 35% HP. */
+function bossCast(e: Enemy, dt: number, n: number) {
+  if (e.drake === undefined || e.ab === undefined || (e.ab -= dt) > 0) return
+  const live: number[] = []; for (let k = 0; k < n; k++) if (G.hp[k] > 0) live.push(k)
+  if (!live.length) { e.ab = 1; return }
+  const d = DRAKES[e.drake], enr = e.hp < e.max * 0.35, base = [6.5, 7.5, 6, 9][e.drake] * (enr ? 0.65 : 1) * (G.raid ? 1.4 : 1), sd = 8 + G.stage * 1.8
+  const tgt = () => { const gp = guardianPos(live[Math.floor(Math.random() * live.length)]); return { x: gp.x + rnd(-12, 12), y: gp.y + rnd(-8, 8) } }
+  G.events.push({ type: 'boss_cast', x: e.x, y: e.y, name: d.cast, col: d.col }); e.ab = base
+  if (e.drake === 0) { for (let k = 0; k < (enr ? 5 : 3); k++) { const t = tgt(); G.shells.push({ x: e.x, y: e.y, tx: t.x, ty: t.y, t: -k * 0.2, dur: 1.3, r: 42, dmg: sd, col: d.col }) } }
+  else if (e.drake === 1) { const c = guardianPos(live[0]); G.shells.push({ x: e.x, y: e.y, tx: c.x, ty: c.y, t: 0, dur: 1.9, r: enr ? 110 : 90, dmg: sd * 1.3, col: d.col }) }
+  else if (e.drake === 2) { for (let k = 0; k < (enr ? 7 : 5); k++) { const t = tgt(); G.shells.push({ x: t.x, y: ARENA.y0 - 20, tx: t.x, ty: t.y, t: -k * 0.22, dur: 0.75, r: 26, dmg: sd * 0.8, col: d.col }) } }
+  else {
+    const t = tgt(); G.shells.push({ x: e.x, y: e.y, tx: t.x, ty: t.y, t: 0, dur: 1.4, r: 50, dmg: sd, col: d.col })
+    for (let k = 0; k < (enr ? 4 : 2); k++) { const hp = hpScale(G.stage) * 0.5; G.enemies.push({ x: e.x + rnd(-24, 24), y: e.y + 10, hp, max: hp, spd: rnd(30, 40), r: 10, kind: 'zombie', flash: 0, wob: Math.random() * 6, dmg: (4 + G.stage * 1.3) * 0.7, cd: 0 }) }
+  }
+}
 
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
@@ -522,6 +544,7 @@ export function update(dtReal: number) {
     if (e.flash > 0) e.flash -= dt
     if (e.hp <= 0) continue
     const ehz = hazardAt(e.x, e.y)
+    if (e.kind === 'boss') bossCast(e, dt, n)
     if (ehz === 'lava') { e.hp -= e.max * 0.07 * dt; if (e.hp <= 0) { killReward(e); continue } }
     if (e.dug) { // gunners / mortars hold position behind their barricade
       if ((e.cd -= dt) > 0) continue
@@ -582,7 +605,7 @@ export function update(dtReal: number) {
   for (const s of G.shells) {
     s.t += dt
     if (s.t < s.dur) continue
-    G.events.push({ type: 'boom', x: s.tx, y: s.ty, r: s.r })
+    G.events.push({ type: 'boom', x: s.tx, y: s.ty, r: s.r, col: s.col })
     for (let i = 0; i < n; i++) { const gp = guardianPos(i); if (alive(i) && Math.hypot(gp.x - s.tx, gp.y - s.ty) < s.r) { hurt(i, s.dmg * 0.5 * aura); G.events.push({ type: 'pack_hit', x: gp.x, y: gp.y - 22, v: Math.ceil(s.dmg * 0.5 * aura) }) } }
     for (const c of G.cover) if (c.side === 'player' && c.hp > 0 && Math.hypot(c.x - s.tx, c.y - s.ty) < s.r + c.w / 2) hitCover(c, s.dmg * 0.4, c.x, c.y)
   }
@@ -693,7 +716,7 @@ export const raidLeft = () => { rollRaid(); return Math.max(0, RAID.attempts + c
 export const raidTier = (dmg: number) => { let t = -1; RAID.tiers.forEach((m, k) => { if (dmg >= raidBase() * m) t = k }); return t }
 function spawnRaidBoss(phase: number) {
   const hp = raidBase() * 1.2 * (1 + 0.5 * (phase - 1))
-  const e: Enemy = { x: 180, y: 140, hp, max: hp, spd: 0, r: 30, kind: 'boss', flash: 0, wob: 0, dmg: 0, cd: 99 }
+  const e: Enemy = { x: 180, y: 158, hp, max: hp, spd: 0, r: 30, kind: 'boss', flash: 0, wob: 0, dmg: 0, cd: 99, drake: (phase - 1) % 4, ab: 5 }
   G.enemies.push(e); if (G.raid) G.raid.boss = e
 }
 export function startRaid(): boolean {
