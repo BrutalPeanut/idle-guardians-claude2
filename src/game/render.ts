@@ -3,6 +3,7 @@ import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unloc
 import type { Guardian } from './data'
 import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
+import { IAP } from './iap'
 import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
@@ -1063,6 +1064,21 @@ export function drawWipe(ctx: Ctx, t: number) {
     ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#7f929a'; ctx.fillText('Reinforce unlocks after ' + WALL_WIPES + ' wipes on the same stage.', W / 2, 410)
   }
   ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#5f7079'; ctx.fillText('Ads are optional and only run when you tap them.', W / 2, 600); void cy; void t
+}
+
+/** One-time starter bundle, offered once after the player first reaches STARTER_STAGE (phone app only). */
+export function drawStarter(ctx: Ctx, t: number) {
+  R.btns = {}
+  ctx.fillStyle = 'rgba(4,8,10,.9)'; ctx.fillRect(0, 0, W, H)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffd84a'; ctx.font = '400 28px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('STARTER PACK', W / 2, 110)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Once per player. Thanks for getting this far.', W / 2, 142)
+  const items: [string, string][] = [['Remove ads for good', 'Keep every reward, skip every ad'], ['350 gems', 'Chests, reinforces, blessing rerolls'], ['10 minutes of Pack Boost', '+50% gold, +25% gun damage']]
+  items.forEach(([a, b], i) => { const y = 180 + i * 72; plate(ctx, 24, y, W - 48, 60, 14, 'rgba(34,52,64,.75)', 'rgba(12,20,26,.75)'); ctx.textAlign = 'left'; ctx.font = '400 17px ' + FONT; ctx.fillStyle = '#fff'; ctx.fillText(a, 42, y + 22); ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#aebfb6'; ctx.fillText(b, 42, y + 43) })
+  const busy = IAP.status === 'busy', price = IAP.starter?.product?.priceString ?? ''
+  button(ctx, 'starter_buy', W / 2 - 120, 412, 240, 54, { top: busy ? '#5a666d' : '#ffcf4a', bot: busy ? '#39434a' : '#e8841a', label: busy ? 'Please wait...' : 'Get the Starter Pack' + (price ? '  ' + price : ''), size: 15, disabled: busy })
+  button(ctx, 'starter_skip', W / 2 - 80, 482, 160, 40, { top: '#6f8794', bot: '#3f525d', label: 'Not now', size: 13 })
+  ctx.textAlign = 'center'; ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#9fb5aa'; ctx.fillText(IAP.msg || 'One-time purchase. Offered once.', W / 2, 560); void t
 }
 
 /** Daily quests: three objectives, claim for gems + gold. */
