@@ -110,6 +110,8 @@ interface State {
 export const PACK_BOUNDS = { x0: ARENA.x0 + 40, x1: ARENA.x1 - 40, y0: ARENA.y0 + 40, y1: ARENA.y1 - 50 }
 const REVIVE_T = 12
 const reviveTime = () => Math.max(5, REVIVE_T - sk('recov'))
+/** Guns only engage enemies this close (px), so a wave is seen walking in before it is shot. */
+const FIRE_RANGE = 185
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
@@ -551,6 +553,7 @@ export function update(dtReal: number) {
     let near: Enemy | null = null, nd = 1e9, clear: Enemy | null = null, cdist = 1e9
     for (const e of G.enemies) {
       const d = Math.hypot(e.x - gp.x, e.y - gp.y)
+      if (!e.dug && (d > FIRE_RANGE || e.y < ARENA.y0 + 6)) continue // let them walk into view and range first (dug-in gunners are exempt)
       if (d < nd) { nd = d; near = e }
       if (d < cdist && (arcs || !blocked(gp.x, gp.y - 6, e.x, e.y))) { cdist = d; clear = e }
     }
