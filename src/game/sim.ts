@@ -586,7 +586,7 @@ export function update(dtReal: number) {
     let near: Enemy | null = null, nd = 1e9, clear: Enemy | null = null, cdist = 1e9
     for (const e of G.enemies) {
       const d = Math.hypot(e.x - gp.x, e.y - gp.y)
-      if (!e.dug && (d > FIRE_RANGE || e.y < ARENA.y0 + 6)) continue // let them walk into view and range first (dug-in gunners are exempt)
+      if (!G.raid && !e.dug && (d > FIRE_RANGE || e.y < ARENA.y0 + 6)) continue // stage waves walk into range first; raid bosses are always in range (dug-in gunners exempt)
       if (d < nd) { nd = d; near = e }
       if (d < cdist && (arcs || !blocked(gp.x, gp.y - 6, e.x, e.y))) { cdist = d; clear = e }
     }
