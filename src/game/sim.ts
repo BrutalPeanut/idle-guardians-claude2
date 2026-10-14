@@ -112,6 +112,8 @@ const REVIVE_T = 12
 const reviveTime = () => Math.max(5, REVIVE_T - sk('recov'))
 /** Guns only engage enemies this close (px), so a wave is seen walking in before it is shot. */
 const FIRE_RANGE = 170
+/** Missile Bots plant this far from the nearest dog: inside FIRE_RANGE, so they can always be shot. */
+const LAUNCH_RANGE = 140
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
@@ -299,9 +301,9 @@ export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 // early stages are a bit beefier so the opening isn't over in two minutes; the bump fades out by the mid game
 /** Overall toughness of the waves (hp / contact damage / headcount). Raised so a pack standing in the open no longer melts everything. */
 const diffRamp = (s: number) => Math.min(1, Math.max(0, (s - 1) / 11)) // gentle first stages, full toughness from stage 12
-export const DIFF = { hp: 4.5, dmg: 1.8, count: 1.4, spd: 1.3 }
+export const DIFF = { hp: 3.7, dmg: 1.8, count: 1.4, spd: 1.3 }
 export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = (s: number) => 1.1 + (DIFF.count - 1.1) * diffRamp(s), dSpd = (s: number) => 1 + (DIFF.spd - 1) * diffRamp(s), dDmg = (s: number) => 1.2 + (DIFF.dmg - 1.2) * diffRamp(s)
-export const hpScale = (s: number) => dHp(s) * Math.pow(1.04, Math.max(0, s - 12)) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
+export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
@@ -418,7 +420,7 @@ function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
 }
 /** Pack Resolve: every wipe on the same stage gives the next attempt +10% power and health (max +60%), until the stage is cleared. Keeps a boss wall from being a dead end. */
 /** Reinforce (after a wall of 3+ wipes): the next attempt is +25% power and health on top of Pack Resolve. */
-export const REINFORCE_BONUS = 0.25, WALL_WIPES = 3, REINFORCE_GEMS = 30
+export const REINFORCE_BONUS = 0.25, WALL_WIPES = 2, REINFORCE_GEMS = 30
 export const resolve = () => !G.raid && G.failStage === G.stage ? Math.min(0.6, 0.1 * G.fail) + (G.reinforce ? REINFORCE_BONUS : 0) : 0
 /** Regroup for free: restart the stage (Pack Resolve applies on repeat wipes). */
 export function regroupFree() {
@@ -448,7 +450,7 @@ const dogPower = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.power : 1) 
 export const cp = (k: string) => clanPerk(G.clan, k)
 const dogArmor = (i: number) => (pk('guard') ? 0.92 : 1) * (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
 /** Extra bite on every enemy hit against a guardian (melee, bullets, missiles, shells): damage lands on single dogs, so they have to be kept alive. */
-const hitMul = () => 2.2 + 2.3 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
+const hitMul = () => 2.2 + 1.7 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
 function hurt(i: number, dmg: number) {
   if (!alive(i)) return
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
@@ -654,14 +656,14 @@ export function update(dtReal: number) {
     }
     if (e.kind === 'launcher') { // Missile Bot: walks to range, plants, fires a slow straight missile at a dog's current spot
       let ld = 1e9; for (const c of centers) ld = Math.min(ld, Math.hypot(c.x - e.x, c.y - e.y))
-      if (ld > 190) { let tgt2 = centers[0], d2 = 1e9; for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < d2) { d2 = d; tgt2 = c } }; const sl = ehz === 'mud' ? 0.45 : 1; e.x += (tgt2.x - e.x) / d2 * e.spd * sl * dt; e.y += (tgt2.y - e.y) / d2 * e.spd * sl * dt }
+      if (ld > LAUNCH_RANGE) { let tgt2 = centers[0], d2 = 1e9; for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < d2) { d2 = d; tgt2 = c } }; const sl = ehz === 'mud' ? 0.45 : 1; e.x += (tgt2.x - e.x) / d2 * e.spd * sl * dt; e.y += (tgt2.y - e.y) / d2 * e.spd * sl * dt }
       else if ((e.cd -= dt) <= 0) {
         const li: number[] = []; for (let k = 0; k < n; k++) if (alive(k)) li.push(k)
         if (li.length) { const gp = guardianPos(li[Math.floor(Math.random() * li.length)]), dx = gp.x - e.x, dy = gp.y - e.y, dd = Math.hypot(dx, dy) || 1, sp = 150
           G.missiles.push({ x: e.x, y: e.y + 6, vx: dx / dd * sp, vy: dy / dd * sp, tx: gp.x, ty: gp.y, life: 4, dmg: 8 + G.stage * 1.7, r: 40 }); G.events.push({ type: 'mortar_fire', x: e.x, y: e.y }) }
         e.cd = rnd(3.6, 4.8)
       }
-      for (const c of G.cover) if (c.hp > 0) { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
+      for (const c of G.cover) if (c.hp > 0 && c.side === 'player') { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } } // bots are only stopped by YOUR cover, never trapped by their own
       e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y)); continue
     }
     // melee: chase the nearest of (strike team / pack) and (planted support squad); cover does NOT stop melee damage
@@ -670,7 +672,7 @@ export function update(dtReal: number) {
     const slow = ehz === 'mud' ? 0.45 : ehz === 'shallows' ? 0.75 : 1
     if (td > 30) { e.x += (tgt.x - e.x) / td * e.spd * slow * dt; e.y += (tgt.y - e.y) / td * e.spd * slow * dt }
     else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura * hitMul()); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
-    for (const c of G.cover) if (c.hp > 0) { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
+    for (const c of G.cover) if (c.hp > 0 && c.side === 'player') { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
     e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y))
   }
   G.enemies = G.enemies.filter(e => e.hp > 0)
