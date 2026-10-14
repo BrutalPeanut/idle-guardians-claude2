@@ -14,7 +14,7 @@ import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
-export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number }
+export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number; path?: number }
 /** Boss dragons: 0 Magma Wyrm (fire barrage), 1 Frost Drake (ice nova), 2 Storm Wyvern (lightning strikes), 3 Plague Drake (spits venom, calls a brood). */
 export const DRAKES = [{ name: 'MAGMA WYRM', cast: 'FIRE BARRAGE', col: '#ff7a2a' }, { name: 'FROST DRAKE', cast: 'ICE NOVA', col: '#8fe0ff' }, { name: 'STORM WYVERN', cast: 'LIGHTNING', col: '#ffe45a' }, { name: 'PLAGUE DRAKE', cast: 'BROOD CALL', col: '#9be04a' }] as const
 export const drakeFor = (stage: number) => (Math.floor(stage / 10) - 1 + 400) % 4
@@ -371,6 +371,16 @@ export function guardianPos(i: number) { const b = baseGuardianPos(i); return { 
 
 const hazardAt = (x: number, y: number): HazardKind | null => { for (const h of G.hazards) if (inHazard(h, x, y)) return h.kind; return null }
 const blocked = (ax: number, ay: number, bx: number, by: number) => { for (const c of G.cover) if (c.side === 'enemy' && c.hp > 0 && segRect(ax, ay, bx, by, c)) return c; return null }
+/** Heading for a walker: straight at the target, or around YOUR barricades (never through them). Keeps one side per enemy so it doesn't dither. */
+const walkAngle = (e: Enemy, tx: number, ty: number, step: number): number => {
+  const base = Math.atan2(ty - e.y, tx - e.x), look = Math.max(step, 36)
+  const walls = G.cover.filter(c => c.side === 'player' && c.hp > 0)
+  const clear = (a: number) => { const nx = e.x + Math.cos(a) * look, ny = e.y + Math.sin(a) * look; return !walls.some(c => segRect(e.x, e.y, nx, ny, c)) }
+  if (!walls.length || clear(base)) return base
+  const side = e.path ?? 1
+  for (const o of [0.45, 0.9, 1.35, 1.8, 2.25, 2.7]) for (const sg of [side, -side]) { const a = base + sg * o; if (clear(a)) { e.path = sg; return a } }
+  return base
+}
 const barricadeAlive = (e: Enemy) => !!e.dug && G.cover.some(c => c.id === e.coverId && c.hp > 0)
 
 /** A boss dragon's signature move. Everything is telegraphed (shell rings) so it can be dodged by moving; raid bosses cast slower. Enrages under 35% HP. */
@@ -656,7 +666,7 @@ export function update(dtReal: number) {
     }
     if (e.kind === 'launcher') { // Missile Bot: walks to range, plants, fires a slow straight missile at a dog's current spot
       let ld = 1e9; for (const c of centers) ld = Math.min(ld, Math.hypot(c.x - e.x, c.y - e.y))
-      if (ld > LAUNCH_RANGE) { let tgt2 = centers[0], d2 = 1e9; for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < d2) { d2 = d; tgt2 = c } }; const sl = ehz === 'mud' ? 0.45 : 1; e.x += (tgt2.x - e.x) / d2 * e.spd * sl * dt; e.y += (tgt2.y - e.y) / d2 * e.spd * sl * dt }
+      if (ld > LAUNCH_RANGE) { let tgt2 = centers[0], d2 = 1e9; for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < d2) { d2 = d; tgt2 = c } }; const sl = ehz === 'mud' ? 0.45 : 1, st = e.spd * sl * dt, a = walkAngle(e, tgt2.x, tgt2.y, st); e.x += Math.cos(a) * st; e.y += Math.sin(a) * st }
       else if ((e.cd -= dt) <= 0) {
         const li: number[] = []; for (let k = 0; k < n; k++) if (alive(k)) li.push(k)
         if (li.length) { const gp = guardianPos(li[Math.floor(Math.random() * li.length)]), dx = gp.x - e.x, dy = gp.y - e.y, dd = Math.hypot(dx, dy) || 1, sp = 150
@@ -670,7 +680,7 @@ export function update(dtReal: number) {
     let tgt = centers[0], td = Math.hypot(centers[0].x - e.x, centers[0].y - e.y)
     for (const c of centers) { const d = Math.hypot(c.x - e.x, c.y - e.y); if (d < td) { td = d; tgt = c } }
     const slow = ehz === 'mud' ? 0.45 : ehz === 'shallows' ? 0.75 : 1
-    if (td > 30) { e.x += (tgt.x - e.x) / td * e.spd * slow * dt; e.y += (tgt.y - e.y) / td * e.spd * slow * dt }
+    if (td > 30) { const st = e.spd * slow * dt, a = walkAngle(e, tgt.x, tgt.y, st); e.x += Math.cos(a) * st; e.y += Math.sin(a) * st }
     else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura * hitMul()); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
     for (const c of G.cover) if (c.hp > 0 && c.side === 'player') { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
     e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y))
