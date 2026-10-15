@@ -303,7 +303,8 @@ export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 const diffRamp = (s: number) => Math.min(1, Math.max(0, (s - 1) / 11)) // gentle first stages, full toughness from stage 12
 export const DIFF = { hp: 3.7, dmg: 1.8, count: 1.4, spd: 1.3 }
 export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = (s: number) => 1.1 + (DIFF.count - 1.1) * diffRamp(s), dSpd = (s: number) => 1 + (DIFF.spd - 1) * diffRamp(s), dDmg = (s: number) => 1.2 + (DIFF.dmg - 1.2) * diffRamp(s)
-export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, s - 1) * (1 + 2.2 / (1 + s / 5))
+/** Enemy HP compounds 1.27x per stage up to stage 12, then 1.23x: late stages stay a climb, not a wall. */
+export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(1.23, Math.max(0, s - 12)) * (1 + 2.2 / (1 + s / 5))
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
