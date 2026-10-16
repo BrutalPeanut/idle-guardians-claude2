@@ -48,3 +48,7 @@
 - Run `supabase/clans.sql` once in the Supabase SQL editor. Until then the game keeps the practice clans (labelled as simulated).
 - All clan reads/writes are SECURITY DEFINER functions; tables are not readable by the anon key. Writes require the player id plus a per-device secret (stored hashed), and rosters never return player ids.
 - Limits: 30 members per clan, 2 new clans per player per day, names/tags filtered to letters, numbers, spaces, _ and -.
+
+## Dog Park (async PvP)
+- Run `supabase/park.sql` once, after `clans.sql` (it reuses the per-device secret). Until then players get practice battles against AI packs (labelled).
+- Snapshots (firepower = best smoothed DPS seen, health = pack max HP) are client-reported like the leaderboard: fine for a casual ladder, not for prizes.
