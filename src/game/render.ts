@@ -1,3 +1,4 @@
+import { DRAW, drawAll } from './ext'
 import { nextGoal } from './meta'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
@@ -687,7 +688,7 @@ export function render(ctx: Ctx, t: number) {
   for (const c of R.scorch) { const a = Math.min(0.4, (6 - c.t) / 6 * 0.45); const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, c.r * 0.6); g.addColorStop(0, 'rgba(15,10,8,' + a + ')'); g.addColorStop(1, 'rgba(15,10,8,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r * 0.6, c.r * 0.42, 0, 0, 6.283); ctx.fill() }
   const ents: { y: number; d: () => void }[] = [];
   for (const c of G.cover) ents.push({ y: c.y + c.h / 2, d: () => drawCover(ctx, c, t) });
-  for (const e of G.enemies) ents.push({ y: e.y, d: () => drawEnemy(ctx, e, t) });
+  for (const e of G.enemies) ents.push({ y: e.y, d: () => { drawEnemy(ctx, e, t); if (DRAW.enemy.length) drawAll(DRAW.enemy, ctx, e, t) } });
   const n = unlockedGuardians(G.stage), ws = sortedWeapons();
   for (let i = 0; i < n; i++) { const gp = guardianPos(i); const firing = ws[i] !== undefined && G.cd[i] > 1 / WEAPONS[ws[i]].rate - 0.08; const tgt = G.enemies[0]; ents.push({ y: gp.y, d: () => { if (G.hp[i] <= 0) ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 5); const sc = dogScale(i); ctx.save(); ctx.translate(gp.x, gp.y + 15); ctx.scale(sc, sc); ctx.translate(-gp.x, -(gp.y + 15)); drawDog(ctx, GUARDIANS[i], gp.x, gp.y, t, firing, tgt); const wl = ws[i]; if (wl !== undefined && G.hp[i] > 0) drawHeld(ctx, wl, gp.x, gp.y, tgt, firing, t, GUARDIANS[i]); ctx.restore(); ctx.globalAlpha = 1
     if (G.hp[i] > 0 && G.shieldT > 0) { const k = G.shieldT < 1.2 ? 0.5 + 0.5 * Math.sin(t * 24) : 1, rr0 = 22 * dogScale(i); ctx.fillStyle = 'rgba(110,190,255,' + 0.18 * k + ')'; ctx.strokeStyle = 'rgba(170,225,255,' + 0.9 * k + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gp.x, gp.y + 2, rr0, 0, 6.283); ctx.fill(); ctx.stroke() }
@@ -709,6 +710,7 @@ export function render(ctx: Ctx, t: number) {
     }
   }
   for (const s of G.shots) drawShot(ctx, s);
+  if (DRAW.world.length) drawAll(DRAW.world, ctx, t);
   for (const g of G.nades) { // lobbed grenade: target ring + arcing ball
     const f = g.t / g.dur, x = g.x + (g.tx - g.x) * f, y = g.y + (g.ty - g.y) * f, hgt = Math.sin(f * Math.PI) * 60
     ctx.strokeStyle = 'rgba(255,150,60,' + (0.35 + 0.35 * Math.sin(t * 20)) + ')'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.arc(g.tx, g.ty, g.r, 0, 6.283); ctx.stroke(); ctx.setLineDash([])
@@ -887,6 +889,7 @@ export function render(ctx: Ctx, t: number) {
     const k = c.t / c.dur, e = k * k * (3 - 2 * k), px = c.sx + (22 - c.sx) * e, py = c.sy + (57 - c.sy) * e - Math.sin(k * Math.PI) * 38
     ctx.save(); ctx.translate(px, py); ctx.scale(0.9 - 0.25 * k, 0.9 - 0.25 * k); icons.coin(ctx, 0, 0, '#ffd84a'); ctx.restore()
   }
+  if (DRAW.hud.length) drawAll(DRAW.hud, ctx, t);
   // banner: ribbon with tails, outlined text, pop-in
   if (G.banner) {
     const b = G.banner
