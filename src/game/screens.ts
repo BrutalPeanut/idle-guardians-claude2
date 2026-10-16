@@ -2,6 +2,7 @@
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
 import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt } from './clan'
 import { premiumOn, unlocked, unlockStage, doSpin, spinsLeft, claimPassTier, claimAch, passLevel, passReady, achReady, statValue, ensurePass } from './sim'
+import { UNLOCK_STAGE } from './meta'
 import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, SPIN_SEGS, seasonDaysLeft, passReward, passPremiumReward } from './meta'
 import { buyPassPlus } from './iap'
 import type { Reward } from './meta'
@@ -25,6 +26,15 @@ export interface Tile { id: string; label: string; sub: () => string; icon: stri
 /** Hub tiles. Later features append here. */
 export const TILES: Tile[] = []
 export const registerTile = (t: Tile) => { TILES.push(t) }
+/** Screens and buttons added by feature modules (see ext.ts / features.ts). */
+export const XSCREENS: Record<string, (ctx: Ctx, t: number) => void> = {}
+export const XBUTTONS: ((k: string) => boolean)[] = []
+/** Register a feature screen: its hub tile (placed in a hub section), draw function, button handler and unlock stage. */
+export function addScreen(o: { tile: Tile; section: 'battle' | 'grow' | 'rewards' | 'more'; minor?: boolean; draw: (ctx: Ctx, t: number) => void; button?: (k: string) => boolean; unlock?: number }) {
+  registerTile(o.tile); XSCREENS[o.tile.id] = o.draw; if (o.button) XBUTTONS.push(o.button)
+  if (o.unlock !== undefined) UNLOCK_STAGE[o.tile.id] = o.unlock
+  const sec = HUB_SECTIONS.find(x => x.id === o.section)!; if (!sec.tiles.includes(o.tile.id)) { (o.minor ? sec.minor : sec.main).push(o.tile.id); sec.tiles.push(o.tile.id) }
+}
 
 export function panel(ctx: Ctx, title: string, back = true) {
   R.btns = {}
@@ -156,7 +166,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'shop': drawShop(ctx); break
     case 'boost': drawBoost(ctx); break
     case 'noads': drawNoAds(ctx); break
-    default: drawHub(ctx, t)
+    default: { const f = R.screen ? XSCREENS[R.screen] : undefined; if (f) f(ctx, t); else drawHub(ctx, t) }
   }
 }
 
@@ -261,6 +271,7 @@ function drawReveal(ctx: Ctx, t: number) {
 
 /** Buttons owned by the gear screens. Returns true if the key was handled. */
 export function screenButton(k: string): boolean {
+  for (const f of XBUTTONS) if (f(k)) return true
   if (k.startsWith('shop_') && shopButton(k)) return true
   if (k.startsWith('cj_')) { const d = CLANS[+k.slice(3)]; if (joinClan(d.id)) { G.banner = { text: 'Joined ' + d.name, sub: 'Contribute by clearing stages and raiding', t: 1.8 }; Audio_.fanfare() } else G.banner = { text: 'Reach stage ' + d.req, sub: 'to join ' + d.name, t: 1.4 }; return true }
   if (k === 'ct_0' || k === 'ct_1') { R.clanTab = +k.slice(3); return true }

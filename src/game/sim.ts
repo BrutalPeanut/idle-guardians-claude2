@@ -1,3 +1,4 @@
+import { ext, ON, fire, XS, loadXS } from './ext'
 import { ARENA, WEAPONS, GUARDIANS, ROSTER, SLOT_OFF, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
@@ -131,7 +132,7 @@ export const G: State = {
 export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
 export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
 export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
-export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper') + 0.15 * pk('lucky'))
+export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper') + 0.15 * pk('lucky') + ext('stash'))
 /** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
 export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
 /** Prestige perk: once you have rebirthed, stages you have already passed (below your best) run at 2x; your frontier stage stays 1x; the manual 2x button multiplies on top (4x). */
@@ -311,20 +312,20 @@ export const isBoss = (s: number) => s % 10 === 0
 let bakAt = 0
 export function save() {
   try { if (Date.now() - bakAt > 120000) { const prev = localStorage.getItem('ig_save'); if (prev) { localStorage.setItem('ig_save_bak', prev); bakAt = Date.now() } } } catch { /* storage unavailable */ }
-  try { G.lastSeen = Date.now(); localStorage.setItem('ig_save', JSON.stringify({ bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, pp: G.passPlus, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, cw: G.collar, cwo: G.collarOwned, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); fire(ON.save); localStorage.setItem('ig_save', JSON.stringify({ xs: XS, bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, pp: G.passPlus, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, cw: G.collar, cwo: G.collarOwned, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
     // a corrupted or wrongly shaped main save falls back to the rolling backup (kept every ~2 min)
     const rd = (k: string) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v && typeof v === 'object' && !Array.isArray(v) ? v : null } catch { return null } }
     const s = rd('ig_save') ?? rd('ig_save_bak')
-    if (!s) { G.bench[0] = 0; G.bench[1] = 0; return false }
+    if (!s) { G.bench[0] = 0; G.bench[1] = 0; loadXS(null); fire(ON.load); return false }
     // core fields: fall back to fresh-game values if a save is missing or has the wrong shape, so a bad save can't crash the game
     const num = (v: unknown, d: number) => typeof v === 'number' && Number.isFinite(v) ? v : d
     const arr = <T,>(v: unknown, d: T[]) => Array.isArray(v) ? v as T[] : d
     const benchOk = arr<number | null>(s.bench, []).length === 8 ? s.bench : (() => { const b: (number | null)[] = new Array(8).fill(null); arr<number | null>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = v }); return b })()
     Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, starterSeen: !!s.ss, collar: typeof s.cw === 'string' ? s.cw : 'red', collarOwned: Array.isArray(s.cwo) ? s.cwo.filter((x: unknown) => typeof x === 'string') : ['red'], shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0, pc: 0 }, passPlus: num(s.pp, 0), spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
-    applySquad(); return true
+    loadXS(s.xs); applySquad(); fire(ON.load); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }
 
@@ -404,8 +405,9 @@ function bossCast(e: Enemy, dt: number, n: number) {
 function killReward(e: Enemy) {
   track('kills'); G.kills++; G.combo++; G.comboT = 2.5
   const mul = e.kind === 'boss' ? 12 : e.kind === 'mortar' ? 2 : e.kind === 'launcher' ? 2.5 : e.kind === 'gunner' ? 1.5 : e.kind === 'runner' ? 0.6 : 1
-  const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + cp('gold') + goldGear() + 0.04 * sk('gold') + 0.04 * tl('fortune') + (wm('gold') ? 0.3 : 0) + (G.boostT > 0 ? BOOST.gold : 0)) * starMul())
+  const gold = G.raid ? 0 : Math.ceil(killGold(G.stage) * mul * (1 + 0.15 * bl('fortune') + 0.1 * pk('treats') + cp('gold') + goldGear() + 0.04 * sk('gold') + 0.04 * tl('fortune') + (wm('gold') ? 0.3 : 0) + (G.boostT > 0 ? BOOST.gold : 0) + ext('gold')) * starMul())
   G.gold += gold; G.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold })
+  fire(ON.kill, { kind: e.kind, x: e.x, y: e.y, raid: !!G.raid, stage: G.stage })
 }
 function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = -1, fl = 0) {
   if (gi >= 0 && e.kind === 'boss') dmg *= 1 + gbc(gi, 'boss')
@@ -420,12 +422,12 @@ function damageEnemy(e: Enemy, dmg: number, crit: boolean, flank: boolean, gi = 
 }
 function fireFrom(i: number, w: number, target: Enemy, flank: 0 | 1 | 2) {
   const gp = guardianPos(i), wd = WEAPONS[w]
-  const crit = Math.random() < Math.min(0.75, 0.1 + 0.06 * bl('crit') + 0.06 * pk('keen') + gbc(i, 'crit') + 0.02 * sk('keen')), fk = flankMul(), mult = (crit ? 2 + gbc(i, 'cdmg') : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
+  const crit = Math.random() < Math.min(0.75, 0.1 + 0.06 * bl('crit') + 0.06 * pk('keen') + gbc(i, 'crit') + 0.02 * sk('keen') + ext('crit', i)), fk = flankMul(), mult = (crit ? 2 + gbc(i, 'cdmg') : 1) * (flank === 2 ? 1 + 0.55 * fk : flank === 1 ? 1 + 0.35 * fk : 1)
   const n = wd.pellets || 1
   for (let k = 0; k < n; k++) {
     const dx = target.x - gp.x, dy = target.y - gp.y
     const a = Math.atan2(dy, dx) + (n > 1 ? (k - (n - 1) / 2) * 0.12 : rnd(-0.03, 0.03))
-    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * gunMul() * (GUN_EQ[i] ?? 1) * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
+    G.shots.push({ x: gp.x, y: gp.y - 6, vx: Math.cos(a) * wd.spd, vy: Math.sin(a) * wd.spd, w, dmg: wd.dmg * gunMul() * (GUN_EQ[i] ?? 1) * (1 + resolve()) * (G.boostT > 0 ? 1 + BOOST.dmg : 1) * GUARDIANS[i].dmgMul * (1 + 0.1 * bl('power')) * (1 + gb(i, 'dmg')) * (1 + 0.03 * sk('sharp')) * (1 + 0.1 * pk('night')) * (1 + cp('dmg') + clanHunt(G.clan)) * (wm('power') ? 1.2 : 1) * starMul() * trainPow() * mult * dogPower(i) * (1 + ext('dmg', i)), crit, flank, life: 1.6, tgt: n > 1 ? null : target, kind: wd.kind, col: wd.col, gi: i })
   }
   G.events.push({ type: 'fire', kind: wd.kind, w, x: gp.x, y: gp.y, col: wd.col })
 }
@@ -453,7 +455,7 @@ export function reinforceRegroup(paid: 'ad' | 'gems'): boolean {
   if (paid === 'gems') { if (G.gems < REINFORCE_GEMS) return false; G.gems -= REINFORCE_GEMS }
   G.reinforce = true; regroupFree(); G.banner = { text: 'REINFORCED!', sub: '+' + Math.round(REINFORCE_BONUS * 100) + '% power and health', t: 1.8 }; save(); return true
 }
-const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0)
+const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0) + ext('hp', i)
 const alive = (i: number) => G.hp[i] > 0
 /** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
 export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
@@ -546,6 +548,7 @@ export function update(dtReal: number) {
   if (Math.floor(G.t) % 20 === 0) ensureDaily() // cheap midnight rollover check
   if (G.raid?.result) closeRaid()
   const dt = dtReal * G.speed * baseSpeed(); G.t += dt
+  if (ON.tick.length) fire(ON.tick, dt)
   { const dealt = G.stats.dealt.reduce((a, b) => a + b, 0), d = dealt - G.dpsLast; G.dpsLast = dealt   // gun DPS, smoothed over ~6s of combat
     if (d < 0) G.dpsEma *= 0.5; else if (G.enemies.length > 0 && dt > 0) G.dpsEma += (d / dt - G.dpsEma) * Math.min(1, dt / 6) }
   G.stash = Math.min(idleCap(G.stage), G.stash + idleRate(G.stage) * dtReal / 60)
@@ -615,7 +618,7 @@ export function update(dtReal: number) {
       // flanking = you found a line round the barricade. 2 = your own positioning already cleared it; 1 = the guardian had to shuffle sideways
       st.flank = blocked(base.x, base.y - 6, tgt.x, tgt.y) ? 1 : 2
     }
-    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + cp('rate') + 0.08 * pk('spotter') + gb(i, 'rate') + 0.02 * sk('quick') + 0.015 * tl('haste') + (wm('quick') ? 0.2 : 0))
+    G.cd[i] -= dt * (G.frenzyT > 0 ? ABIL.frenzy.mul : 1) * (1 + 0.08 * bl('rapid') + cp('rate') + 0.08 * pk('spotter') + gb(i, 'rate') + 0.02 * sk('quick') + 0.015 * tl('haste') + (wm('quick') ? 0.2 : 0) + ext('rate', i))
     if (G.cd[i] > 0 || !tgt) continue
     fireFrom(i, w, tgt, st.flank); G.cd[i] = 1 / WEAPONS[w].rate
   }
@@ -756,8 +759,8 @@ export function update(dtReal: number) {
     const bonus = Math.ceil((10 + G.stage * 4) * Math.pow(1.1, G.stage - 1))
     G.gold += bonus; G.events.push({ type: 'stage_clear', stage: G.stage, gold: bonus })
     const cleared = G.stage; track('stages'); addPassXp(isBoss(cleared) ? PASS_XP_GAIN.boss : PASS_XP_GAIN.stage); if (isBoss(cleared)) track('bosses')
-    if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0); G.coins += Math.round((4 + Math.floor(cleared / 5)) * (1 + cp('coins'))); clanContribute(12) } else clanContribute(3)
-    G.stage++; G.best = Math.max(G.best, G.stage); G.reinforce = false
+    if (isBoss(cleared)) { addChest(cleared < 20 ? 0 : cleared < 50 ? 1 : 2); if (Math.random() < 0.3) addChest(0); G.coins += Math.round((4 + Math.floor(cleared / 5)) * (1 + cp('coins') + ext('coins'))); clanContribute(12) } else clanContribute(3)
+    G.stage++; G.best = Math.max(G.best, G.stage); G.reinforce = false; fire(ON.clear, cleared, isBoss(cleared))
     if (G.stage === STARTER_STAGE && !G.starterSeen && !G.noAds) G.starterDue = true // the one-time starter bundle offer (see starterOffer)
     startStage()
     if (cleared % BLESSING_EVERY === 0) offerBlessings()
