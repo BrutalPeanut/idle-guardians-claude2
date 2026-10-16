@@ -311,6 +311,7 @@ export const isBoss = (s: number) => s % 10 === 0
 
 let bakAt = 0
 export function save() {
+  if (HOOK.noSave) return
   try { if (Date.now() - bakAt > 120000) { const prev = localStorage.getItem('ig_save'); if (prev) { localStorage.setItem('ig_save_bak', prev); bakAt = Date.now() } } } catch { /* storage unavailable */ }
   try { G.lastSeen = Date.now(); fire(ON.save); localStorage.setItem('ig_save', JSON.stringify({ xs: XS, bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, pp: G.passPlus, sp: G.spin, au: G.auto, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, cw: G.collar, cwo: G.collarOwned, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }

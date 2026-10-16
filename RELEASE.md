@@ -52,3 +52,6 @@
 ## Dog Park (async PvP)
 - Run `supabase/park.sql` once, after `clans.sql` (it reuses the per-device secret). Until then players get practice battles against AI packs (labelled).
 - Snapshots (firepower = best smoothed DPS seen, health = pack max HP) are client-reported like the leaderboard: fine for a casual ladder, not for prizes.
+
+## Cloud save
+- Run `supabase/cloud.sql` once, after `clans.sql`. Opt-in from Menu > More > Save Data. The privacy page now covers cloud save, clans and Dog Park.
