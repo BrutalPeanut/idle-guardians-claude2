@@ -7,6 +7,7 @@ export const COLLARS = [
   { id: 'gold', name: 'Gold', col: '#f5c542', free: false },
   { id: 'neon', name: 'Neon teal', col: '#3cf0ff', free: false },
   { id: 'royal', name: 'Royal purple', col: '#9b59ff', free: false },
+  { id: 'pumpkin', name: 'Pumpkin', col: '#ff8a1a', free: false, event: 'Halloween' },
 ] as const
 export type CollarId = (typeof COLLARS)[number]['id']
 export const collarOf = (id: string) => COLLARS.find(c => c.id === id) ?? COLLARS[0]

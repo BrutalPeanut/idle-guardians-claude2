@@ -30,10 +30,10 @@ export const registerTile = (t: Tile) => { TILES.push(t) }
 export const XSCREENS: Record<string, (ctx: Ctx, t: number) => void> = {}
 export const XBUTTONS: ((k: string) => boolean)[] = []
 /** Register a feature screen: its hub tile (placed in a hub section), draw function, button handler and unlock stage. */
-export function addScreen(o: { tile: Tile; section: 'battle' | 'grow' | 'rewards' | 'more'; minor?: boolean; draw: (ctx: Ctx, t: number) => void; button?: (k: string) => boolean; unlock?: number }) {
+export function addScreen(o: { tile: Tile; section: 'battle' | 'grow' | 'rewards' | 'more'; minor?: boolean; first?: boolean; draw: (ctx: Ctx, t: number) => void; button?: (k: string) => boolean; unlock?: number }) {
   registerTile(o.tile); XSCREENS[o.tile.id] = o.draw; if (o.button) XBUTTONS.push(o.button)
   if (o.unlock !== undefined) UNLOCK_STAGE[o.tile.id] = o.unlock
-  const sec = HUB_SECTIONS.find(x => x.id === o.section)!; if (!sec.tiles.includes(o.tile.id)) { (o.minor ? sec.minor : sec.main).push(o.tile.id); sec.tiles.push(o.tile.id) }
+  const sec = HUB_SECTIONS.find(x => x.id === o.section)!; if (!sec.tiles.includes(o.tile.id)) { const l = o.minor ? sec.minor : sec.main; if (o.first) l.unshift(o.tile.id); else l.push(o.tile.id); sec.tiles.push(o.tile.id) }
 }
 
 export function panel(ctx: Ctx, title: string, back = true) {
@@ -745,12 +745,12 @@ function drawShop(ctx: Ctx) {
     ctx.fillText(IAP.msg || (IAP.status === 'unavailable' ? 'Gem packs are sold in the Android and iPhone app.' : 'One-time purchases. Gems never expire.'), W / 2, 404)
   } else if (tab === 3) {
     COLLARS.forEach((c, i) => {
-      const y = 120 + i * 72, owned = G.collarOwned.includes(c.id), wearing = G.collar === c.id, pk = IAP.collars[c.id]
-      const label = wearing ? 'Wearing' : owned ? 'Wear' : c.free ? 'Wear' : pk ? (pk.product?.priceString ?? 'Buy') : 'In the app'
+      const y = 112 + i * 70, owned = G.collarOwned.includes(c.id), wearing = G.collar === c.id, pk = IAP.collars[c.id]
+      const ev = 'event' in c ? c.event : '', label = wearing ? 'Wearing' : owned ? 'Wear' : c.free ? 'Wear' : ev ? 'Event' : pk ? (pk.product?.priceString ?? 'Buy') : 'In the app'
       const busy = IAP.status === 'busy'
-      shopRow(ctx, y, 'collar', c.col, c.name + ' collar', c.free ? 'Free' : owned ? 'Owned' : 'Looks only. No stat change.', wearing ? 'shop_noop' : owned || c.free ? 'shop_look_' + c.id : 'shop_buy_look_' + c.id, label, !wearing && !busy && (owned || c.free || !!pk), c.col)
+      shopRow(ctx, y, 'collar', c.col, c.name + ' collar', c.free ? 'Free' : owned ? 'Owned' : ev ? 'Earned in the ' + ev + ' event' : 'Looks only. No stat change.', wearing ? 'shop_noop' : owned || c.free ? 'shop_look_' + c.id : 'shop_buy_look_' + c.id, label, !wearing && !busy && (owned || c.free || (!ev && !!pk)), c.col)
     })
-    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = IAP.msg ? '#d6f2ff' : '#7f929a'; ctx.fillText(IAP.msg || 'Cosmetics only. They never change damage, health or gold.', W / 2, 400)
+    ctx.textAlign = 'center'; ctx.font = '400 11px ' + FONT; ctx.fillStyle = IAP.msg ? '#d6f2ff' : '#7f929a'; ctx.fillText(IAP.msg || 'Cosmetics only. They never change damage, health or gold.', W / 2, 112 + COLLARS.length * 70 + 8)
   } else {
     const r = (y: number, icon: string, col: string, title: string, sub: string, key: string, cost: number, ok: boolean) => shopRow(ctx, y, icon, col, title, sub, key, '' + cost + ' gems', G.gems >= cost && ok, '#3aa0e0')
     r(120, 'collar', '#e8e8f0', 'Silver Chest', 'Better gear odds than wood', 'shop_buy_chest1', SHOP.cost.chest1, true)
