@@ -1,4 +1,4 @@
-import { ext, ON, fire, XS, loadXS } from './ext'
+import { ext, ON, fire, XS, loadXS, HOOK } from './ext'
 import { ARENA, WEAPONS, GUARDIANS, ROSTER, SLOT_OFF, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
 import { BLESSINGS, BLESSING_EVERY } from './blessings'
@@ -204,7 +204,7 @@ export const wm = (id: string) => weekMod().id === id
 /** Roster index of the dog standing in pack slot i (identity until the Kennel lets you swap support dogs). */
 export const dogId = (i: number) => (i < 2 ? i : G.squad[i - 2] ?? i)
 /** 1 if a squad dog in an unlocked support slot has this perk. */
-export const pk = (id: string) => G.squad.some((r, k) => ROSTER[r].perk === id && unlockedGuardians(G.stage) > 2 + k) ? 1 : 0
+export const pk = (id: string) => { for (let k = 0; k < G.squad.length; k++) { const r = G.squad[k]; if (ROSTER[r]?.perk === id && unlockedGuardians(G.stage) > 2 + k) return HOOK.perkScale(r) } return 0 }
 export function applySquad() { for (let k = 0; k < 2; k++) GUARDIANS[2 + k] = { ...ROSTER[G.squad[k]], off: SLOT_OFF[k] } }
 export function buyDog(r: number): boolean { const d = ROSTER[r]; if (!d || G.owned.includes(r) || G.coins < (d.cost ?? 0)) return false; G.coins -= d.cost ?? 0; G.owned.push(r); save(); return true }
 export function setSquad(k: number, r: number): boolean {
@@ -295,7 +295,7 @@ export function respec() { if (G.gems < RESPEC_GEMS || pointsSpent() === 0) retu
 const flankMul = () => (weekMod().id === 'flank' ? 1.5 : 1) * (1 + 0.08 * sk('flanker'))
 
 export const bl = (id: string) => G.blessings[id] ?? 0
-export const nadeCdMax = () => NADE.cd * (pk('bark') ? 0.85 : 1) * Math.pow(0.85, bl('blast')) * (wm('bomb') ? 0.6 : 1) * (1 - 0.03 * sk('boomS'))
+export const nadeCdMax = () => NADE.cd * Math.pow(0.85, pk('bark')) * Math.pow(0.85, bl('blast')) * (wm('bomb') ? 0.6 : 1) * (1 - 0.03 * sk('boomS'))
 export const shieldDur = () => ABIL.shield.dur + bl('aegis') + 0.4 * sk('aegisS')
 export const frenzyDur = () => ABIL.frenzy.dur + 1.5 * bl('fury')
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a)
@@ -461,7 +461,7 @@ const alive = (i: number) => G.hp[i] > 0
 export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
 const dogPower = (i: number) => (i === 0 && G.tankT > 0 ? MODES.tank.power : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.power : 1)
 export const cp = (k: string) => clanPerk(G.clan, k)
-const dogArmor = (i: number) => (pk('guard') ? 0.92 : 1) * (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
+const dogArmor = (i: number) => Math.pow(0.92, pk('guard')) * (i === 0 && G.tankT > 0 ? MODES.tank.armor : 1) * (i === 1 && G.panicT > 0 ? MODES.panic.armor : 1)
 /** Extra bite on every enemy hit against a guardian (melee, bullets, missiles, shells): damage lands on single dogs, so they have to be kept alive. */
 const hitMul = () => 2.2 + 1.7 * Math.min(1, Math.max(0, (G.stage - 1) / 11))
 function hurt(i: number, dmg: number) {
@@ -573,7 +573,7 @@ export function update(dtReal: number) {
     if (hazardAt(gp.x, gp.y) === 'lava') { hurt(i, G.mhp[i] * 0.035 * dt); if (Math.random() < dt * 4) G.events.push({ type: 'pack_hit', x: gp.x + rnd(-10, 10), y: gp.y - 24, v: Math.ceil(G.mhp[i] * 0.035 * 0.25) }) }
   } else if ((G.reviveT[i] -= dt) <= 0) { G.hp[i] = Math.ceil(G.mhp[i] * 0.4); const gp = guardianPos(i); G.events.push({ type: 'revive', i, x: gp.x, y: gp.y }) }
 
-  if (pk('medic')) for (let i = 0; i < n; i++) if (alive(i) && G.hp[i] < G.mhp[i]) G.hp[i] = Math.min(G.mhp[i], G.hp[i] + G.mhp[i] * 0.01 * dt)
+  if (pk('medic')) for (let i = 0; i < n; i++) if (alive(i) && G.hp[i] < G.mhp[i]) G.hp[i] = Math.min(G.mhp[i], G.hp[i] + G.mhp[i] * 0.01 * pk('medic') * dt)
   if (G.comboT > 0 && (G.comboT -= dt) <= 0) G.combo = 0
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null
   for (const c of G.cover) if (c.flash > 0) c.flash -= dt
