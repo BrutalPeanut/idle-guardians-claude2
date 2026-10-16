@@ -59,6 +59,7 @@ function finish() {
   if (rw.chest !== undefined) { if (rw.chest >= 0) { addChest(rw.chest); txt = ['Wooden', 'Silver', 'Golden'][rw.chest] + ' chest' } else txt = 'No chest (need 15 kills)' }
   if (rw.bones) { addBones(rw.bones); txt = '+' + rw.bones + ' bones' }
   const s = st(); s.best[r.kind] = Math.max(s.best[r.kind] ?? 0, r.kills)
+  G.life.dungeons = (G.life.dungeons ?? 0) + 1
   r.result = { kills: r.kills, text: txt }
   // put the stage back exactly as it was (a wipe inside the dungeon must not count toward Pack Resolve)
   G.fail = r.fail; G.failStage = r.failStage; G.wipe = null; G.stage = r.stage; startStage()

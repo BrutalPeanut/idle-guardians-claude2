@@ -24,6 +24,7 @@ interface Opp { sid: number; name: string; stage: number; power: number; hp: num
 const st = () => xs('park', () => ({ day: '', used: 0, peak: 0, rating: 1000, wins: 0, losses: 0 }))
 function roll() { const s = st(); if (s.day !== dayKey()) { s.day = dayKey(); s.used = 0 } return s }
 export const ticketsLeft = () => Math.max(0, TICKETS - roll().used)
+export const parkWins = () => st().wins
 
 // ---- your pack's numbers ----
 ON.tick.push(() => { const s = st(); if (G.dpsEma > s.peak) s.peak = G.dpsEma })
