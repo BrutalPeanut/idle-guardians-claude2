@@ -10,3 +10,4 @@ import { XS } from './ext'
 try { if (/[?&]debug\b/.test(location.search)) (window as unknown as { __ww: unknown }).__ww = { G, R, XS, save } } catch { /* no location */ }
 import './notify'
 import './events'
+import './haptics'

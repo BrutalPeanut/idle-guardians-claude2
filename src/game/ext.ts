@@ -25,6 +25,8 @@ export const ON = {
   kill: [] as ((e: KillInfo) => void)[],
   clear: [] as ((stage: number, boss: boolean) => void)[],
   tick: [] as ((dt: number) => void)[],
+  /** every game event (merge, kill, dmg, down, boss_cast...) as the renderer drains them */
+  gevent: [] as ((e: { type: string } & Record<string, unknown>) => void)[],
   /** after a successful load() (or a fresh game), and before every save */
   load: [] as (() => void)[],
   save: [] as (() => void)[],
