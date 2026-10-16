@@ -43,3 +43,8 @@
 ## Triggered offers
 - Two one-time consumable products in the current RevenueCat offering, package identifiers `offer_wall` (suggested $2.99) and `offer_rebirth` (suggested $4.99).
 - Wall Breaker appears once, after the first time a stage walls the player (2+ wipes); Rebirth Bundle appears once, right after the first Rebirth. Each then sits in Menu > Rewards > Offers for 48 hours. Never shown on the web or if the product isn't configured.
+
+## Online clans
+- Run `supabase/clans.sql` once in the Supabase SQL editor. Until then the game keeps the practice clans (labelled as simulated).
+- All clan reads/writes are SECURITY DEFINER functions; tables are not readable by the anon key. Writes require the player id plus a per-device secret (stored hashed), and rosters never return player ids.
+- Limits: 30 members per clan, 2 new clans per player per day, names/tags filtered to letters, numbers, spaces, _ and -.

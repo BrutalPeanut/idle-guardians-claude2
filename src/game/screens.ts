@@ -1,6 +1,6 @@
 /** Full-screen menu panels (hub and its sub-screens). All draw over a dimmed game and register their own buttons. */
 import { W, H, GUARDIANS, ROSTER, unlockedGuardians } from './data'
-import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt } from './clan'
+import { CLANS, PERKS, MILESTONES, clanById, clanLevel, XP_PER_LEVEL, onlineCount, onlineSet, mates, clanHunt, isNet, memberCount, NET } from './clan'
 import { premiumOn, unlocked, unlockStage, doSpin, spinsLeft, claimPassTier, claimAch, passLevel, passReady, achReady, statValue, ensurePass } from './sim'
 import { UNLOCK_STAGE } from './meta'
 import { ACHIEVEMENTS, PASS_TIERS, PASS_XP, SPIN_SEGS, seasonDaysLeft, passReward, passPremiumReward } from './meta'
@@ -29,6 +29,8 @@ export const registerTile = (t: Tile) => { TILES.push(t) }
 /** Screens and buttons added by feature modules (see ext.ts / features.ts). */
 export const XSCREENS: Record<string, (ctx: Ctx, t: number) => void> = {}
 export const XBUTTONS: ((k: string) => boolean)[] = []
+/** Extra drawing on top of a core screen, keyed by screen id (e.g. a Create button on the clan screen). */
+export const XAFTER: Record<string, (ctx: Ctx, t: number) => void> = {}
 /** Register a feature screen: its hub tile (placed in a hub section), draw function, button handler and unlock stage. */
 export function addScreen(o: { tile: Tile; section: 'battle' | 'grow' | 'rewards' | 'more'; minor?: boolean; first?: boolean; draw: (ctx: Ctx, t: number) => void; button?: (k: string) => boolean; unlock?: number }) {
   registerTile(o.tile); XSCREENS[o.tile.id] = o.draw; if (o.button) XBUTTONS.push(o.button)
@@ -168,6 +170,7 @@ export function drawScreen(ctx: Ctx, t: number) {
     case 'noads': drawNoAds(ctx); break
     default: { const f = R.screen ? XSCREENS[R.screen] : undefined; if (f) f(ctx, t); else drawHub(ctx, t) }
   }
+  const after = R.screen ? XAFTER[R.screen] : undefined; if (after) after(ctx, t)
 }
 
 // ================= Gear =================
@@ -471,16 +474,16 @@ registerTile({ id: 'raid', label: 'Boss Raid', sub: () => raidLeft() + ' attempt
 export function drawClan(ctx: Ctx) {
   panel(ctx, 'Clan')
   ctx.textBaseline = 'middle'
-  const foot = (y: number) => { ctx.textAlign = 'center'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now (no online service yet).', W / 2, y) }
+  const foot = (y: number) => { ctx.textAlign = 'center'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(G.clan ? (isNet(clanById(G.clan.id)) ? 'Online clan: these are real players.' : 'Practice clan: clanmates are simulated, not real players.') : NET.on ? 'Online clans with real players. Or start your own.' : 'Practice clans: clanmates are simulated, not real players.', W / 2, y) }
   if (!G.clan) {
     ctx.textAlign = 'center'; ctx.fillStyle = '#c9d8d0'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Join a clan: bigger clans give stronger perks.', W / 2, 62)
-    CLANS.forEach((d, i) => {
+    CLANS.slice(0, 6).forEach((d, i) => {
       const y = 82 + i * 70, ok = G.best >= d.req, p = PERKS[Math.min(9, d.base) - 1]
       button(ctx, 'cj_' + i, 16, y, W - 32, 62, { top: ok ? '#2e3e48' : '#252f36', bot: ok ? '#1a2830' : '#1b2328' })
       ctx.fillStyle = d.col; rr(ctx, 26, y + 12, 38, 38, 10); ctx.fill(); ctx.fillStyle = '#0e1a20'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.tag, 45, y + 31)
       ctx.textAlign = 'left'; ctx.fillStyle = ok ? '#fff' : '#9fb0b8'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(d.name, 76, y + 18)
-      ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Level ' + d.base + '  \u00b7  12 members  \u00b7  ' + onlineCount(d) + ' online', 76, y + 35)
-      ctx.fillStyle = '#ffd84a'; ctx.fillText('Starts with: ' + p.text, 76, y + 50)
+      ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText((isNet(d) ? '' : 'Level ' + d.base + '  \u00b7  ') + memberCount(d) + ' members  \u00b7  ' + onlineCount(d) + ' online', 76, y + 35)
+      ctx.fillStyle = '#ffd84a'; ctx.fillText(isNet(d) ? (d.req > 1 ? 'Needs stage ' + d.req : 'Open to everyone') : 'Starts with: ' + p.text, 76, y + 50)
       ctx.textAlign = 'right'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = ok ? '#7af09a' : '#ff9a7a'; ctx.fillText(ok ? 'JOIN' : 'Stage ' + d.req, W - 28, y + 18)
     })
     foot(520); return
@@ -528,7 +531,7 @@ export function drawClan(ctx: Ctx) {
     ctx.fillStyle = on ? '#fff' : '#6d7d85'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(p.text, 70, y + 9)
   })
   button(ctx, 'cleave', W - 134, 552, 118, 24, { top: R.leaveArm ? '#ff6a5a' : '#4a565d', bot: R.leaveArm ? '#c42f2f' : '#2f3a40', label: R.leaveArm ? 'Tap again to leave' : 'Leave clan', size: 10 })
-  ctx.textAlign = 'left'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Clanmates are simulated for now.', 18, 564)
+  ctx.textAlign = 'left'; ctx.fillStyle = '#5f7078'; ctx.font = '400 9px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(isNet(clanById(G.clan!.id)) ? 'Online clan: real players.' : 'Practice clan: clanmates are simulated.', 18, 564)
 }
 registerTile({ id: 'clan', label: 'Clan', sub: () => G.clan ? clanById(G.clan.id).name + '  Lv' + clanLevel(G.clan) : 'Join a clan', icon: 'gem', col: '#9fd0ff', badge: () => !G.clan ? G.best >= 8 : clanClaimable() })
 void cp
