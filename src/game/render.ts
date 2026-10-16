@@ -557,6 +557,14 @@ function drawLauncher(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: b
 }
 const ES = new WeakMap<Enemy, { x: number; y: number; t: number; vx: number; ph: number }>()
 const GAIT = { ph: 0, mv: 0 }
+/** One enemy standing still, for the codex. `drake` picks the boss dragon. */
+export function drawEnemyPortrait(ctx: Ctx, kind: Enemy['kind'], x: number, y: number, t: number, drake = 0) {
+  const r = kind === 'boss' ? 24 : kind === 'launcher' ? 14 : kind === 'runner' ? 8 : kind === 'robot' ? 13 : kind === 'zombie' ? 11 : 12
+  const e = { x, y, hp: 1, max: 1, spd: 0, r, kind, flash: 0, wob: 1.3, dmg: 0, cd: 1, ...(kind === 'boss' ? { drake } : {}) } as Enemy
+  ES.delete(e); GAIT.ph = t * 2; GAIT.mv = 0.25
+  if (kind === 'boss') { drawDragon(ctx, e, t, x, y, false); return }
+  drawEnemy(ctx, e, t)
+}
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
   const st = ES.get(e) ?? { x: e.x, y: e.y, t, vx: 0, ph: e.wob }, dtE = Math.max(0.001, Math.min(0.1, t - st.t))
   st.vx += (((e.x - st.x) / dtE) - st.vx) * 0.2; const mv = Math.min(1, Math.hypot(e.x - st.x, e.y - st.y) / dtE / 30)
