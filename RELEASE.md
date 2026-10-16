@@ -39,3 +39,7 @@
 - Perks while active: 20 gems to claim per day, +25% idle stash cap, +1 Boss Raid attempt per daily claim. Never gates content.
 - The entitlement is re-checked on start-up and cached with its expiry, so perks work offline until the paid period ends; a refund/cancel ends them at the next start-up.
 - Store listing must mention the subscription, price and auto-renewal (the in-game screen already does).
+
+## Triggered offers
+- Two one-time consumable products in the current RevenueCat offering, package identifiers `offer_wall` (suggested $2.99) and `offer_rebirth` (suggested $4.99).
+- Wall Breaker appears once, after the first time a stage walls the player (2+ wipes); Rebirth Bundle appears once, right after the first Rebirth. Each then sits in Menu > Rewards > Offers for 48 hours. Never shown on the web or if the product isn't configured.
