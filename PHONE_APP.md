@@ -5,7 +5,7 @@ Prerequisites: Node, Android Studio (Android) or Xcode on a Mac (iOS), a Play Co
 1. Edit `capacitor.config.json`: replace `com.CHANGEME.woofwars` with your permanent app ID (it cannot change after publishing).
 2. Install (needs network):
    ```
-   npm i @capacitor/core @capacitor-community/admob
+   npm i @capacitor/core @capacitor-community/admob @capacitor/local-notifications
    npm i -D @capacitor/cli
    npm i @capacitor/android @capacitor/ios
    ```
@@ -27,3 +27,8 @@ Prerequisites: Node, Android Studio (Android) or Xcode on a Mac (iOS), a Play Co
 9. Consent: in AdMob, Privacy & messaging, create the GDPR (EEA/UK) message and publish it. The game already asks for consent before any ad request.
 
 Status: config and code are in place, but the native projects have not been generated or run yet (the sandbox that wrote this had no npm access).
+
+## Notifications
+- Uses `@capacitor/local-notifications` (installed in step 2). No server or Firebase needed: reminders are scheduled on the phone when the app goes to the background and cancelled when it comes back.
+- Android 13+: the plugin adds the `POST_NOTIFICATIONS` permission; the game asks once, after the player's first welcome-back collect (stage 3+). Players can toggle each reminder in Menu > More > Alerts.
+- Optional: add a white-on-transparent `ic_stat_icon_config_sample` small icon in `android/app/src/main/res/drawable` (see the plugin docs); otherwise Android shows the app icon.
