@@ -1,4 +1,4 @@
-import { DRAW, drawAll } from './ext'
+import { DRAW, drawAll, ON, fire } from './ext'
 import { nextGoal } from './meta'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
@@ -93,6 +93,7 @@ export function drainEvents() {
       R.floats.push({ x: W / 2, y: ARENA.y0 + 60, v: 'CLEAR +' + e.gold, gold: true, big: true, t: 0 });
     }
   }
+  if (ON.gevent.length) for (const e of G.events) fire(ON.gevent, e as unknown as { type: string } & Record<string, unknown>)
   G.events.length = 0;
 }
 function burst(x: number, y: number, col: string, n: number, sp: number) {
