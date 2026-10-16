@@ -17,12 +17,12 @@ import { GREEN } from './ui'
 import { track } from './telemetry'
 
 const hdr = () => ({ apikey: LB_KEY, Authorization: 'Bearer ' + LB_KEY, 'Content-Type': 'application/json' })
-async function rpc<T>(fn: string, body: Record<string, unknown>): Promise<T> {
+export async function rpc<T>(fn: string, body: Record<string, unknown>): Promise<T> {
   const r = await fetch(LB_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: hdr(), body: JSON.stringify(body) })
   if (!r.ok) throw new Error(fn + ' ' + r.status)
   return r.json() as Promise<T>
 }
-function secret(): string {
+export function secret(): string {
   try {
     let s = localStorage.getItem('ig_csec')
     if (!s) { const a = new Uint8Array(24); crypto.getRandomValues(a); s = Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('ig_csec', s) }
