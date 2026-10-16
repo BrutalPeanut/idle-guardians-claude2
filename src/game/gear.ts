@@ -32,10 +32,12 @@ export const fmtStat = (it: Item) => fmtLine(it.stat, it.val)
 export const fmtShort = (it: Item) => '+' + num(it.stat, it.val) + '% ' + SHORT[it.stat]
 export const fmtSubs = (it: Item) => (it.subs ?? []).map(b => fmtLine(b.stat, b.val))
 export const statVal = (it: Item, stat: Stat) => (it.stat === stat ? it.val : 0) + (it.subs ?? []).reduce((a, b) => a + (b.stat === stat ? b.val : 0), 0)
-export function rollItem(id: number, tier: number, lvl: number, bonus = 0, rand: () => number = Math.random): Item {
+/** `force` pins the rarity and/or slot (gear fusion). */
+export function rollItem(id: number, tier: number, lvl: number, bonus = 0, rand: () => number = Math.random, force?: { rar?: number; slot?: Slot }): Item {
   const o = ODDS[tier].slice(); const shift = Math.min(o[0], bonus * 100); o[0] -= shift; o[1] += shift * 0.6; o[2] += shift * 0.3; o[3] += shift * 0.1
   let r = rand() * 100, rar = 0; for (let i = 0; i < 4; i++) { if (r < o[i]) { rar = i; break } r -= o[i]; rar = i }
-  const slot = SLOTS[Math.floor(rand() * 3)], stats = SLOT_STATS[slot], stat = stats[Math.floor(rand() * stats.length)]
+  if (force?.rar !== undefined) rar = force.rar
+  const slot = force?.slot ?? SLOTS[Math.floor(rand() * 3)], stats = SLOT_STATS[slot], stat = stats[Math.floor(rand() * stats.length)]
   const roll = (st: Stat, k: number) => BASE[st] * RARITY[rar].mul * (1 + lvl / LVL_DIV[st]) * k
   const pool = stats.filter(x => x !== stat); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]] }
   const subs = pool.slice(0, rar === 2 ? 1 : rar === 3 ? 2 : 0).map(st => ({ stat: st, val: roll(st, SUB_MUL) }))
