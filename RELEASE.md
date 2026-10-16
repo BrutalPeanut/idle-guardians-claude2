@@ -32,3 +32,10 @@
 - **Telemetry:** run `supabase/telemetry.sql` once in the Supabase SQL editor. Until then, events are silently dropped.
 - **Remove Ads:** create a non-consumable product, link it in RevenueCat to an entitlement named `no_ads`, put the public SDK keys in `RC_KEYS` (src/game/config.ts), and install `@revenuecat/purchases-capacitor`. Untested against the real plugin; test with a Play licence tester first.
 - **Google Drive backup (web):** in Google Cloud Console create an OAuth *Web* client, enable the Drive API, add the site URL as an authorised JavaScript origin, set the `drive.appdata` scope on the consent screen, and paste the client ID into `GOOGLE_CLIENT_ID` (src/game/config.ts). Empty hides the buttons. Not available in the installed app (Google blocks webview sign-in); it uses the backup code.
+
+## Treat Club (monthly membership)
+- Play Console: create an auto-renewing **subscription** (suggested $4.99/month). App Store: same, in a subscription group.
+- RevenueCat: attach it to a new entitlement named `treat_club`, and add a package with identifier `treat_club` to the current offering.
+- Perks while active: 20 gems to claim per day, +25% idle stash cap, +1 Boss Raid attempt per daily claim. Never gates content.
+- The entitlement is re-checked on start-up and cached with its expiry, so perks work offline until the paid period ends; a refund/cancel ends them at the next start-up.
+- Store listing must mention the subscription, price and auto-renewal (the in-game screen already does).
