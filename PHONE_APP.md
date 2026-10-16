@@ -5,7 +5,7 @@ Prerequisites: Node, Android Studio (Android) or Xcode on a Mac (iOS), a Play Co
 1. Edit `capacitor.config.json`: replace `com.CHANGEME.woofwars` with your permanent app ID (it cannot change after publishing).
 2. Install (needs network):
    ```
-   npm i @capacitor/core @capacitor-community/admob @capacitor/local-notifications @capacitor/haptics
+   npm i @capacitor/core @capacitor-community/admob @capacitor/local-notifications @capacitor/haptics @capacitor/share
    npm i -D @capacitor/cli
    npm i @capacitor/android @capacitor/ios
    ```
@@ -35,3 +35,6 @@ Status: config and code are in place, but the native projects have not been gene
 
 ## Haptics
 - Uses `@capacitor/haptics` (installed in step 2). No permissions needed. Players can switch it off in Menu > More > Vibration.
+
+## Sharing
+- Menu > More > Share renders a 1080x1350 brag card. On phones whose WebView supports Web Share with files it shares the image; otherwise `@capacitor/share` (installed in step 2) shares the caption and link; on desktop the PNG downloads and the caption is copied.
