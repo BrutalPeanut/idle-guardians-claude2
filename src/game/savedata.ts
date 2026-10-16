@@ -4,6 +4,7 @@
  * code is rejected instead of wrecking progress.
  */
 import { save } from './sim'
+import { HOOK } from './ext'
 import { telemetryOn, setTelemetry } from './telemetry'
 import { driveAvailable, driveBackup, driveFetch, driveRestore } from './gdrive'
 
@@ -25,9 +26,11 @@ export function parseCode(code: string): string | null {
 }
 export function restoreFromCode(code: string): boolean {
   const raw = parseCode(code); if (!raw) return false
-  try { const cur = localStorage.getItem('ig_save'); if (cur) localStorage.setItem('ig_save_bak', cur); localStorage.setItem('ig_save', raw); location.reload(); return true } catch { return false }
+  try { HOOK.noSave = true; const cur = localStorage.getItem('ig_save'); if (cur) localStorage.setItem('ig_save_bak', cur); localStorage.setItem('ig_save', raw); location.reload(); return true } catch { return false }
 }
 
+/** Extra sections other modules add to the Save Data dialog (cloud save). Each returns its DOM nodes. */
+export const SAVE_SECTIONS: ((status: HTMLElement) => HTMLElement[])[] = []
 export function openSaveData() {
   if (document.getElementById('ww-save')) return
   const wrap = document.createElement('div'); wrap.id = 'ww-save'
@@ -65,6 +68,6 @@ export function openSaveData() {
   const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = telemetryOn(); cb.onchange = () => setTelemetry(cb.checked)
   tel.append(cb, document.createTextNode('Share anonymous usage and crash reports'))
   const close = btn('Close', '#4a5c66'); close.onclick = () => wrap.remove()
-  box.append(title, h('Back up'), note('A code with all your progress. Use it to move to a new phone or recover after a reinstall.'), out, copy, h('Restore'), note('Paste a code from another device or an earlier backup.'), inp, rst, ...drive, status, tel, close)
+  box.append(title, h('Back up'), note('A code with all your progress. Use it to move to a new phone or recover after a reinstall.'), out, copy, h('Restore'), note('Paste a code from another device or an earlier backup.'), inp, rst, ...drive, ...SAVE_SECTIONS.flatMap(f => f(status)), status, tel, close)
   wrap.append(box); wrap.addEventListener('pointerdown', e => { if (e.target === wrap) wrap.remove() }); document.body.appendChild(wrap)
 }

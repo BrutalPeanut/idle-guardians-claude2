@@ -24,6 +24,8 @@ export function ext(k: BonusKey, i = -1): number {
 export const HOOK = {
   /** perk strength multiplier for a roster dog (dog stars raise it) */
   perkScale: (_roster: number) => 1,
+  /** set while a restore swaps the save in and reloads, so nothing writes the old progress back over it */
+  noSave: false,
 }
 
 export interface KillInfo { kind: string; x: number; y: number; raid: boolean; stage: number }
