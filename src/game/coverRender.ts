@@ -72,21 +72,21 @@ export function drawCover(ctx: Ctx, c: Cover, t: number) {
 export function drawHazard(ctx: Ctx, h: Hazard, t: number) {
   const ry = h.r * HAZARD_SQUASH; ctx.save(); ctx.translate(h.x, h.y)
   if (h.kind === 'lava') {
-    ctx.fillStyle = '#2a1414'; ctx.beginPath(); ctx.ellipse(0, 1, h.r + 4, ry + 3, 0, 0, 6.283); ctx.fill()
-    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, h.r); g.addColorStop(0, '#fff2a0'); g.addColorStop(0.4, '#ff9a2a'); g.addColorStop(1, '#d8341a'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.fill()
+    ctx.fillStyle = '#2a1414'; ctx.beginPath(); ctx.ellipse(0, 1, Math.max(0, h.r + 4), Math.max(0, ry + 3), 0, 0, 6.283); ctx.fill()
+    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, h.r); g.addColorStop(0, '#fff2a0'); g.addColorStop(0.4, '#ff9a2a'); g.addColorStop(1, '#d8341a'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.fill()
     ctx.fillStyle = 'rgba(255,240,160,.8)'; for (let i = 0; i < 4; i++) { const a = t * 1.3 + i * 1.7, k = (Math.sin(t * 2 + i) + 1) / 2; ctx.beginPath(); ctx.arc(Math.cos(a) * h.r * 0.5, Math.sin(a) * ry * 0.5 - k * 3, 1.5 + k * 1.5, 0, 6.283); ctx.fill() }
   } else if (h.kind === 'mud') {
-    ctx.fillStyle = '#3a2c1c'; ctx.beginPath(); ctx.ellipse(0, 1, h.r + 3, ry + 2, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#5a4630'; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.fill()
-    ctx.strokeStyle = 'rgba(180,150,100,.4)'; ctx.lineWidth = 1.2; for (let i = 0; i < 2; i++) { const k = ((t * 0.4 + i * 0.5) % 1); ctx.beginPath(); ctx.ellipse(h.r * 0.15, 0, h.r * 0.6 * k, ry * 0.6 * k, 0, 0, 6.283); ctx.stroke() }
+    ctx.fillStyle = '#3a2c1c'; ctx.beginPath(); ctx.ellipse(0, 1, Math.max(0, h.r + 3), Math.max(0, ry + 2), 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#5a4630'; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = 'rgba(180,150,100,.4)'; ctx.lineWidth = 1.2; for (let i = 0; i < 2; i++) { const k = ((t * 0.4 + i * 0.5) % 1); ctx.beginPath(); ctx.ellipse(h.r * 0.15, 0, Math.max(0, h.r * 0.6 * k), Math.max(0, ry * 0.6 * k), 0, 0, 6.283); ctx.stroke() }
     ctx.fillStyle = '#7a6444'; for (const [x, y] of [[-h.r * 0.4, 1], [h.r * 0.3, -2]]) { ctx.beginPath(); ctx.arc(x, y, 2.4, 0, 6.283); ctx.fill() }
   } else if (h.kind === 'ice') {
-    const g = ctx.createLinearGradient(-h.r, -ry, h.r, ry); g.addColorStop(0, '#e8f8ff'); g.addColorStop(1, '#a8d8f0'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.fill()
+    const g = ctx.createLinearGradient(-h.r, -ry, h.r, ry); g.addColorStop(0, '#e8f8ff'); g.addColorStop(1, '#a8d8f0'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-h.r * 0.5, -ry * 0.2); ctx.lineTo(-h.r * 0.1, -ry * 0.55); ctx.moveTo(h.r * 0.1, ry * 0.5); ctx.lineTo(h.r * 0.5, ry * 0.1); ctx.stroke()
-    ctx.strokeStyle = 'rgba(80,150,200,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.stroke()
+    ctx.strokeStyle = 'rgba(80,150,200,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.stroke()
   } else {
-    ctx.fillStyle = 'rgba(80,190,215,.5)'; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, h.r, ry, 0, 0, 6.283); ctx.stroke()
-    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.2; for (let i = 0; i < 2; i++) { const k = ((t * 0.35 + i * 0.5) % 1); ctx.beginPath(); ctx.ellipse(0, 0, h.r * 0.8 * k, ry * 0.8 * k, 0, 0, 6.283); ctx.stroke() }
+    ctx.fillStyle = 'rgba(80,190,215,.5)'; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r), Math.max(0, ry), 0, 0, 6.283); ctx.stroke()
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.2; for (let i = 0; i < 2; i++) { const k = ((t * 0.35 + i * 0.5) % 1); ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0, h.r * 0.8 * k), Math.max(0, ry * 0.8 * k), 0, 0, 6.283); ctx.stroke() }
   }
   ctx.restore()
 }
