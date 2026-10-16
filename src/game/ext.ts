@@ -20,6 +20,12 @@ export function ext(k: BonusKey, i = -1): number {
   return v
 }
 
+/** Replaceable hooks with a single owner (a feature sets them; the core calls them). */
+export const HOOK = {
+  /** perk strength multiplier for a roster dog (dog stars raise it) */
+  perkScale: (_roster: number) => 1,
+}
+
 export interface KillInfo { kind: string; x: number; y: number; raid: boolean; stage: number }
 export const ON = {
   kill: [] as ((e: KillInfo) => void)[],
