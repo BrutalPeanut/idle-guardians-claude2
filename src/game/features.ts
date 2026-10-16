@@ -11,3 +11,4 @@ try { if (/[?&]debug\b/.test(location.search)) (window as unknown as { __ww: unk
 import './notify'
 import './events'
 import './haptics'
+import './share'

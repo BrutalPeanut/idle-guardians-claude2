@@ -137,6 +137,14 @@ const pawX = (sd: number) => DYN.run * Math.cos(DYN.step + (sd < 0 ? 0 : Math.PI
 const pawY = (sd: number) => DYN.run * Math.max(0, Math.sin(DYN.step + (sd < 0 ? 0 : Math.PI))) * 3.4
 /** Rudy and Cooper are drawn larger so the strike team reads at a glance. Feet stay anchored. */
 const dogScale = (i: number) => i === 0 ? 1.45 : i === 1 ? 1.32 : 1
+/** A dog standing still, facing the viewer (codex, share card). Same art as in battle. */
+export function drawDogPortrait(ctx: Ctx, g: Guardian, x: number, y: number, t: number) {
+  DYN.run = 0; DYN.step = 0
+  ctx.fillStyle = 'rgba(0,0,0,.26)'; ctx.beginPath(); ctx.ellipse(x, y + 15, g.look === 'cooper' ? 10.5 : 12.5, 4, 0, 0, 6.283); ctx.fill()
+  if (g.look === 'rudy') drawRudy(ctx, g, x, y, t, 0)
+  else if (g.look === 'cooper') drawCooper(ctx, g, x, y, t, 0)
+  else drawPlainDog(ctx, g, x, y, 0, t)
+}
 function drawDog(ctx: Ctx, g: Guardian, x: number, y: number, t: number, firing: boolean, tgt: Enemy | undefined) {
   const gi = GUARDIANS.indexOf(g), st = DS[g.n] ?? (DS[g.n] = { x, y, t, hp: G.hp[gi] ?? 1, run: 0, step: 0, fl: 0, lean: 0, rec: 0 })
   const dt = Math.min(0.1, Math.max(0.001, t - st.t)), vx = (x - st.x) / dt, vy = (y - st.y) / dt, sp = t - st.t > 0.25 ? 0 : Math.hypot(vx, vy)
