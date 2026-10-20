@@ -26,7 +26,7 @@ Ready to bark orders?
 ## Play Console forms (answers must match what the game does)
 - **App access:** all functionality available without login.
 - **Ads:** yes, the app contains ads (rewarded, user-initiated).
-- **Target audience:** pick 13+ unless you decide to target children (then ads must be Families-compliant).
+- **Target audience:** 13+. Woof Wars is not directed to children (decided). Do not select the Families program or any child-directed setting.
 - **Data safety:**
   - Data collected: device or other IDs (advertising ID, via AdMob); app activity (highest stage, rebirths, in-game events) and a chosen display name (leaderboard); crash logs and diagnostics; purchase history (Remove Ads, gem packs, Starter Pack, Season Pass, cosmetics, via RevenueCat). Random app-instance ID for analytics. All optional telemetry can be disabled in-app.
   - Shared with third parties: advertising ID with Google AdMob.
