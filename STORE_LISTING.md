@@ -28,7 +28,7 @@ Ready to bark orders?
 - **Ads:** yes, the app contains ads (rewarded, user-initiated).
 - **Target audience:** pick 13+ unless you decide to target children (then ads must be Families-compliant).
 - **Data safety:**
-  - Data collected: device or other IDs (advertising ID, via AdMob); app activity (highest stage, rebirths, in-game events) and a chosen display name (leaderboard); crash logs and diagnostics; purchase history (Remove Ads, via RevenueCat). Random app-instance ID for analytics. All optional telemetry can be disabled in-app.
+  - Data collected: device or other IDs (advertising ID, via AdMob); app activity (highest stage, rebirths, in-game events) and a chosen display name (leaderboard); crash logs and diagnostics; purchase history (Remove Ads, gem packs, Starter Pack, Season Pass, cosmetics, via RevenueCat). Random app-instance ID for analytics. All optional telemetry can be disabled in-app.
   - Shared with third parties: advertising ID with Google AdMob.
   - Data is encrypted in transit: yes.
   - Users can request deletion: yes (via the contact on the privacy page).
