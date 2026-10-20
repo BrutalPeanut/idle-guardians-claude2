@@ -15,7 +15,7 @@ import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
-export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number; path?: number }
+export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number; path?: number; lx?: number; ly?: number; still?: number }
 /** Boss dragons: 0 Magma Wyrm (fire barrage), 1 Frost Drake (ice nova), 2 Storm Wyvern (lightning strikes), 3 Plague Drake (spits venom, calls a brood). */
 export const DRAKES = [{ name: 'MAGMA WYRM', cast: 'FIRE BARRAGE', col: '#ff7a2a' }, { name: 'FROST DRAKE', cast: 'ICE NOVA', col: '#8fe0ff' }, { name: 'STORM WYVERN', cast: 'LIGHTNING', col: '#ffe45a' }, { name: 'PLAGUE DRAKE', cast: 'BROOD CALL', col: '#9be04a' }] as const
 export const drakeFor = (stage: number) => (Math.floor(stage / 10) - 1 + 400) % 4
@@ -143,7 +143,7 @@ export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max
 /** Roll a fresh set when the local date changes. */
 // ---- shop ----
 /** Starter bundle: one-time offer shown when a player first reaches this stage. */
-export const STARTER_STAGE = 11, STARTER_GEMS = 350, STARTER_BOOST_S = 600
+export const STARTER_STAGE = 15, STARTER_GEMS = 350, STARTER_BOOST_S = 600
 export const SHOP = { chestAds: 3, gemAds: 3, gemAdAmt: 5, cost: { chest1: 70, chest2: 160, boost: 30, raid: 20 } as Record<string, number> }
 /** Gem packs. Amounts set so a silver chest costs about one small pack; prices live in the store (tune both together). */
 export const GEM_PACKS = [{ key: 'gems_s', gems: 80, name: 'Handful', tag: '' }, { key: 'gems_m', gems: 400, name: 'Pouch', tag: 'POPULAR' }, { key: 'gems_l', gems: 1000, name: 'Treasure', tag: 'BEST VALUE' }]
@@ -340,7 +340,7 @@ export function startStage() {
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
   for (const u of L.units) G.enemies.push({
-    x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.4 : 1.2), max: hpScale(s) * (u.kind === 'mortar' ? 1.4 : 1.2),
+    x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)))
@@ -691,6 +691,14 @@ export function update(dtReal: number) {
     else { const vi = nearestAlive(e.x, e.y, n); if (vi >= 0) { hurt(vi, e.dmg * dt * aura * hitMul()); if (Math.random() < dt * 3) { const vp = guardianPos(vi); G.events.push({ type: 'pack_hit', x: vp.x + rnd(-10, 10), y: vp.y - 20, v: Math.ceil(e.dmg * aura) }) } } }
     for (const c of G.cover) if (c.hp > 0 && c.side === 'player') { const r = pushOut(e.x, e.y, e.r * 0.9, c); if (r) { e.x = r.x + (r.x >= c.x ? 1 : -1) * 40 * dt; e.y = r.y } }
     e.x = Math.max(ARENA.x0 + e.r, Math.min(ARENA.x1 - e.r, e.x)); e.y = Math.max(ARENA.y0 - 14, Math.min(ARENA.y1, e.y))
+  }
+  // Stall watchdog: a walker that hasn't moved for 20s and isn't in melee range is stuck (usually behind a barricade corner or in a pocket). Count it as cleared so progression never stops.
+  for (const e of G.enemies) {
+    if (e.dug || e.kind === 'launcher' || e.kind === 'boss' || e.hp <= 0) continue
+    const moved = Math.hypot(e.x - (e.lx ?? e.x), e.y - (e.ly ?? e.y)); e.lx = e.x; e.ly = e.y
+    const engaged = centers.some(c => Math.hypot(c.x - e.x, c.y - e.y) <= 40)
+    e.still = moved < 0.5 && !engaged ? (e.still ?? 0) + dt : 0
+    if ((e.still ?? 0) > 20) { e.hp = 0; killReward(e) }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0)
 

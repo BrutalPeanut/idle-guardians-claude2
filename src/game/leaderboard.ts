@@ -1,5 +1,5 @@
 /** Global leaderboard client (Supabase REST). Everything fails soft: no network or no config just means an empty board. */
-import { LB_URL, LB_KEY } from './config'
+import { LB_URL, LB_KEY, LB_PUBLIC } from './config'
 import { G } from './sim'
 
 export interface Row { id: string; name: string; stage: number; rebirths: number }
@@ -25,7 +25,7 @@ let lastSent = 0, lastStage = 0, lastReb = -1
 
 /** Push our best stage. Throttled; only sends when something improved (or forced, e.g. after a rename). */
 export async function submit(force = false) {
-  if (LB.status === 'off' || !nameChosen()) return
+  if (!LB_PUBLIC || LB.status === 'off' || !nameChosen()) return
   const now = Date.now()
   if (!force && (G.best === lastStage && G.rebirths === lastReb)) return
   if (!force && now - lastSent < 20000) return

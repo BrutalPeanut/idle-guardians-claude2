@@ -57,3 +57,10 @@
 
 ## Cloud save
 - Run `supabase/cloud.sql` once, after `clans.sql`. Opt-in from Menu > More > Save Data. The privacy page now covers cloud save, clans and Dog Park.
+
+## Launch hardening (top-10 review)
+- Leaderboard submission is off (`LB_PUBLIC = false` in src/game/config.ts) until submit_score validates scores on the server. Flip it only after that.
+- Starter Pack is offered at stage 15 (was 11), so the first 14 stages are fully free.
+- Stall watchdog: a walking enemy that sits still for 20 s outside melee range is cleared, so a stage can't stop progressing.
+- Regression sweep: `tests/stage_sweep.py` auto-plays ten stages and fails if any stage doesn't clear in 300 simulated seconds or throws. Run it before every release.
+- Still open: server-verify gem and pass purchases; real playtest; audience decision (under-13 wording in privacy.html).
