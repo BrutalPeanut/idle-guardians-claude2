@@ -18,14 +18,14 @@
 1. AdMob account, app IDs and rewarded ad unit IDs; Capacitor wrapper; test on real devices with test ads first.
 2. Privacy policy URL (required by both stores and AdMob), including the leaderboard (player id + chosen name) and ad data.
 3. Consent: Google UMP consent message for EEA/UK, and Apple ATT prompt on iOS.
-4. Audience decision: a game with cartoon dogs reads as child-directed. If it is, ads must be family-safe and personalization limited (COPPA / Play Families). Safer to target 13+ and set content rating and ad settings to match.
+4. Audience: DECIDED, not directed to children, rated 13+. In the AdMob console set the child-directed and under-age settings to "not child-directed" and keep personalised ads behind UMP consent. Before the first live build, check the exact option names in the installed AdMob plugin version (`prepareRewardVideoAd` / initialize) and set the child-directed tag to false there.
 5. Real No-Ads purchase with receipt validation.
 6. Store assets: icon (favicon draft pending approval), screenshots, description, age rating.
 7. Crash and analytics reporting (none today), and a cloud save or export so a cleared browser or new phone does not wipe progress.
 8. Leaderboard hardening: scores are client-reported; the server clamps and rate-limits but cannot verify. Fine for launch, not for prizes.
 
 ## Known gaps
-- Children: privacy.html says the game is not directed to under-13s. Cartoon dogs may still read as child-directed; the audience decision must match that statement.
+- Children: decided, not child-directed (13+). privacy.html matches. Keep marketing and in-game copy aimed at adults.
 - Never tested on a real phone by me; only headless Chromium.
 - Pacing and the grenade/gun balance were tuned with an automated player, not human play.
 
