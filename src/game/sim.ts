@@ -324,7 +324,9 @@ export function load() {
     // core fields: fall back to fresh-game values if a save is missing or has the wrong shape, so a bad save can't crash the game
     const num = (v: unknown, d: number) => typeof v === 'number' && Number.isFinite(v) ? v : d
     const arr = <T,>(v: unknown, d: T[]) => Array.isArray(v) ? v as T[] : d
-    const benchOk = arr<number | null>(s.bench, []).length === 8 ? s.bench : (() => { const b: (number | null)[] = new Array(8).fill(null); arr<number | null>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = v }); return b })()
+    // Sanitise slots: a corrupt or hand-edited save with an unknown weapon index would crash the damage estimate.
+    const okSlot = (v: unknown): number | null => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < WEAPONS.length ? v : null
+    const benchOk = (() => { const b: (number | null)[] = new Array(8).fill(null); arr<unknown>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = okSlot(v) }); return b })()
     Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, starterSeen: !!s.ss, collar: typeof s.cw === 'string' ? s.cw : 'red', collarOwned: Array.isArray(s.cwo) ? s.cwo.filter((x: unknown) => typeof x === 'string') : ['red'], shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0, pc: 0 }, passPlus: num(s.pp, 0), spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     loadXS(s.xs); applySquad(); fire(ON.load); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
@@ -338,7 +340,7 @@ export function startStage() {
   Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
   for (const u of L.units) G.enemies.push({
-    x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
+    x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.4 : 1.2), max: hpScale(s) * (u.kind === 'mortar' ? 1.4 : 1.2),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)))

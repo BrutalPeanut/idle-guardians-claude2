@@ -25,11 +25,13 @@
 8. Leaderboard hardening: scores are client-reported; the server clamps and rate-limits but cannot verify. Fine for launch, not for prizes.
 
 ## Known gaps
+- Children: privacy.html says the game is not directed to under-13s. Cartoon dogs may still read as child-directed; the audience decision must match that statement.
 - Never tested on a real phone by me; only headless Chromium.
 - Pacing and the grenade/gun balance were tuned with an automated player, not human play.
 
 ## Backend and purchase setup
 - **Telemetry:** run `supabase/telemetry.sql` once in the Supabase SQL editor. Until then, events are silently dropped.
+- **Other purchases:** gem packs (gems_s/m/l), Starter Pack (starter), Season Pass (pass_plus), and cosmetic collars (cos_gold/cos_neon/cos_royal) are also RevenueCat products. Gems and passes are granted on-device only, so they need server-side receipt validation before launch.
 - **Remove Ads:** create a non-consumable product, link it in RevenueCat to an entitlement named `no_ads`, put the public SDK keys in `RC_KEYS` (src/game/config.ts), and install `@revenuecat/purchases-capacitor`. Untested against the real plugin; test with a Play licence tester first.
 - **Google Drive backup (web):** in Google Cloud Console create an OAuth *Web* client, enable the Drive API, add the site URL as an authorised JavaScript origin, set the `drive.appdata` scope on the consent screen, and paste the client ID into `GOOGLE_CLIENT_ID` (src/game/config.ts). Empty hides the buttons. Not available in the installed app (Google blocks webview sign-in); it uses the backup code.
 
