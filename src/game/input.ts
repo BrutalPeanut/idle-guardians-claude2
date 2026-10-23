@@ -1,4 +1,5 @@
 import { submit } from './leaderboard'
+import { coachTips } from './coach'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
 import { chestGate, drawChestMoment, drawGearIntro, openChestMoment, drawFreshAsk, freshAnswer, freshGate } from './chestmoment'
@@ -42,7 +43,14 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const p = pt(ev); R.hint = 0
     if (R.freshAsk) { for (const k of ['fresh_continue', 'fresh_restart']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.chestMoment || (R.gearIntro && !R.summary)) { for (const k of ['chest_open', 'gear_intro_ok']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
-    if (R.coach && R.coachBox && inR(p, R.coachBox)) { G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui(); return }
+    if (R.coach && R.coachX && inR(p, R.coachX)) { G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui(); return }
+    if (R.coach && R.coachBox && inR(p, R.coachBox)) {
+      // tapping the bubble dismisses it and, when the tip names a button, goes there
+      const go = coachTips().find(x => x.id === R.coach!.id)?.go
+      G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui()
+      if (go) fireButton(go)
+      return
+    }
     if (adState.play) { const r = R.btns.ad_done; if (r && adState.play.done && inR(p, r)) { R.pressed = 'ad_done'; mode = 'btn'; Audio_.ui() } return }
     if (G.away) { for (const k of ['welcome', 'welcome_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (starterShowing()) { for (const k of ['starter_buy', 'starter_skip']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
