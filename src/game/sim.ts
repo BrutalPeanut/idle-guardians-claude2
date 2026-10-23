@@ -102,6 +102,8 @@ interface State {
   life: Record<string, number>; achClaimed: string[]; pass: { s: number; xp: number; claimed: number; pc?: number }; passPlus: number; spin: { day: string; free: number; ad: number }
   /** Auto-abilities: master switch plus per-ability switches (all on by default). nadeTaught = the player has thrown a grenade by hand. */
   auto: AutoCfg; autoT: number; nadeTaught: boolean
+  /** coach tips already shown (id -> 1). Persisted. */
+  tipsSeen: Record<string, number>
   raid: RaidState | null; raidInfo: { day: string; used: number; extra: number; best: number }
   /** Training levels (gold sink), the supply crate currently in the arena (tap it!) and the countdown to the next drop. */
   train: Record<string, number>; crate: { x: number; y: number; t: number } | null; crateT: number
@@ -117,6 +119,7 @@ const FIRE_RANGE = 170
 const LAUNCH_RANGE = 140
 const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike team
 export const G: State = {
+  tipsSeen: {},
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
   pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], missiles: [], cover: [], hazards: [], events: [], t: 0,
@@ -322,7 +325,7 @@ const BAK_KEY = SAVE_KEY + '_bak'
 export function save() {
   if (HOOK.noSave) return
   try { if (Date.now() - bakAt > 120000) { const prev = localStorage.getItem(SAVE_KEY); if (prev) { localStorage.setItem(BAK_KEY, prev); bakAt = Date.now() } } } catch { /* storage unavailable */ }
-  try { G.lastSeen = Date.now(); fire(ON.save); localStorage.setItem(SAVE_KEY, JSON.stringify({ xs: XS, bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, pp: G.passPlus, sp: G.spin, au: G.auto, aum: 1, nt: G.nadeTaught, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, cw: G.collar, cwo: G.collarOwned, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
+  try { G.lastSeen = Date.now(); fire(ON.save); localStorage.setItem(SAVE_KEY, JSON.stringify({ xs: XS, bt: Math.round(G.boostT), gold: G.gold, stage: G.stage, bought: G.bought, bench: G.bench, maxLevel: G.maxLevel, stash: G.stash, bl: G.blessings, pick: G.pick, lf: G.life, ac: G.achClaimed, ps: G.pass, pp: G.passPlus, sp: G.spin, au: G.auto, aum: 1, nt: G.nadeTaught, tp: G.tipsSeen, cl: G.clan, rd: G.raidInfo, kn: G.owned, sq: G.squad, co: G.coins, sd: G.stardust, rb: G.rebirths, gm: G.gems, dq: G.daily, ad: G.ads, na: G.noAds, ss: G.starterSeen, cw: G.collar, cwo: G.collarOwned, sh: G.shop, gr: G.gear, ch: G.chests, ni: G.nextItem, lg: G.login, sk: G.skills, tr: G.train, bs: G.best, t: G.lastSeen })) } catch { /* storage unavailable */ }
 }
 export function load() {
   try {
@@ -337,7 +340,7 @@ export function load() {
     const okSlot = (v: unknown): number | null => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < WEAPONS.length ? v : null
     const benchOk = (() => { const b: (number | null)[] = new Array(8).fill(null); arr<unknown>(s.bench, [0, 0]).slice(0, 8).forEach((v, i) => { b[i] = okSlot(v) }); return b })()
     // aum: one-time migration, Auto Mode back on for saves made before it defaulted on
-    Object.assign(G, { gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, starterSeen: !!s.ss, collar: typeof s.cw === 'string' ? s.cw : 'red', collarOwned: Array.isArray(s.cwo) ? s.cwo.filter((x: unknown) => typeof x === 'string') : ['red'], shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0, pc: 0 }, passPlus: num(s.pp, 0), spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}), ...(s.aum ? {} : { on: true }) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
+    Object.assign(G, { tipsSeen: s.tp && typeof s.tp === 'object' && !Array.isArray(s.tp) ? s.tp : {}, gold: num(s.gold, 40), stage: Math.max(1, num(s.stage, 1)), bought: num(s.bought, 0), bench: benchOk, maxLevel: num(s.maxLevel, 0), stash: s.stash ?? 0, blessings: s.bl ?? {}, pick: s.pick ?? null, stardust: s.sd ?? 0, rebirths: s.rb ?? 0, gems: s.gm ?? 0, daily: s.dq ?? rollDaily(dayKey()), ads: s.ad ?? { day: dayKey(), used: 0 }, noAds: !!s.na, starterSeen: !!s.ss, collar: typeof s.cw === 'string' ? s.cw : 'red', collarOwned: Array.isArray(s.cwo) ? s.cwo.filter((x: unknown) => typeof x === 'string') : ['red'], shop: s.sh && typeof s.sh.day === 'string' ? { day: s.sh.day, chest: num(s.sh.chest, 0), gems: num(s.sh.gems, 0) } : { day: '', chest: 0, gems: 0 }, gear: s.gr ?? [], chests: s.ch ?? [0, 0, 0], nextItem: s.ni ?? 1, login: s.lg ?? { last: '', streak: 0 }, life: s.lf ?? {}, achClaimed: s.ac ?? [], pass: s.ps ?? { s: 0, xp: 0, claimed: 0, pc: 0 }, passPlus: num(s.pp, 0), spin: s.sp ?? { day: '', free: 0, ad: 0 }, auto: { on: true, shield: true, frenzy: true, nade: true, tank: true, panic: true, ...(s.au ?? {}), ...(s.aum ? {} : { on: true }) }, nadeTaught: !!s.nt, clan: s.cl ?? null, raidInfo: s.rd ?? { day: '', used: 0, extra: 0, best: 0 }, owned: s.kn ?? [2, 3], squad: s.sq ?? [2, 3], coins: s.co ?? 0, skills: s.sk ?? {}, train: s.tr ?? {}, boostT: Math.min(BOOST.cap, Math.max(0, num(s.bt, 0))), best: Math.max(s.bs ?? 1, s.stage ?? 1), lastSeen: s.t ?? Date.now() })
     loadXS(s.xs); applySquad(); fire(ON.load); return true
   } catch { G.bench[0] = 0; G.bench[1] = 0; return false }
 }

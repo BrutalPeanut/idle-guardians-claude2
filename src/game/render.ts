@@ -1,5 +1,6 @@
 import { DRAW, drawAll, ON, fire } from './ext'
 import { nextGoal } from './meta'
+import { coachTips, nextTip } from './coach'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { PERKS } from './clan'
@@ -28,7 +29,7 @@ export type Ctx = CanvasRenderingContext2D
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { coach: null as null | { id: string; text: string; target?: string; start: number }, coachBox: null as Rect | null, blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -685,6 +686,31 @@ export function plate(ctx: Ctx, x: number, y: number, w: number, h: number, r: n
   ctx.strokeStyle = OUT; ctx.lineWidth = 2.4; rr(ctx, x, y, w, h, r); ctx.stroke()
   ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1; rr(ctx, x + 2.2, y + 2.2, w - 4.4, h - 4.4, Math.max(2, r - 2)); ctx.stroke()
 }
+// coach tip: one bubble at a time, pointing at the next button to press. Waits while a menu is open.
+function drawCoachTip(ctx: Ctx, t: number) {
+  const now = performance.now(), busy = !!(R.screen || R.quests || R.rebirth || G.pick || G.wipe || G.away || R.tour !== null || R.tourAsk || G.raid)
+  R.coachBox = null
+  if (busy) { R.coach = null; return }
+  if (R.coach && (now - R.coach.start > 7000 || !(coachTips().find(x => x.id === R.coach!.id)?.when() ?? false))) { G.tipsSeen[R.coach.id] = 1; R.coach = null }
+  if (!R.coach) { const nx = nextTip(); if (nx) R.coach = { id: nx.id, text: nx.text, target: nx.target, start: now } }
+  if (!R.coach) return
+  const c = R.coach, font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+  ctx.font = font; const maxW = 290, words = c.text.split(' '), lines: string[] = []
+  let cur = ''; for (const w of words) { const tryS = cur ? cur + ' ' + w : w; if (ctx.measureText(tryS).width > maxW && cur) { lines.push(cur); cur = w } else cur = tryS }
+  if (cur) lines.push(cur)
+  const bw = Math.min(W - 24, Math.max(...lines.map(l => ctx.measureText(l).width)) + 28), bh = lines.length * 16 + 14
+  const tg = c.target ? R.btns[c.target] : undefined
+  let x = tg ? tg.x + tg.w / 2 - bw / 2 : W / 2 - bw / 2, y = tg ? tg.y - bh - 12 : ACTION_BAR.y - bh - 10
+  if (tg && y < ARENA.y0) y = tg.y + tg.h + 10
+  x = Math.max(12, Math.min(W - 12 - bw, x))
+  if (tg) { const k = 0.5 + 0.5 * Math.sin(t * 5); ctx.strokeStyle = 'rgba(255,216,74,' + (0.45 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(tg.x - 4, tg.y - 4, tg.w + 8, tg.h + 8, 12); ctx.stroke() }
+  glass(ctx, x, y, bw, bh, 12)
+  ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  lines.forEach((l, i) => ctx.fillText(l, x + bw / 2, y + 7 + 8 + i * 16))
+  ctx.textBaseline = 'alphabetic'
+  R.coachBox = { x, y, w: bw, h: bh }
+}
+
 export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
   R.btns[key] = { x, y, w, h }
   const down = R.pressed === key, dy = down ? 2.5 : 0, rad = o.round ? h / 2 : Math.min(14, h / 2.2), lip = down ? 1 : 4, fh = h - 4
@@ -917,6 +943,7 @@ export function render(ctx: Ctx, t: number) {
     ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 34 + 3 * k, 0, 6.283); ctx.stroke()
     const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
   }
+  drawCoachTip(ctx, t)
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
   if (G.raid && !G.raid.result) { // raid scoreboard: damage bar with tier ticks

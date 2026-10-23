@@ -39,6 +39,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
+    if (R.coach && R.coachBox && inR(p, R.coachBox)) { G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui(); return }
     if (adState.play) { const r = R.btns.ad_done; if (r && adState.play.done && inR(p, r)) { R.pressed = 'ad_done'; mode = 'btn'; Audio_.ui() } return }
     if (G.away) { for (const k of ['welcome', 'welcome_ad']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (starterShowing()) { for (const k of ['starter_buy', 'starter_skip']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
