@@ -1,6 +1,6 @@
 // Static game data. No logic here.
 export const W = 360, H = 640;
-export const ARENA = { x0: 8, y0: 74, x1: 352, y1: 462 };
+export const ARENA = { x0: 8, y0: 74, x1: 352, y1: 404 };
 export const ERAS = ['Stone Age', 'Archery', 'Sidearms', 'Longarms', 'Automatics', 'Heavy Ordnance'];
 // 13-rung ladder (locked). dmg = per projectile, rate = shots/sec
 export interface Weapon { n: string; era: number; dmg: number; rate: number; spd: number; kind: WeaponKind; col: string; pellets?: number; splash?: number }

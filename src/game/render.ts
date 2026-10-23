@@ -890,7 +890,7 @@ export function render(ctx: Ctx, t: number) {
   button(ctx, 'buy', 10, ACTION_BAR.y, 180, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, glow: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
   button(ctx, 'merge', 198, ACTION_BAR.y, 152, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', glow: canMergeNow(), icon: 'merge', label: 'MERGE', size: 13 })
   { // active ability row under the arena: shield, frenzy, grenade. Each shows its cooldown sweep, or a drain bar while active.
-    const ns = 40, ny = ARENA.y1 - 44
+    const ns = 40, ny = ARENA.y1 + 14
     const abil = (key: string, x: number, icon: string, top: string, bot: string, cd: number, cdMax: number, act: number, actMax: number, size = ns, dy = 0) => {
       const sz = size, yy = ny + dy
       const ready = cd <= 0 && act <= 0
@@ -900,20 +900,20 @@ export function render(ctx: Ctx, t: number) {
       else if (cd > 0) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.moveTo(x + sz / 2, yy + sz / 2); ctx.arc(x + sz / 2, yy + sz / 2, sz / 2 - 2, -Math.PI / 2, -Math.PI / 2 + 6.283 * (cd / cdMax)); ctx.closePath(); ctx.fill(); ctx.restore()
         ctx.textAlign = 'center'; ctx.font = '400 16px ' + FONT; outText(ctx, Math.ceil(cd) + '', x + sz / 2, yy + sz / 2 + 1, '#fff', 3.5) }
     }
-    { const hs = 48, hx = 12, hy = ARENA.y1 - 48, lock = unlockedGuardians(G.stage) <= 2, held = !!G.hold
+    { const hs = 48, hx = 12, hy = ny - 4, lock = unlockedGuardians(G.stage) <= 2, held = !!G.hold
       if (held) { const k = 0.5 + 0.5 * Math.sin(t * 6); ctx.strokeStyle = 'rgba(255,179,71,' + (0.4 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hx + hs / 2, hy + hs / 2, hs / 2 + 3 + k * 2, 0, 6.283); ctx.stroke() }
       button(ctx, 'hold', hx, hy, hs, hs, { top: lock ? '#5a666d' : held ? '#ffb347' : '#b58cf0', bot: lock ? '#39434a' : held ? '#e0731a' : '#7a4ec0', disabled: lock, label: held ? 'RECALL' : 'HOLD', size: held ? 10 : 12, round: true })
-      ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lock ? 'STAGE 5' : held ? 'PLANTED' : 'FOLLOW', hx + hs / 2, ARENA.y1 - 8) }
-    button(ctx, 'auto', 70, ARENA.y1 - 44, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
-    ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ARENA.y1 - 8)
+      ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lock ? 'STAGE 5' : held ? 'PLANTED' : 'FOLLOW', hx + hs / 2, hy + hs - 8) }
+    button(ctx, 'auto', 70, ny, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
+    ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ny + 36)
     abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
     abil('panic', 165, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
     abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
     abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
-    abil('nade', 292, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1, 60, -10)
+    abil('nade', 297, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1, 50, -5)
   }
   if (G.stage <= 5 && !G.nadeTaught && G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1) { // grenade teaching hint: pulsing ring + bubble over the button
-    const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 - 24
+    const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 + 34
     ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 34 + 3 * k, 0, 6.283); ctx.stroke()
     const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
   }
