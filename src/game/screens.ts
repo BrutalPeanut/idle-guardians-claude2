@@ -306,7 +306,7 @@ export function screenButton(k: string): boolean {
   }
   if (k === 'login_claim') { claimLogin(); return true }
   if (k.startsWith('sb_')) { R.skillTab = +k.slice(3); return true }
-  if (k.startsWith('sk_')) { if (!buySkill(k.slice(3))) G.banner = { text: pointsLeft() < 1 ? 'No Paw Points left' : 'Maxed', sub: pointsLeft() < 1 ? 'Reach new stages or Rebirth to earn more' : undefined, t: 1.2 }; else Audio_.ui(); return true }
+  if (k.startsWith('sk_')) { if (!buySkill(k.slice(3))) { const sd = SKILLS.find(s => s.id === k.slice(3)); const lockedNow = !!sd?.need && G.best < sd.need; G.banner = { text: lockedNow ? 'Locked' : pointsLeft() < 1 ? 'No Paw Points left' : 'Maxed', sub: lockedNow ? 'Reach stage ' + sd!.need + ' to unlock' : pointsLeft() < 1 ? 'Reach new stages or Rebirth to earn more' : undefined, t: 1.2 } } else Audio_.ui(); return true }
   if (k === 'respec') { if (respec()) G.banner = { text: 'Skills reset', t: 1.2 }; else G.banner = { text: 'Need ' + RESPEC_GEMS + ' gems', t: 1.2 }; return true }
   if (k === 'chest_all') {
     const ids: number[] = []; let sold = 0, chests = 0
@@ -389,10 +389,10 @@ export function drawSkills(ctx: Ctx) {
   BRANCHES.forEach((b, i) => button(ctx, 'sb_' + i, 16 + i * 112, 104, 104, 32, { top: R.skillTab === i ? b.col : '#3a4850', bot: R.skillTab === i ? b.col + 'aa' : '#26323a', label: b.name, size: 13 }))
   const br = BRANCHES[R.skillTab], list = SKILLS.filter(s => s.branch === br.id)
   list.forEach((s, i) => {
-    const x = 16, y = 148 + i * 86, w = W - 32, h = 78, r = sk(s.id), can = pointsLeft() > 0 && r < s.max
+    const x = 16, y = 148 + i * 86, w = W - 32, h = 78, r = sk(s.id), locked = !!s.need && G.best < s.need, can = pointsLeft() > 0 && r < s.max && !locked
     plate(ctx, x, y, w, h, 14); ctx.strokeStyle = r ? br.col : 'rgba(255,255,255,.12)'; ctx.lineWidth = 1.5; rr(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 14); ctx.stroke()
     ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(s.name, x + 14, y + 20)
-    ctx.fillStyle = '#c9d8d0'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(s.desc, x + 14, y + 40)
+    ctx.fillStyle = locked ? '#ffd84a' : '#c9d8d0'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(locked ? 'Locked: reach stage ' + s.need + ' to unlock' : s.desc, x + 14, y + 40)
     for (let p = 0; p < s.max; p++) { ctx.fillStyle = p < r ? br.col : 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(x + 20 + p * 18, y + 60, 6, 0, 6.283); ctx.fill() }
     button(ctx, 'sk_' + s.id, x + w - 66, y + 20, 52, 38, { top: can ? '#52d273' : '#4a565d', bot: can ? '#25994a' : '#2f3a40', label: r >= s.max ? 'MAX' : '+', size: r >= s.max ? 11 : 20, disabled: !can })
   })
