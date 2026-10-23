@@ -15,7 +15,7 @@ import type { Daily } from './quests'
 import { buildLayout, rulesFor, bulletDmg, localStage, segRect, pushOut, inHazard } from './cover'
 import type { Cover, Hazard, HazardKind } from './cover'
 
-export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number; path?: number; lx?: number; ly?: number; still?: number }
+export interface Enemy { x: number; y: number; hp: number; max: number; spd: number; r: number; kind: 'zombie' | 'robot' | 'boss' | 'gunner' | 'mortar' | 'runner' | 'launcher'; flash: number; wob: number; dmg: number; cd: number; dug?: boolean; coverId?: number; drake?: number; ab?: number; path?: number; lx?: number; ly?: number; still?: number; wt?: number }
 /** Boss dragons: 0 Magma Wyrm (fire barrage), 1 Frost Drake (ice nova), 2 Storm Wyvern (lightning strikes), 3 Plague Drake (spits venom, calls a brood). */
 export const DRAKES = [{ name: 'MAGMA WYRM', cast: 'FIRE BARRAGE', col: '#ff7a2a' }, { name: 'FROST DRAKE', cast: 'ICE NOVA', col: '#8fe0ff' }, { name: 'STORM WYVERN', cast: 'LIGHTNING', col: '#ffe45a' }, { name: 'PLAGUE DRAKE', cast: 'BROOD CALL', col: '#9be04a' }] as const
 export const drakeFor = (stage: number) => (Math.floor(stage / 10) - 1 + 400) % 4
@@ -389,8 +389,8 @@ const blocked = (ax: number, ay: number, bx: number, by: number) => { for (const
 /** Heading for a walker: straight at the target, or around YOUR barricades (never through them). Keeps one side per enemy so it doesn't dither. */
 const walkAngle = (e: Enemy, tx: number, ty: number, step: number): number => {
   const base = Math.atan2(ty - e.y, tx - e.x), look = Math.max(step, 36)
-  const walls = G.cover.filter(c => c.side === 'player' && c.hp > 0)
-  const clear = (a: number) => { const nx = e.x + Math.cos(a) * look, ny = e.y + Math.sin(a) * look; return !walls.some(c => segRect(e.x, e.y, nx, ny, c)) }
+  const walls = G.cover.filter(c => c.side === 'player' && c.hp > 0), pad = e.r * 0.9
+  const clear = (a: number) => { const nx = e.x + Math.cos(a) * look, ny = e.y + Math.sin(a) * look; return !walls.some(c => segRect(e.x, e.y, nx, ny, { x: c.x, y: c.y, w: c.w + 2 * pad, h: c.h + 2 * pad })) }
   if (!walls.length || clear(base)) return base
   const side = e.path ?? 1
   for (const o of [0.45, 0.9, 1.35, 1.8, 2.25, 2.7]) for (const sg of [side, -side]) { const a = base + sg * o; if (clear(a)) { e.path = sg; return a } }
@@ -469,6 +469,8 @@ export function reinforceRegroup(paid: 'ad' | 'gems'): boolean {
   G.reinforce = true; regroupFree(); G.banner = { text: 'REINFORCED!', sub: '+' + Math.round(REINFORCE_BONUS * 100) + '% power and health', t: 1.8 }; save(); return true
 }
 const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0) + ext('hp', i)
+/** Enemies the stall watchdog had to clear (a pathing failure, not a real kill). Tests and telemetry read it. */
+export const STALL = { kills: 0, secs: 0 }
 const alive = (i: number) => G.hp[i] > 0
 /** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
 export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
@@ -710,10 +712,15 @@ export function update(dtReal: number) {
   // Stall watchdog: a walker that hasn't moved for 20s and isn't in melee range is stuck (usually behind a barricade corner or in a pocket). Count it as cleared so progression never stops.
   for (const e of G.enemies) {
     if (e.dug || e.kind === 'launcher' || e.kind === 'boss' || e.hp <= 0) continue
-    const moved = Math.hypot(e.x - (e.lx ?? e.x), e.y - (e.ly ?? e.y)); e.lx = e.x; e.ly = e.y
-    const engaged = centers.some(c => Math.hypot(c.x - e.x, c.y - e.y) <= 40)
-    e.still = moved < 0.5 && !engaged ? (e.still ?? 0) + dt : 0
-    if ((e.still ?? 0) > 10) { e.hp = 0; killReward(e) }
+    // Measure over half-second windows: a slow walker (robot, mud, shallows) moves well under a pixel a frame but is not stuck.
+    e.wt = (e.wt ?? 0) + dt
+    if (e.wt >= 0.5) {
+      const moved = Math.hypot(e.x - (e.lx ?? e.x), e.y - (e.ly ?? e.y)); e.lx = e.x; e.ly = e.y; e.wt = 0
+      const engaged = centers.some(c => Math.hypot(c.x - e.x, c.y - e.y) <= 40)
+      e.still = moved < 4 && !engaged ? (e.still ?? 0) + 0.5 : 0 // under 4px in half a second = not moving
+    }
+    if ((e.still ?? 0) > 3) STALL.secs += dt
+    if ((e.still ?? 0) > 10) { e.hp = 0; STALL.kills++; killReward(e) }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0)
 
