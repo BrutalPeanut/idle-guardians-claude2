@@ -189,7 +189,7 @@ function itemCard(ctx: Ctx, x: number, y: number, w: number, h: number, it: Item
   if (it) { itemIcon(ctx, it, x + w / 2, y + h * 0.36, 1.25); ctx.fillStyle = '#fff'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(fmtShort(it), x + w / 2, y + h - 11); if (it.subs) { ctx.fillStyle = RARITY[it.rar].col; for (let k = 0; k < it.subs.length; k++) { ctx.beginPath(); ctx.arc(x + w - 9 - k * 8, y + 9, 2.6, 0, 6.283); ctx.fill() } } }
   else { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(label ?? 'empty', x + w / 2, y + h / 2) }
 }
-function chestIcon(ctx: Ctx, x: number, y: number, s: number, tier: number, open = 0) {
+export function chestIcon(ctx: Ctx, x: number, y: number, s: number, tier: number, open = 0) {
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s); const col = CHEST_COLS[tier]
   ctx.fillStyle = col; ctx.strokeStyle = OUT; ctx.lineWidth = 2; rr(ctx, -16, -4, 32, 20, 4); ctx.fill(); ctx.stroke()
   ctx.save(); ctx.translate(-16, -4); ctx.rotate(-open * 0.9); ctx.fillStyle = col; rr(ctx, 0, -12, 32, 12, 5); ctx.fill(); ctx.stroke(); ctx.restore()
