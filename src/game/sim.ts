@@ -294,7 +294,7 @@ const fmtN = (n: number) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? (
 export const pointsSpent = () => Object.values(G.skills).reduce((a, b) => a + b, 0)
 export const pointsLeft = () => pointsEarned(G.best, G.rebirths) - pointsSpent()
 export function buySkill(id: string) {
-  const d = SKILLS.find(s => s.id === id); if (!d || sk(id) >= d.max || pointsLeft() < 1) return false
+  const d = SKILLS.find(s => s.id === id); if (!d || sk(id) >= d.max || pointsLeft() < 1 || (d.need && G.best < d.need)) return false
   G.skills[id] = sk(id) + 1; save(); return true
 }
 export function respec() { if (G.gems < RESPEC_GEMS || pointsSpent() === 0) return false; G.gems -= RESPEC_GEMS; G.skills = {}; save(); return true }
@@ -672,7 +672,14 @@ export function update(dtReal: number) {
         G.events.push({ type: 'boom', x: s.x, y: s.y, r: sp })
         for (const o of G.enemies) if (o.hp > 0 && Math.hypot(o.x - s.x, o.y - s.y) < sp) { total += s.dmg; G.stats.dealt[s.gi] += s.dmg; o.hp -= s.dmg; o.flash = 0.1; if (o.hp <= 0) killReward(o) }
         G.events.push({ type: 'dmg', x: s.x, y: s.y - 14, v: total, crit: s.crit, kill: false, blast: true })
-      } else { damageEnemy(e, s.dmg, s.crit, s.flank > 0, s.gi, s.flank); G.events.push({ type: 'hit', x: s.x, y: s.y, col: s.col }) }
+      } else {
+        damageEnemy(e, s.dmg, s.crit, s.flank > 0, s.gi, s.flank); G.events.push({ type: 'hit', x: s.x, y: s.y, col: s.col })
+        if (sk('splash') > 0) { // Splash Rounds: the hit bursts, hurting foes nearby
+          const sr = 30, d = s.dmg * 0.35
+          G.events.push({ type: 'boom', x: s.x, y: s.y, r: sr })
+          for (const o of G.enemies) if (o !== e && o.hp > 0 && Math.hypot(o.x - s.x, o.y - s.y) < sr + o.r) { G.stats.dealt[s.gi] += d; o.hp -= d; o.flash = 0.1; if (o.hp <= 0) killReward(o) }
+        }
+      }
       break
     }
   }

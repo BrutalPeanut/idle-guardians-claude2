@@ -1,6 +1,6 @@
 /** Skill tree: three branches of four skills, bought with Paw Points (earned by reaching new stages and by Rebirth). */
 export type Branch = 'fang' | 'fur' | 'nose'
-export interface Skill { id: string; branch: Branch; name: string; desc: string; max: number }
+export interface Skill { id: string; branch: Branch; name: string; desc: string; max: number; need?: number /* best stage needed before it can be bought */ }
 export const BRANCHES: { id: Branch; name: string; col: string }[] = [
   { id: 'fang', name: 'Fang', col: '#ff6a5a' }, { id: 'fur', name: 'Fur', col: '#5be07f' }, { id: 'nose', name: 'Nose', col: '#ffd84a' },
 ]
@@ -9,6 +9,7 @@ export const SKILLS: Skill[] = [
   { id: 'quick',   branch: 'fang', name: 'Quick Draw',      desc: '+2% fire rate per rank', max: 5 },
   { id: 'keen',    branch: 'fang', name: 'Keen Eyes',       desc: '+2% crit chance per rank', max: 5 },
   { id: 'flanker', branch: 'fang', name: 'Flank Master',    desc: '+8% flanking bonus per rank', max: 5 },
+  { id: 'splash',  branch: 'fang', name: 'Splash Rounds',   desc: 'Bullets burst on hit: 35% damage to foes within 30px', max: 1, need: 12 },
   { id: 'coat',    branch: 'fur',  name: 'Thick Coat',      desc: '+4% max HP per rank', max: 5 },
   { id: 'bunker',  branch: 'fur',  name: 'Dig In',          desc: '+8% cover HP per rank', max: 5 },
   { id: 'aegisS',  branch: 'fur',  name: 'Shield Shine',    desc: 'Shield lasts +0.4s per rank', max: 5 },

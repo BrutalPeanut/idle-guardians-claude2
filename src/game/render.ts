@@ -695,19 +695,22 @@ function drawCoachTip(ctx: Ctx, t: number) {
   else if (R.coach && now - R.coach.start > 7000) { const pt = coachTips().find(x => x.id === R.coach!.id); if (pt?.persist) coachCool[R.coach.id] = now; else G.tipsSeen[R.coach.id] = 1; R.coach = null }
   if (!R.coach) { const nx = nextTip(); if (nx) R.coach = { id: nx.id, text: nx.text, target: nx.target, start: now } }
   if (!R.coach) return
-  const c = R.coach, font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
-  ctx.font = font; const maxW = 290, words = c.text.split(' '), lines: string[] = []
+  const c = R.coach, hot = !!coachTips().find(x => x.id === c.id)?.persist // buy and merge: big, gold, hard to miss
+  const fs = hot ? 15 : 12, lh = hot ? 20 : 16, pad = hot ? 9 : 7
+  const font = '400 ' + fs + 'px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+  ctx.font = font; const maxW = hot ? 300 : 290, words = c.text.split(' '), lines: string[] = []
   let cur = ''; for (const w of words) { const tryS = cur ? cur + ' ' + w : w; if (ctx.measureText(tryS).width > maxW && cur) { lines.push(cur); cur = w } else cur = tryS }
   if (cur) lines.push(cur)
-  const bw = Math.min(W - 24, Math.max(...lines.map(l => ctx.measureText(l).width)) + 28), bh = lines.length * 16 + 14
+  const bw = Math.min(W - 24, Math.max(...lines.map(l => ctx.measureText(l).width)) + (hot ? 36 : 28)), bh = lines.length * lh + (hot ? 18 : 14)
   const tg = c.target ? R.btns[c.target] : undefined
   let x = tg ? tg.x + tg.w / 2 - bw / 2 : W / 2 - bw / 2, y = tg ? tg.y - bh - 12 : ACTION_BAR.y - bh - 10
   if (tg && y < ARENA.y0) y = tg.y + tg.h + 10
   x = Math.max(12, Math.min(W - 12 - bw, x))
-  if (tg) { const k = 0.5 + 0.5 * Math.sin(t * 5); ctx.strokeStyle = 'rgba(255,216,74,' + (0.45 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(tg.x - 4, tg.y - 4, tg.w + 8, tg.h + 8, 12); ctx.stroke() }
-  glass(ctx, x, y, bw, bh, 12)
-  ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  lines.forEach((l, i) => ctx.fillText(l, x + bw / 2, y + 7 + 8 + i * 16))
+  if (tg) { const k = 0.5 + 0.5 * Math.sin(t * 5); ctx.strokeStyle = 'rgba(255,216,74,' + (0.45 + 0.5 * k) + ')'; ctx.lineWidth = hot ? 4 : 3; ctx.beginPath(); ctx.roundRect(tg.x - 4, tg.y - 4, tg.w + 8, tg.h + 8, 12); ctx.stroke()
+    if (hot) { ctx.strokeStyle = 'rgba(255,216,74,' + (0.25 + 0.35 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(tg.x - 11, tg.y - 11, tg.w + 22, tg.h + 22, 16); ctx.stroke() } }
+  if (hot) plate(ctx, x, y, bw, bh, 12, '#ffe27a', '#e8961a'); else glass(ctx, x, y, bw, bh, 12)
+  ctx.fillStyle = hot ? '#2a1400' : '#ffd9a0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  lines.forEach((l, i) => ctx.fillText(l, x + bw / 2, y + pad + lh / 2 + i * lh))
   ctx.textBaseline = 'alphabetic'
   R.coachBox = { x, y, w: bw, h: bh }
 }
