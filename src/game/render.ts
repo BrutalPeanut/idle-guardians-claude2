@@ -6,7 +6,7 @@ import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
 import { IAP } from './iap'
 import { collarOf } from './cosmetics'
-import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_CAP, starBonus, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
+import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, STAR_CAP, starBonus, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -71,7 +71,7 @@ export function drainEvents() {
       R.flash = 0.15
     }
     else if (e.type === 'blessing') { Audio_.fanfare(); const b = BLESSINGS.find(x => x.id === e.id)!; G.banner = { text: b.name.toUpperCase() + ' x' + bl(e.id), sub: b.desc, t: 1.8, big: true }; R.flash = 0.25 }
-    else if (e.type === 'rebirth') { track('rebirth', { n: e.gain }); Audio_.fanfare(); G.banner = { text: 'REBORN', sub: '+' + e.gain + ' Stardust', t: 2.4, big: true }; R.flash = 0.8 }
+    else if (e.type === 'rebirth') { track('rebirth', { n: e.gain }); Audio_.fanfare(); G.banner = { text: 'REBORN', sub: G.rebirths <= 2 ? '+' + e.gain + ' Stardust: permanent damage & gold up, replayed stages run 2x' : '+' + e.gain + ' Stardust', t: G.rebirths <= 2 ? 4.2 : 2.4, big: true }; R.flash = 0.8 }
     else if (e.type === 'quest_claim') { Audio_.coins(); G.banner = { text: 'QUEST DONE', sub: '+' + e.gems + ' gems  +' + fmt(e.gold) + ' gold', t: 1.6 } }
     else if (e.type === 'chest_get') { Audio_.fanfare(); G.banner = { text: 'CHEST EARNED', sub: CHEST_NAMES[e.tier] + (e.n > 1 ? ' x' + e.n : '') + ' (tap GEAR)', t: 2.2, big: true } }
     else if (e.type === 'login_claim') { Audio_.coins(); G.banner = { text: 'DAY ' + (e.day + 1) + ' REWARD', sub: e.label, t: 1.8 } }
@@ -814,10 +814,10 @@ export function render(ctx: Ctx, t: number) {
   button(ctx, 'speed', 252, 8, 62, 34, { label: (G.speed * baseSpeed()) + 'x', size: 15, top: G.speed > 1 ? '#ffb347' : '#5b6c75', bot: G.speed > 1 ? '#e0731a' : '#3a4850', icon: 'bolt' })
   button(ctx, 'mute', 318, 8, 34, 34, { top: '#5b6c75', bot: '#3a4850', icon: 'speaker' })
   { // stardust chip: permanent currency; tap to open Rebirth (glows when a rebirth would pay out)
-    const sx = 216, sw = 134, can = rebirthGain(G.stage) > 0, pulse = can ? 0.5 + 0.5 * Math.sin(t * 5) : 0
+    const sx = 216, sw = 134, can = rebirthGain(G.stage) > 0, glow = can && G.rebirths >= 2, pulse = glow ? 0.5 + 0.5 * Math.sin(t * 2) : 0
     R.btns.stardust = { x: sx, y: 45, w: sw, h: 24 }
     glass(ctx, sx, 45, sw, 24, 10)
-    ctx.strokeStyle = can ? 'rgba(190,150,255,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = can ? 1.6 : 1; rr(ctx, sx + 0.5, 45.5, sw - 1, 23, 10); ctx.stroke()
+    ctx.strokeStyle = glow ? 'rgba(190,150,255,' + (0.22 + 0.28 * pulse) + ')' : can ? 'rgba(190,150,255,.35)' : 'rgba(255,255,255,.12)'; ctx.lineWidth = glow ? 1.4 : 1; rr(ctx, sx + 0.5, 45.5, sw - 1, 23, 10); ctx.stroke()
     icons.star(ctx, sx + 13, 57, '#c9a6ff'); ctx.textAlign = 'left'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#e4d3ff'
     ctx.fillText(fmt(G.stardust) + (G.stardust ? '  +' + Math.round(starBonus(G.stardust) * 100) + '%' : ''), sx + 25, 57.5)
     if (can) { ctx.textAlign = 'right'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#c9a6ff'; ctx.fillText('REBIRTH', sx + sw - 8, 57.5) } }
@@ -1041,7 +1041,7 @@ export function drawPick(ctx: Ctx, t: number) {
 export function drawRebirth(ctx: Ctx, t: number) {
   R.btns = {}
   ctx.fillStyle = 'rgba(4,8,10,.86)'; ctx.fillRect(0, 0, W, H)
-  const cw = 308, ch = 340, cx = (W - cw) / 2, cy = 120, gain = rebirthGain(G.stage)
+  const cw = 308, gain = rebirthGain(G.stage), teach = gain > 0 && G.rebirths < 2, ch = teach ? 420 : 340, cx = (W - cw) / 2, cy = teach ? 100 : 120, dy = teach ? 80 : 0
   const g = ctx.createLinearGradient(0, cy, 0, cy + ch); g.addColorStop(0, '#2d2a44'); g.addColorStop(1, '#171626')
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24; ctx.fillStyle = g; rr(ctx, cx, cy, cw, ch, 22); ctx.fill(); ctx.restore()
   ctx.strokeStyle = 'rgba(190,150,255,.6)'; ctx.lineWidth = 1.5; rr(ctx, cx + 0.75, cy + 0.75, cw - 1.5, ch - 1.5, 22); ctx.stroke()
@@ -1051,15 +1051,23 @@ export function drawRebirth(ctx: Ctx, t: number) {
   if (gain) {
     ctx.fillStyle = '#e4d3ff'; ctx.font = '400 28px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('+' + gain + ' Stardust', W / 2, cy + 134)
     ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
-    ctx.fillText('Permanent damage & gold: +' + Math.round(starBonus(G.stardust) * 100) + '%  →  +' + Math.round(starBonus(G.stardust + gain) * 100) + '% (max +' + Math.round(STAR_CAP * 100) + '%)', W / 2, cy + 162)
+    ctx.fillText('Damage & gold: +' + Math.round(starBonus(G.stardust) * 100) + '%  →  +' + Math.round(starBonus(G.stardust + gain) * 100) + '%  (cap +' + Math.round(STAR_CAP * 100) + '%)', W / 2, cy + 162)
     ctx.fillStyle = '#ffb27a'; ctx.fillText('Resets stage, gold, weapons, blessings and stash.', W / 2, cy + 192)
     ctx.fillStyle = '#7f929a'; ctx.fillText('Stardust and Rebirths are kept forever.', W / 2, cy + 212)
+    if (teach) { // first two rebirths: say what it buys, in plain words
+      ctx.fillStyle = '#e4d3ff'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+      ctx.fillText('What you gain', W / 2, cy + 240)
+      ctx.fillStyle = '#9fb5aa'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+      ctx.fillText('+' + Math.round(STAR_BONUS * 100) + '% damage and gold, forever, for every Stardust', W / 2, cy + 258)
+      ctx.fillText('Stages you replay below your best run at 2x speed', W / 2, cy + 274)
+      ctx.fillText('Stardust builds up to +' + Math.round(STAR_CAP * 100) + '%, then the bonus caps', W / 2, cy + 290)
+    }
   } else {
     ctx.fillStyle = '#ffd84a'; ctx.font = '400 18px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Reach stage ' + REBIRTH_MIN + ' to Rebirth', W / 2, cy + 134)
     ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('You are on stage ' + G.stage + '. Rebirthing earns Stardust,', W / 2, cy + 168); ctx.fillText('a permanent damage and gold bonus.', W / 2, cy + 188)
     ctx.fillStyle = '#e4d3ff'; ctx.fillText('Stardust: ' + G.stardust + '   Rebirths: ' + G.rebirths, W / 2, cy + 218)
   }
-  if (gain) { button(ctx, 'rb_go', cx + 24, cy + 240, cw - 48, 40, { top: '#b58cf0', bot: '#6a3fb8', label: 'REBIRTH', size: 15 }); button(ctx, 'rb_close', cx + 24, cy + 288, cw - 48, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Not yet', size: 13 }) }
+  if (gain) { button(ctx, 'rb_go', cx + 24, cy + 240 + dy, cw - 48, 40, { top: '#b58cf0', bot: '#6a3fb8', label: 'REBIRTH', size: 15 }); button(ctx, 'rb_close', cx + 24, cy + 288 + dy, cw - 48, 36, { top: '#5b6c75', bot: '#3a4850', label: 'Not yet', size: 13 }) }
   else button(ctx, 'rb_close', cx + 24, cy + 270, cw - 48, 44, { top: '#5b6c75', bot: '#3a4850', label: 'Close', size: 14 })
 }
 
