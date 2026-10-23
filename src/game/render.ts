@@ -565,6 +565,26 @@ export function drawEnemyPortrait(ctx: Ctx, kind: Enemy['kind'], x: number, y: n
   if (kind === 'boss') { drawDragon(ctx, e, t, x, y, false); return }
   drawEnemy(ctx, e, t)
 }
+/** Biome skin: each enemy picks up its stage's look (moss, sand, seaweed and salt, embers, frost, swamp mud). Drawn over the body, same transform. */
+function drawBiomeSkin(ctx: Ctx, e: Enemy, x: number, y: number, s: number, fl: boolean) {
+  if (fl) return
+  const b = biomeIndex(G.stage), seed = e.wob || 0
+  const dots = (col: string, n: number, rx: number, ry: number, cy: number, r: number) => {
+    ctx.fillStyle = col
+    for (let i = 0; i < n; i++) { const a = seed * 7 + i * 2.399; ctx.beginPath(); ctx.arc(x + Math.cos(a) * rx * s, y + cy * s + Math.sin(a * 1.7) * ry * s, r * s, 0, 6.283); ctx.fill() }
+  }
+  ctx.save()
+  switch (b) {
+    case 0: ctx.globalAlpha = 0.85; dots('#5c9a4a', 4, 6, 6, -4, 1.6); break // forest: moss
+    case 1: ctx.globalAlpha = 0.35; ctx.fillStyle = '#e8c98a'; ctx.beginPath(); ctx.ellipse(x, y + 2 * s, 11 * s, 12 * s, 0, 0, 6.283); ctx.fill(); ctx.globalAlpha = 0.8; dots('#f3dfb0', 4, 8, 9, 0, 1); break // desert: sand dust
+    case 2: ctx.globalAlpha = 0.85; ctx.strokeStyle = '#2f9a8c'; ctx.lineWidth = 1.6 * s; for (let i = 0; i < 3; i++) { const ox = x + (i - 1) * 5 * s; ctx.beginPath(); ctx.moveTo(ox, y + 4 * s); ctx.quadraticCurveTo(ox + 2 * s, y + 10 * s, ox - s, y + 14 * s); ctx.stroke() } dots('#ffffff', 3, 7, 6, -2, 0.8); break // tideline: seaweed and salt
+    case 3: ctx.globalAlpha = 0.9; dots('#ff9a3a', 4, 8, 9, 0, 1.1); ctx.strokeStyle = '#ff6a2a'; ctx.lineWidth = 1.2 * s; ctx.beginPath(); ctx.arc(x, y, 10 * s, 0, 6.283); ctx.stroke(); break // badlands: embers
+    case 4: ctx.globalAlpha = 0.5; ctx.fillStyle = '#eaf6ff'; ctx.beginPath(); ctx.ellipse(x, y - 2 * s, 9 * s, 10 * s, 0, 0, 6.283); ctx.fill(); ctx.globalAlpha = 0.9; dots('#ffffff', 5, 9, 10, 0, 1); break // snowfield: frost
+    case 5: ctx.globalAlpha = 0.8; dots('#6b8a3a', 4, 7, 8, 2, 1.8); ctx.fillStyle = '#4f3d28'; ctx.beginPath(); ctx.ellipse(x, y + 8 * s, 9 * s, 3 * s, 0, 0, 6.283); ctx.fill(); break // swamp: mud
+  }
+  ctx.restore()
+}
+
 function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
   const st = ES.get(e) ?? { x: e.x, y: e.y, t, vx: 0, ph: e.wob }, dtE = Math.max(0.001, Math.min(0.1, t - st.t))
   st.vx += (((e.x - st.x) / dtE) - st.vx) * 0.2; const mv = Math.min(1, Math.hypot(e.x - st.x, e.y - st.y) / dtE / 30)
@@ -593,6 +613,7 @@ function drawEnemy(ctx: Ctx, e: Enemy, t: number) {
   } else if (e.kind === 'launcher') { drawLauncher(ctx, e, t, x, y, fl)
   } else if (e.kind === 'robot') { drawRobot(ctx, e, t, x, y, s, fl)
   } else { drawZombie(ctx, e, t, x, y, s, fl) }
+  if (e.kind !== 'boss') drawBiomeSkin(ctx, e, x, e.y + 0, s, fl)
   ctx.restore()
   if (e.hp < e.max || e.kind === 'boss') {
     const bw = e.r * 2.2; ctx.fillStyle = OUT; ctx.fillRect(x - bw / 2 - 1, y - e.r - 15, bw + 2, 5);
