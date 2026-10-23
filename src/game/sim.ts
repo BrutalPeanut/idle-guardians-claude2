@@ -309,7 +309,8 @@ export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = 
 /** Enemy HP compounds 1.27x per stage up to stage 12, then 1.23x: late stages stay a climb, not a wall. */
 /** Opening stages ease enemy HP in (45% at stage 1, full by stage 8) so a starting bench can clear them. */
 const earlyHp = (s: number) => 0.45 + 0.55 * Math.min(1, Math.max(0, (s - 1) / 7))
-export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(1.23, Math.max(0, s - 12)) * (1 + 2.2 / (1 + s / 5)) * earlyHp(s)
+/** Late HP grows polynomially ((s/12)^3.5) instead of compounding 1.23x a stage: steady climb, no runaway wall. */
+export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(Math.max(1, s / 12), 3.5) * (1 + 2.2 / (1 + s / 5)) * earlyHp(s)
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
@@ -348,7 +349,9 @@ export function startStage() {
     x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
-  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * openingMul(s))
+  // Waves: every 5th stage (5, 15, 25...) is a breather with a lighter crowd, so pressure comes in pulses instead of one climb.
+  const breather = !isBoss(s) && localStage(s) === 5 ? 0.7 : 1
+  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * openingMul(s) * breather)
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: s === 2 ? 'Sniper behind a barricade. Drag your pack to its side to flank it' : localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
