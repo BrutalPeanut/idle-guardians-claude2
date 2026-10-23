@@ -473,6 +473,8 @@ export function reinforceRegroup(paid: 'ad' | 'gems'): boolean {
 const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0) + ext('hp', i)
 /** Enemies the stall watchdog had to clear (a pathing failure, not a real kill). Tests and telemetry read it. */
 export const STALL = { kills: 0, secs: 0 }
+/** Pressure: dogs knocked down. A stage that never hurts the pack is not really being played. */
+export const PRESSURE = { downs: 0 }
 const alive = (i: number) => G.hp[i] > 0
 /** Rudy's Tank mode (guardian 0): takes 40% damage and hits 1.5x. Cooper's Panic mode (guardian 1): hits 2.3x but takes 2.5x. */
 export const MODES = { tank: { dur: 7, cd: 24, armor: 0.4, power: 1.5 }, panic: { dur: 6, cd: 26, armor: 2.5, power: 2.3 } }
@@ -486,6 +488,7 @@ function hurt(i: number, dmg: number) {
   if (G.shieldT > 0) { G.stats.shield += dmg; return } // Guardian Shield: all incoming damage is blocked
   dmg *= dogArmor(i) * (1 - gbc(i, 'guard'))
   G.stats.taken[i] += Math.min(dmg, G.hp[i]); G.hp[i] -= dmg
+  if (G.hp[i] <= 0) PRESSURE.downs++ // a dog went down: the pressure signal tests read
   if (G.hp[i] <= 0) { G.hp[i] = 0; G.reviveT[i] = reviveTime(); const gp = guardianPos(i); G.events.push({ type: 'down', i, x: gp.x, y: gp.y }) }
 }
 function nearestAlive(x: number, y: number, n: number) {
@@ -543,7 +546,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: 2 * (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
   G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
@@ -952,8 +955,6 @@ function autoAbilities() {
   if (A.frenzy && G.frenzyCd <= 0 && G.frenzyT <= 0 && (live >= 4 || boss)) useAbility('frenzy')
   if (A.tank && G.tankCd <= 0 && G.tankT <= 0 && alive(0) && (live >= 4 || boss)) useAbility('tank')
   if (A.panic && G.panicCd <= 0 && G.panicT <= 0 && alive(1) && n > 1 && G.hp[1] / G.mhp[1] > 0.7 && (live >= 6 || boss)) useAbility('panic')
-  // hold the grenade back early so the hint can teach it; after that (or from stage 6) it throws itself at clumps of 3+
-  if (A.nade && G.nadeCd <= 0 && (G.nadeTaught || G.stage > 5) && bestClump() >= 3) throwGrenade()
 }
 
 // ================= Meta: achievements, season pass, lucky spin, unlocks =================
