@@ -1,6 +1,6 @@
 import { DRAW, drawAll, ON, fire } from './ext'
 import { nextGoal } from './meta'
-import { coachTips, nextTip } from './coach'
+import { coachTips, nextTip, coachCool } from './coach'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { PERKS } from './clan'
@@ -691,7 +691,8 @@ function drawCoachTip(ctx: Ctx, t: number) {
   const now = performance.now(), busy = !!(R.screen || R.quests || R.rebirth || G.pick || G.wipe || G.away || R.tour !== null || R.tourAsk || G.raid)
   R.coachBox = null
   if (busy) { R.coach = null; return }
-  if (R.coach && (now - R.coach.start > 7000 || !(coachTips().find(x => x.id === R.coach!.id)?.when() ?? false))) { G.tipsSeen[R.coach.id] = 1; R.coach = null }
+  if (R.coach && !(coachTips().find(x => x.id === R.coach!.id)?.when() ?? false)) { G.tipsSeen[R.coach.id] = 1; R.coach = null } // the player acted: done
+  else if (R.coach && now - R.coach.start > 7000) { const pt = coachTips().find(x => x.id === R.coach!.id); if (pt?.persist) coachCool[R.coach.id] = now; else G.tipsSeen[R.coach.id] = 1; R.coach = null }
   if (!R.coach) { const nx = nextTip(); if (nx) R.coach = { id: nx.id, text: nx.text, target: nx.target, start: now } }
   if (!R.coach) return
   const c = R.coach, font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'

@@ -2,11 +2,15 @@
 import { G, buyCost, canMergeNow, rebirthGain, questReady } from './sim'
 import { unlockedGuardians } from './data'
 
-export interface Tip { id: string; target?: string; text: string; when: () => boolean }
+export interface Tip { id: string; target?: string; text: string; when: () => boolean; persist?: boolean }
+
+// persistent tips keep coming back (after a short pause) until the player acts; the pause start is kept here, not saved
+export const coachCool: Record<string, number> = {}
+const PAUSE_MS = 8000
 
 const STATIC: Tip[] = [
-  { id: 'buy' + G.bought, target: 'buy', text: 'You can afford a new gun! Tap BUY.', when: () => G.gold >= buyCost() && G.bench.includes(null) },
-  { id: 'merge' + G.bought, target: 'merge', text: 'Two matching guns merge into a stronger one. Tap MERGE!', when: () => canMergeNow() },
+  { id: 'buy' + G.bought, target: 'buy', text: 'You can afford a new gun! Tap BUY.', when: () => G.gold >= buyCost() && G.bench.includes(null), persist: true },
+  { id: 'merge' + G.bought, target: 'merge', text: 'Two matching guns merge into a stronger one. Tap MERGE!', when: () => canMergeNow(), persist: true },
   { id: 'abil', target: 'shield', text: 'Abilities sit under the arena. Tap Shield, Frenzy, Tank or Panic when a wave closes in.', when: () => G.stage >= 3 && (G.nadeTaught || G.stage > 5) },
   { id: 'hold', target: 'hold', text: 'HOLD plants your pack in place. Tap it again to recall.', when: () => G.stage >= 5 },
   { id: 'quest', target: 'nav_quests', text: 'A daily quest is done! Tap the quest bar to claim gems.', when: () => questReady() > 0 },
@@ -23,6 +27,7 @@ export function coachTips(): Tip[] { return [...guardianTips(), ...STATIC] }
 
 /** The first tip the player has not seen yet whose moment has come, or null. */
 export function nextTip(): Tip | null {
-  for (const t of coachTips()) if (!G.tipsSeen[t.id] && t.when()) return t
+  const now = performance.now()
+  for (const t of coachTips()) if (!G.tipsSeen[t.id] && t.when() && !(coachCool[t.id] && now - coachCool[t.id] < PAUSE_MS)) return t
   return null
 }
