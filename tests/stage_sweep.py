@@ -26,8 +26,8 @@ RUN = """((st)=>{const s=__sim,G=s.G;const weak=%s; const w=(k)=>Math.max(0,Math
   const bench=[w(0.8)+1,w(0.7)+1,w(0.6)+1,w(0.6),w(0.5)+1,w(0.5),w(0.4)+1,w(0.4)].map(v=>Math.min(12,v));
   localStorage.setItem('ig_save',JSON.stringify({gold:1e9,stage:st,bs:st,best:st,bought:50,bench,maxLevel:st,stash:0,t:Date.now()}));
   s.load(); G.stage=st; s.startStage(); G.auto={on:!weak,shield:!weak,frenzy:!weak,nade:!weak,tank:!weak,panic:!weak};
-  const s0=s.STALL.kills, t0=s.STALL.secs; let i=0; for(;i<60*BUDGET_S;i++){ s.update(1/60); if(G.hp.every(h=>h<=0))G.hp=G.mhp.slice(); if(G.stage!==st)break }
-  return {st, secs: Math.round(i/60), advanced: G.stage!==st, left: G.enemies.length, stall: s.STALL.kills - s0, stuckS: Math.round(s.STALL.secs - t0)}})(%d)"""
+  const s0=s.STALL.kills, t0=s.STALL.secs, d0=s.PRESSURE.downs; let i=0; for(;i<60*BUDGET_S;i++){ s.update(1/60); if(G.hp.every(h=>h<=0))G.hp=G.mhp.slice(); if(G.stage!==st)break }
+  return {st, secs: Math.round(i/60), advanced: G.stage!==st, left: G.enemies.length, stall: s.STALL.kills - s0, stuckS: Math.round(s.STALL.secs - t0), downs: s.PRESSURE.downs - d0}})(%d)"""
 
 async def main():
     failed = []

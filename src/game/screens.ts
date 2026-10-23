@@ -537,12 +537,11 @@ registerTile({ id: 'clan', label: 'Clan', sub: () => G.clan ? clanById(G.clan.id
 void cp
 
 // ================= Auto abilities =================
-const AUTO_ROWS: { key: 'shield' | 'frenzy' | 'nade' | 'tank' | 'panic'; name: string; icon: string; col: string; when: string }[] = [
+const AUTO_ROWS: { key: 'shield' | 'frenzy' | 'tank' | 'panic'; name: string; icon: string; col: string; when: string }[] = [
   { key: 'shield', name: 'Shield', icon: 'shield', col: '#5ab8ff', when: 'When a dog is hurt (under 45%) or down' },
   { key: 'frenzy', name: 'Frenzy', icon: 'frenzy', col: '#ffd84a', when: 'When 4+ enemies are out, or a boss' },
   { key: 'tank',   name: 'Tank (Rudy)', icon: 'tank', col: '#7fcf86', when: 'When 4+ enemies are out, or a boss' },
   { key: 'panic',  name: 'Panic (Cooper)', icon: 'panic', col: '#ff7a6a', when: 'Only when Cooper is healthy and 6+ enemies / a boss' },
-  { key: 'nade',   name: 'Grenade', icon: 'nade', col: '#ff9a3a', when: 'When it would catch 3+ enemies (after you throw your first by hand, or from stage 6)' },
 ]
 export function drawAuto(ctx: Ctx) {
   panel(ctx, 'Auto Abilities')
