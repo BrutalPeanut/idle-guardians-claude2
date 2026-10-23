@@ -305,7 +305,9 @@ const diffRamp = (s: number) => Math.min(1, Math.max(0, (s - 1) / 11)) // gentle
 export const DIFF = { hp: 3.7, dmg: 1.8, count: 1.4, spd: 1.3 }
 export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = (s: number) => 1.1 + (DIFF.count - 1.1) * diffRamp(s), dSpd = (s: number) => 1 + (DIFF.spd - 1) * diffRamp(s), dDmg = (s: number) => 1.2 + (DIFF.dmg - 1.2) * diffRamp(s)
 /** Enemy HP compounds 1.27x per stage up to stage 12, then 1.23x: late stages stay a climb, not a wall. */
-export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(1.23, Math.max(0, s - 12)) * (1 + 2.2 / (1 + s / 5))
+/** Opening stages ease enemy HP in (45% at stage 1, full by stage 8) so a starting bench can actually clear them. */
+const earlyHp = (s: number) => 0.45 + 0.55 * Math.min(1, Math.max(0, (s - 1) / 7))
+export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(1.23, Math.max(0, s - 12)) * (1 + 2.2 / (1 + s / 5)) * earlyHp(s)
 export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
@@ -512,7 +514,8 @@ export const GUN_MUL = 7
 /** Guns ramp up with the stage: modest early (so the first stages are a fight), full strength by stage ~26. */
 /** Squad equalizer: the top gun would otherwise carry nearly all damage. Each dog's gun is pulled toward the squad's average power by this exponent (0 = off, 1 = everyone equal), so merging still pays but supports stay relevant. */
 const GUN_EQ_K = 0.85, GUN_EQ: number[] = [1, 1, 1, 1]
-const gunMul = () => 1.5 + (GUN_MUL - 1.5) * Math.min(1, Math.max(0, (G.stage - 1) / 25))
+/** Player gun power: starts at 2.4x (was 1.5x) and climbs to GUN_MUL by stage 26. */
+const gunMul = () => 2.4 + (GUN_MUL - 2.4) * Math.min(1, Math.max(0, (G.stage - 1) / 25))
 /** Size of the biggest bunch of enemies a grenade would catch. */
 export function bestClump() {
   const live = G.enemies.filter(e => e.hp > 0); let bc = 0
@@ -613,10 +616,10 @@ export function update(dtReal: number) {
       if (d < cdist && (arcs || !blocked(gp.x, gp.y - 6, e.x, e.y))) { cdist = d; clear = e }
     }
     const tgt = clear ?? near
-    if (i < STRIKE) { // auto-flank: slide sideways (up to 60px) to find a clear line round a barricade
+    if (i < STRIKE) { // auto-flank: slide sideways (up to 180px) to find a clear line round a barricade, so a sniper behind a wide wall can always be reached
       let desired = 0
       if (tgt && !arcs && blocked(base.x, base.y - 6, tgt.x, tgt.y)) {
-        for (const o of [15, -15, 30, -30, 45, -45, 60, -60]) { const px = base.x + o; if (px < ARENA.x0 + 10 || px > ARENA.x1 - 10) continue; if (!blocked(px, base.y - 6, tgt.x, tgt.y)) { desired = o; break } }
+        for (const o of [15, -15, 30, -30, 45, -45, 60, -60, 90, -90, 120, -120, 150, -150, 180, -180]) { const px = base.x + o; if (px < ARENA.x0 + 10 || px > ARENA.x1 - 10) continue; if (!blocked(px, base.y - 6, tgt.x, tgt.y)) { desired = o; break } }
       }
       const step = 90 * dtReal, cur = G.flankOff[i]; G.flankOff[i] = cur + Math.max(-step, Math.min(step, desired - cur))
     } else G.flankOff[i] = 0
