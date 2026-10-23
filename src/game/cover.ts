@@ -63,8 +63,8 @@ export function buildLayout(stage: number, enemyHp: (s: number) => number) {
   const rules = rulesFor(stage), rng = mulberry32(stage * 7919 + 13), R = (a: number, b: number) => a + rng() * (b - a)
   const pick = <T,>(a: T[]) => a[Math.floor(rng() * a.length)]
   const local = localStage(stage)
-  // Stages 2-4 always have one sniper behind a barricade, so cover matters from the first real fight (stage 1 stays zombies only).
-  const gunners = Math.max(stage >= 2 && stage <= 4 ? 1 : 0, Math.min(3, Math.round(Math.max(0, (local - 2) * 0.5 + Math.floor(stage / 10)) * rules.gunnerMul)))
+  // Stages 2-9 always have one sniper behind a barricade, so cover matters from the first real fight (stage 1 stays zombies only).
+  const gunners = Math.max(stage >= 2 && stage <= 9 ? 1 : 0, Math.min(3, Math.round(Math.max(0, (local - 2) * 0.5 + Math.floor(stage / 10)) * rules.gunnerMul)))
   let mortars = Math.min(2, Math.round(Math.max(0, (local - 4) * 0.35 + Math.floor(stage / 12)) * rules.mortarMul) + (local === 10 ? 1 : 0))
   if (gunners + mortars > 4) mortars-- // max 4 dug-in units so barricades always leave lanes to flank through
   const kinds: Unit['kind'][] = [...Array<Unit['kind']>(gunners).fill('gunner'), ...Array<Unit['kind']>(mortars).fill('mortar')]

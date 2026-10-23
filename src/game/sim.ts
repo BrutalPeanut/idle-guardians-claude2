@@ -362,7 +362,9 @@ const seenKinds = new Set<string>()
 /** Stage 7+: packs of fast, fragile Feral Hounds. Stage 11+: slow Missile Bots that stop at range and fire dodgeable missiles. */
 function spawnEnemy() {
   const s = G.stage, boss = isBoss(s) && G.spawned === 0, roll = Math.random()
-  const launcher = !boss && s >= 11 && roll < 0.1, runner = !boss && !launcher && s >= 7 && roll < 0.1 + 0.2
+  // Ranged walkers (Missile Bots) start at stage 6 and grow to 12% of spawns by stage 11; hounds keep their 20% share on top.
+  const launchShare = s >= 11 ? 0.12 : s >= 6 ? 0.06 : 0
+  const launcher = !boss && launchShare > 0 && roll < launchShare, runner = !boss && !launcher && s >= 7 && roll < launchShare + 0.2
   const robot = !boss && !launcher && !runner && s >= 6 && Math.random() < 0.35
   const kind: Enemy['kind'] = boss ? 'boss' : launcher ? 'launcher' : runner ? 'runner' : robot ? 'robot' : 'zombie'
   const hp = hpScale(s) * (boss ? 14 : launcher ? 2 : runner ? 0.32 : 1) * rnd(0.9, 1.15) * (robot ? 1.4 : 1)
