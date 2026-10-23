@@ -1,3 +1,4 @@
+import { FRESH } from './fresh'
 import { ext, ON, fire, XS, loadXS, HOOK } from './ext'
 import { ARENA, WEAPONS, GUARDIANS, ROSTER, SLOT_OFF, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
@@ -318,8 +319,6 @@ export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
 export const isBoss = (s: number) => s % 10 === 0
 
 let bakAt = 0
-// ?fresh starts a separate run in this browser (own keys), so a player's real save is never touched
-const FRESH = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').has('fresh') } catch { return false } })()
 const SAVE_KEY = FRESH ? 'ig_save_fresh' : 'ig_save'
 const BAK_KEY = SAVE_KEY + '_bak'
 export function save() {
