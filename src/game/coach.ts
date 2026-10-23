@@ -14,7 +14,8 @@ const STATIC: Tip[] = [
   { id: 'abil', target: 'shield', text: 'Abilities sit under the arena. Tap Shield, Frenzy, Tank or Panic when a wave closes in.', when: () => G.stage >= 3 && (G.nadeTaught || G.stage > 5) },
   { id: 'hold', target: 'hold', text: 'HOLD plants your pack in place. Tap it again to recall.', when: () => G.stage >= 5 },
   { id: 'quest', target: 'nav_quests', go: 'nav_quests', text: 'A daily quest is done! Tap the quest bar to claim gems.', when: () => questReady() > 0 },
-  { id: 'rebirth', target: 'stardust', go: 'stardust', text: 'Rebirth is ready. Tap the stardust chip up top to start over stronger.', when: () => rebirthGain(G.stage) > 0 },
+  // persistent and re-armed per rebirth, so it keeps nudging until the player goes
+  { id: 'rebirth' + G.rebirths, target: 'stardust', go: 'stardust', text: 'Rebirth is ready! Tap the stardust chip to start over stronger.', when: () => rebirthGain(G.stage) > 0, persist: true },
 ]
 
 // buy and merge re-arm after every purchase (keyed by purchase count), so the nudge comes back whenever the option does
