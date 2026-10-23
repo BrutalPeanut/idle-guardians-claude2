@@ -6,7 +6,7 @@ import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
 import { IAP } from './iap'
 import { collarOf } from './cosmetics'
-import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, STAR_CAP, starBonus, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
+import { WALL_WIPES, REINFORCE_GEMS, canMergeNow, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, STAR_CAP, starBonus, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -671,7 +671,7 @@ export const icons: Record<string, Icon> = {
   star: (c, x, y, col) => { c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 4 : 9; c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad) } c.closePath(); c.fill(); c.stroke() },
   plus: (c, x, y, col) => { c.strokeStyle = col; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x + 6, y); c.moveTo(x, y - 6); c.lineTo(x, y + 6); c.stroke() },
 }
-interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string; round?: boolean; shine?: boolean }
+interface BtnOpts { top: string; bot: string; label?: string; icon?: string; disabled?: boolean; size?: number; sub?: string; round?: boolean; shine?: boolean; glow?: boolean }
 /** Modern pill button: vertical gradient, soft drop shadow, top gloss, press-down state. Registers its hit rect. */
 /** Outlined cartoon text: dark stroke under the fill so it reads on any background. */
 export function outText(ctx: Ctx, txt: string, x: number, y: number, fill: string, lw = 3, stroke = OUT) {
@@ -702,6 +702,10 @@ export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h
   if (o.shine && !o.disabled) { // idle shine sweep: a soft diagonal glint crosses the button every ~2.5s
     const ph = (performance.now() / 1000 % 2.6) / 0.7
     if (ph < 1) { ctx.save(); rr(ctx, x + 1.5, y + 1.5 + dy, w - 3, fh - 3, rad - 1); ctx.clip(); const sx = x - 30 + (w + 60) * ph; ctx.fillStyle = 'rgba(255,255,255,.38)'; ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + 14, y); ctx.lineTo(sx - 6, y + h); ctx.lineTo(sx - 20, y + h); ctx.closePath(); ctx.fill(); ctx.restore() }
+  }
+  if (o.glow && !o.disabled) { // actionable: a soft pulsing rim in the button's own colour
+    const p = 0.5 + 0.5 * Math.sin(performance.now() / 450)
+    ctx.save(); ctx.shadowColor = o.top; ctx.shadowBlur = 10 + 10 * p; ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 + 0.4 * p).toFixed(2) + ')'; ctx.lineWidth = 3; rr(ctx, x + 1.5, y + 1.5 + dy, w - 3, fh - 3, rad); ctx.stroke(); ctx.restore()
   }
   const col = o.disabled ? 'rgba(255,255,255,.6)' : '#fff', cy = y + dy + fh / 2 + 0.5
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '400 ' + (o.size || 13) + 'px ' + FONT
@@ -883,8 +887,8 @@ export function render(ctx: Ctx, t: number) {
   if (R.drag) { const d = R.drag; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6; drawCard(ctx, d.x - BENCH.w / 2, d.y - BENCH.h / 2 - 10, BENCH.w, BENCH.h, G.bench[d.from] ?? 0, 1.12, undefined); ctx.restore() }
   // action bar
   const cost = buyCost(), can = G.gold >= cost && G.bench.includes(null)
-  button(ctx, 'buy', 10, ACTION_BAR.y, 180, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
-  button(ctx, 'merge', 198, ACTION_BAR.y, 152, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', icon: 'merge', label: 'MERGE', size: 13 })
+  button(ctx, 'buy', 10, ACTION_BAR.y, 180, ACTION_BAR.h, { top: '#52d273', bot: '#25994a', disabled: !can, shine: can, glow: can, icon: 'plus', label: 'BUY  ' + fmt(cost), size: 13 })
+  button(ctx, 'merge', 198, ACTION_BAR.y, 152, ACTION_BAR.h, { top: '#5aa8ff', bot: '#2b6fd0', glow: canMergeNow(), icon: 'merge', label: 'MERGE', size: 13 })
   { // active ability row under the arena: shield, frenzy, grenade. Each shows its cooldown sweep, or a drain bar while active.
     const ns = 40, ny = ARENA.y1 - 44
     const abil = (key: string, x: number, icon: string, top: string, bot: string, cd: number, cdMax: number, act: number, actMax: number) => {

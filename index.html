@@ -19,7 +19,7 @@
   <body>
     <div id="root"><div id="boot">Loading Woof Wars…<div id="err"></div></div></div>
   <script>
-fetch('game.js?v=1573422875').then(function(r){ showErr('game.js HTTP '+r.status+' '+r.headers.get('content-type')); return r.text() }).then(function(t){
+fetch('game.js?v=497000895').then(function(r){ showErr('game.js HTTP '+r.status+' '+r.headers.get('content-type')); return r.text() }).then(function(t){
   showErr('game.js bytes='+t.length)
   try { var s=document.createElement('script'); s.textContent=t; document.body.appendChild(s); showErr('executed; stage='+window.__igStage) } catch(e) { showErr('run threw: '+(e&&e.message)) }
 }).catch(function(e){ showErr('fetch failed: '+e) })
