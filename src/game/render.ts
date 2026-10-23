@@ -29,7 +29,7 @@ export type Ctx = CanvasRenderingContext2D
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { freshAsk: false, freshChecked: false, freshStage: 1, chestMoment: null as null | { tier: number }, gearIntro: false, lastChests: -1, coach: null as null | { id: string; text: string; target?: string; start: number }, coachBox: null as Rect | null, blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { freshAsk: false, freshChecked: false, freshStage: 1, chestMoment: null as null | { tier: number }, gearIntro: false, lastChests: -1, coach: null as null | { id: string; text: string; target?: string; start: number }, coachBox: null as Rect | null, coachX: null as Rect | null, blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -693,7 +693,7 @@ export function plate(ctx: Ctx, x: number, y: number, w: number, h: number, r: n
 // coach tip: one bubble at a time, pointing at the next button to press. Waits while a menu is open.
 function drawCoachTip(ctx: Ctx, t: number) {
   const now = performance.now(), busy = !!(R.screen || R.quests || R.rebirth || G.pick || G.wipe || G.away || R.tour !== null || R.tourAsk || G.raid)
-  R.coachBox = null
+  R.coachBox = null; R.coachX = null
   if (busy) { R.coach = null; return }
   if (R.coach && !(coachTips().find(x => x.id === R.coach!.id)?.when() ?? false)) { G.tipsSeen[R.coach.id] = 1; R.coach = null } // the player acted: done
   else if (R.coach && now - R.coach.start > 7000) { const pt = coachTips().find(x => x.id === R.coach!.id); if (pt?.persist) coachCool[R.coach.id] = now; else G.tipsSeen[R.coach.id] = 1; R.coach = null }
@@ -717,6 +717,11 @@ function drawCoachTip(ctx: Ctx, t: number) {
   lines.forEach((l, i) => ctx.fillText(l, x + bw / 2, y + pad + lh / 2 + i * lh))
   ctx.textBaseline = 'alphabetic'
   R.coachBox = { x, y, w: bw, h: bh }
+  // small X in the top-right corner: dismisses the tip without acting on it
+  const xc = { x: x + bw - 11, y: y + 11 }
+  ctx.fillStyle = 'rgba(40,20,0,.8)'; ctx.beginPath(); ctx.arc(xc.x, xc.y, 8, 0, 6.283); ctx.fill()
+  ctx.strokeStyle = hot ? '#fff3c4' : '#ffd9a0'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(xc.x - 3.5, xc.y - 3.5); ctx.lineTo(xc.x + 3.5, xc.y + 3.5); ctx.moveTo(xc.x + 3.5, xc.y - 3.5); ctx.lineTo(xc.x - 3.5, xc.y + 3.5); ctx.stroke()
+  R.coachX = { x: xc.x - 12, y: xc.y - 12, w: 24, h: 24 }
 }
 
 export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
