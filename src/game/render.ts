@@ -351,9 +351,12 @@ const DRAKE_PAL = [
 function drawDragon(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: boolean) {
   const d = e.drake ?? 0, P = DRAKE_PAL[d], k = e.r / 24, flap = Math.sin(t * 4.5 + e.wob) * 5, charge = e.ab !== undefined && e.ab < 0.9
   const F = (c: string) => fl ? '#fff' : c
-  ctx.save(); ctx.translate(x, y - 2); ctx.scale(k, k); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = OUT; ctx.lineWidth = 2
+  const enr = e.hp < e.max * 0.35
+  ctx.save(); ctx.translate(x, y - 2); ctx.scale(k * 1.3, k * 1.3); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = OUT; ctx.lineWidth = 2
   const poly = (pts: number[][], fill: string) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); ctx.fillStyle = F(fill); ctx.fill(); ctx.stroke() }
   if (!fl) { const g = ctx.createRadialGradient(0, 0, 6, 0, 0, 46); g.addColorStop(0, P.glow + (charge ? '88' : '38')); g.addColorStop(1, P.glow + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 46, 0, 6.283); ctx.fill() }
+  if (!fl) { ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(0, 30, 26, 7, 0, 0, 6.283); ctx.fill() } // ground shadow: it has weight
+  if (enr && !fl) for (let i = 0; i < 6; i++) { const a = t * 2 + i * 1.05; ctx.fillStyle = 'rgba(255,' + (120 + i * 18) + ',40,' + (0.5 + 0.4 * Math.sin(t * 8 + i)) + ')'; ctx.beginPath(); ctx.arc(Math.cos(a) * 32, Math.sin(a) * 24 - 4, 2.4, 0, 6.283); ctx.fill() } // enraged: embers circle it
   // tail with spikes
   const sw = Math.sin(t * 3 + e.wob) * 4
   ctx.beginPath(); ctx.moveTo(0, 14); ctx.quadraticCurveTo(24 + sw, 34, 36, 22 + sw * 0.5); ctx.lineWidth = 11; ctx.strokeStyle = OUT; ctx.stroke(); ctx.lineWidth = 7.5; ctx.strokeStyle = F(P.body); ctx.stroke()
@@ -368,6 +371,7 @@ function drawDragon(ctx: Ctx, e: Enemy, t: number, x: number, y: number, fl: boo
       if (d === 3) { ctx.fillStyle = P.glow; for (const [bx, by] of [[30, -8], [38, 2]]) { ctx.beginPath(); ctx.arc(sx * bx, by + f * 0.4, 2.4, 0, 6.283); ctx.fill() } }     // venom sacs
       if (d === 1) { ctx.fillStyle = 'rgba(255,255,255,.5)'; poly([[sx * 30, -14 + f * 0.6], [sx * 34, -22 + f * 0.8], [sx * 36, -12 + f * 0.6]], '#dff6ff') } }                  // ice shards
   }
+  for (let i = 0; i < 4; i++) poly([[-4.5, -6 + i * 6], [0.5, -17 + i * 5], [4.5, -6 + i * 6]], P.horn) // dorsal spikes, drawn under the body
   // body and belly
   ctx.beginPath(); ctx.ellipse(0, 6, 15, 18, 0, 0, 6.283); ctx.fillStyle = F(P.body); ctx.fill(); ctx.stroke()
   ctx.beginPath(); ctx.ellipse(0, 9, 8.5, 13, 0, 0, 6.283); ctx.fillStyle = F(P.belly); ctx.fill()
