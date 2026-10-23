@@ -343,9 +343,11 @@ export function startStage() {
     x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
-  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)))
+  // Opening stages are lighter so the player can read the field: stage 1 ~5 zombies, stage 2 ~7, then the normal ramp.
+  const opening = s === 1 ? 0.55 : s === 2 ? 0.65 : 1
+  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * opening)
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
-  G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
+  G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: s === 2 ? 'A sniper hides behind a barricade. Put your logs between you and it' : localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
 const seenKinds = new Set<string>()
