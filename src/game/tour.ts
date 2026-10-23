@@ -12,7 +12,7 @@ const STEPS: Step[] = [
   { title: 'Action bar', body: 'BUY a weapon, MERGE all matching pairs, or HOLD to plant your support dogs so Rudy and Cooper can flank enemy barricades.', hl: { x: 8, y: 596, w: 344, h: 40 } },
   { title: 'Abilities', body: 'Shield blocks all damage, Frenzy doubles your fire rate, and Grenade blasts the biggest clump. Each has a cooldown.', hl: { x: 208, y: 416, w: 142, h: 46 } },
   { title: 'Idle gold', body: 'Your pack earns gold even while you are away. Tap this chip to collect it.', hl: { x: 82, y: 43, w: 128, h: 28 } },
-  { title: 'Menu', body: 'Gear, daily quests, login streak, rebirth and stats all live under MENU. A red dot means something is ready.', hl: { x: 204, y: 464, w: 148, h: 24 } },
+  { title: 'Menu', body: 'Gear, daily quests, login streak, rebirth and stats all live under MENU. A red dot means something is ready.', hl: { x: 214, y: 464, w: 138, h: 24 } },
 ]
 export const TOUR_KEY = 'ig_tut'
 // fresh runs always get the tutorial and never mark it done for the normal game
