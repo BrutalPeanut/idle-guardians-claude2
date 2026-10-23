@@ -15,9 +15,10 @@ const STEPS: Step[] = [
   { title: 'Menu', body: 'Gear, daily quests, login streak, rebirth and stats all live under MENU. A red dot means something is ready.', hl: { x: 214, y: 464, w: 138, h: 24 } },
 ]
 export const TOUR_KEY = 'ig_tut'
-// fresh runs always get the tutorial and never mark it done for the normal game
-export const tourSeen = () => { if (FRESH) return false; try { return localStorage.getItem(TOUR_KEY) !== null } catch { return true } }
-export const markTour = (v: string) => { if (FRESH) return; try { localStorage.setItem(TOUR_KEY, v) } catch { /* storage unavailable */ } }
+// a fresh run has its own tutorial flag, so the normal game's flag is never touched
+const tourKey = () => FRESH ? TOUR_KEY + '_fresh' : TOUR_KEY
+export const tourSeen = () => { try { return localStorage.getItem(tourKey()) !== null } catch { return true } }
+export const markTour = (v: string) => { try { localStorage.setItem(tourKey(), v) } catch { /* storage unavailable */ } }
 
 function dim(ctx: Ctx, hl?: Step['hl']) {
   ctx.save(); ctx.fillStyle = 'rgba(2,5,7,.78)'; ctx.beginPath(); ctx.rect(0, 0, W, H)
