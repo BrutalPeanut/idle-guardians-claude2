@@ -981,15 +981,12 @@ export function drawHelp(ctx: Ctx) {
   const rules = rulesFor(G.stage), bi = BIOMES[biomeIndex(G.stage)]
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '400 20px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('How to win', 18, 30)
   ctx.fillStyle = '#ffd84a'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(bi.n, 18, 49); ctx.fillStyle = '#9fb5aa'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText(rules.tip, 18, 66)
+  // New players need four things. Everything else is learned in play, so it is not listed here.
   const rows: [string, string, string][] = [
-    ['shield', 'In cover', 'Bullets hit your cover first. It cracks, and under 35% HP it leaks half the damage.'],
-    ['arrows', 'Flanking', 'A clear line round an enemy barricade: x1.35 when a guardian shuffles, x1.55 when you placed them.'],
-    ['ring', 'Mortar ring', 'Shells arc OVER cover. Move or spread out before the ring fills.'],
-    ['zombie', 'Zombies', 'Melee ignores cover. Kill them before they reach you.'],
-    ['boom', 'Explosives', 'Mk 19 grenades arc over barricades and hit gunners behind them.'],
-    ['coin', 'Idle stash', 'Your pack keeps earning gold while you are away (up to ' + IDLE.capHours + 'h). Tap the stash chip under the gold counter to collect it.'],
-    ['shield', 'Abilities', 'Buttons under the arena. Shield (blue): no damage for ' + shieldDur() + 's. Frenzy (yellow): double fire rate for ' + frenzyDur() + 's. Grenade (orange): blasts the biggest clump. Green: Rudy\'s Tank mode. Red: Cooper\'s Panic mode (huge damage, but he takes 2.5x).'],
-    ['hold', 'HOLD', 'Plants Bruno and Luna. Drag then steers only Rudy & Cooper round the barricades. RECALL regroups.'],
+    ['zombie', 'Goal', 'Clear every enemy on the stage to move on. Rebirth unlocks at stage ' + REBIRTH_MIN + '.'],
+    ['ring', 'Merge', 'Two matching guns on the bench merge into a stronger one. Tap MERGE, or buy a spare gun first.'],
+    ['arrows', 'Cover', 'Enemy guns shoot from behind barricades. Drag your pack to their side to get a clear shot.'],
+    ['boom', 'Abilities', 'Shield, Frenzy and Grenade buttons sit under the arena. Tap them when a wave closes in.'],
   ]
   let y = 92
   for (const [icon, title, body] of rows) {
