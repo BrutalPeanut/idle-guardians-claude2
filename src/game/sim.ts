@@ -584,7 +584,7 @@ export function update(dtReal: number) {
 
   // ---- pack movement: eases toward the drag target; hazards change the feel ----
   const hz = hazardAt(p.x, p.y)
-  let follow = Math.min(1, 22 * dtReal)
+  let follow = Math.min(1, 18 * dtReal) // pack catch-up rate (was 22): a little slower
   if (hz === 'ice') follow = Math.min(1, 4.5 * dtReal); else if (hz === 'mud') follow *= 0.45; else if (hz === 'shallows') follow *= 0.75
   p.x += (p.tx - p.x) * follow; p.y += (p.ty - p.y) * follow
   p.x = Math.max(PACK_BOUNDS.x0, Math.min(PACK_BOUNDS.x1, p.x)); p.y = Math.max(PACK_BOUNDS.y0, Math.min(PACK_BOUNDS.y1, p.y))
