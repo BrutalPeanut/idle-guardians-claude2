@@ -68,6 +68,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const fireButton = (k: string) => {
     if (k === 'fresh_continue') { freshAnswer(false); return }
     if (k === 'fresh_restart') { freshAnswer(true); return }
+    if (k === 'corner_grow') { R.screen = 'hub'; R.hubTab = 1; return }
+    if (k === 'corner_more') { R.screen = 'hub'; R.hubTab = 3; return }
     if (k === 'chest_open') { openChestMoment(); return }
     if (k === 'gear_intro_ok') { R.gearIntro = false; G.tipsSeen.gearIntro = 1; return }
     if (tourButton(k) || screenButton(k)) return

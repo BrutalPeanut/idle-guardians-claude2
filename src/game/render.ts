@@ -942,6 +942,12 @@ export function render(ctx: Ctx, t: number) {
     abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
     abil('nade', 297, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1, 50, -5)
   }
+  { // prototype: corner buttons on the arena's top corners open the Grow and More hub sections, flagged when something waits
+    const cy = ARENA.y0 + 6, cnt = G.chests[0] + G.chests[1] + G.chests[2] + (questReady() > 0 ? 1 : 0) + (pointsLeft() > 0 ? 1 : 0) + (rebirthGain(G.stage) > 0 ? 1 : 0)
+    button(ctx, 'corner_grow', 12, cy, 42, 42, { top: '#2a4a3b', bot: '#183029', label: 'GROW', size: 9, round: true })
+    button(ctx, 'corner_more', W - 54, cy, 42, 42, { top: '#2a4a3b', bot: '#183029', label: 'MORE', size: 9, round: true })
+    if (cnt > 0) { ctx.beginPath(); ctx.arc(50, cy + 4, 9, 0, 6.283); ctx.fillStyle = '#ffd84a'; ctx.fill(); ctx.fillStyle = '#2a1c00'; ctx.font = '400 10px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(String(cnt), 50, cy + 8); ctx.textAlign = 'left' }
+  }
   if (G.stage <= 5 && !G.nadeTaught && G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1) { // grenade teaching hint: pulsing ring + bubble over the button
     const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 + 34
     ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 34 + 3 * k, 0, 6.283); ctx.stroke()
