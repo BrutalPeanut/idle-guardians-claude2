@@ -1,7 +1,7 @@
 import { submit } from './leaderboard'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
-import { chestGate, drawChestMoment, drawGearIntro, openChestMoment } from './chestmoment'
+import { chestGate, drawChestMoment, drawGearIntro, openChestMoment, drawFreshAsk, freshAnswer, freshGate } from './chestmoment'
 import { starterShowing, buyStarter, skipStarter } from './iap'
 import { WALL_WIPES, regroupFree, revivePack, reinforceRegroup, BOOST, baseSpeed, startBoost, G, PACK_BOUNDS, load, save, startStage, update, buyWeapon, tryMerge, mergeAll, toggleHold, throwGrenade, useAbility, accrueAway, collectStash, chooseBlessing, doRebirth, rebirthGain, claimQuest, rerollBlessings, ensureDaily, REROLL_COST } from './sim'
 import { drawScreen, screenButton, startSpin } from './screens'
@@ -40,6 +40,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const down = (ev: PointerEvent) => {
     ev.preventDefault(); cv.setPointerCapture(ev.pointerId); Audio_.resume()
     const p = pt(ev); R.hint = 0
+    if (R.freshAsk) { for (const k of ['fresh_continue', 'fresh_restart']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.chestMoment || (R.gearIntro && !R.summary)) { for (const k of ['chest_open', 'gear_intro_ok']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.coach && R.coachBox && inR(p, R.coachBox)) { G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui(); return }
     if (adState.play) { const r = R.btns.ad_done; if (r && adState.play.done && inR(p, r)) { R.pressed = 'ad_done'; mode = 'btn'; Audio_.ui() } return }
@@ -65,6 +66,8 @@ export function startGame(cv: HTMLCanvasElement): () => void {
   const track2 = (id: string) => { try { tele(id) } catch { /* telemetry is optional */ } }
   const adGate = (r: string) => { if (r === 'cap') G.banner = { text: 'No ads left today', sub: 'Back tomorrow', t: 1.4 }; else if (r === 'cooldown') G.banner = { text: 'Ad not ready yet', sub: 'Try again in a moment', t: 1.4 } }
   const fireButton = (k: string) => {
+    if (k === 'fresh_continue') { freshAnswer(false); return }
+    if (k === 'fresh_restart') { freshAnswer(true); return }
     if (k === 'chest_open') { openChestMoment(); return }
     if (k === 'gear_intro_ok') { R.gearIntro = false; G.tipsSeen.gearIntro = 1; return }
     if (tourButton(k) || screenButton(k)) return
@@ -138,14 +141,15 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const dt = Math.min(0.1, (now - last) / 1000); last = now
     acc += dt; T += dt
     try {
-      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick && !G.wipe && !starterShowing() && !R.chestMoment && !R.gearIntro) { const k = Math.max(1, Math.round(G.speed * baseSpeed() / 2)); for (let j = 0; j < k; j++) update(1 / 60 / k) } acc -= 1 / 60 }
+      while (acc >= 1 / 60) { tickAd(1 / 60); if (!adState.play && !R.help && !R.rebirth && !R.quests && !R.screen && !R.tourAsk && R.tour === null && !G.away && !G.pick && !G.wipe && !starterShowing() && !R.chestMoment && !R.gearIntro && !R.freshAsk) { const k = Math.max(1, Math.round(G.speed * baseSpeed() / 2)); for (let j = 0; j < k; j++) update(1 / 60 / k) } acc -= 1 / 60 }
       drainEvents(); updateFx(dt)
     } catch (e) { acc = 0; if (errs++ < 5) console.error('sim error', e) }
     try {
       ctx.setTransform(ctx.canvas.width / 360, 0, 0, ctx.canvas.height / 640, 0, 0); ctx.globalAlpha = 1; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
+      freshGate()
       chestGate()
       render(ctx, T)
-      if (adState.play) drawAd(ctx, T); else if (R.chestMoment) drawChestMoment(ctx, T); else if (R.gearIntro && !R.summary) drawGearIntro(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (starterShowing()) drawStarter(ctx, T); else if (G.wipe) drawWipe(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
+      if (adState.play) drawAd(ctx, T); else if (R.freshAsk) drawFreshAsk(ctx, T); else if (R.chestMoment) drawChestMoment(ctx, T); else if (R.gearIntro && !R.summary) drawGearIntro(ctx, T); else if (G.away) drawWelcome(ctx, T); else if (starterShowing()) drawStarter(ctx, T); else if (G.wipe) drawWipe(ctx, T); else if (G.pick) drawPick(ctx, T); else if (R.tourAsk) drawTourAsk(ctx); else if (R.tour !== null) drawTour(ctx); else if (R.screen) drawScreen(ctx, T); else if (R.quests) drawQuests(ctx, T); else if (R.rebirth) drawRebirth(ctx, T); else if (R.help) drawHelp(ctx)
     } catch (e) {
       if (errs++ < 5) console.error('render error', e)
       R.screen = null; R.quests = false; R.rebirth = false; R.help = false; R.tour = null; R.tourAsk = false
