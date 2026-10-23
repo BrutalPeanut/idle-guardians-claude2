@@ -3,10 +3,11 @@ import { W, H } from './data'
 import { R, button, rr } from './render'
 import type { Ctx } from './render'
 import { Audio_ } from './audio'
+import { FRESH } from './fresh'
 
 interface Step { title: string; body: string; hl: { x: number; y: number; w: number; h: number } }
 const STEPS: Step[] = [
-  { title: 'Move your pack', body: 'Touch the arena and drag. Your dogs follow your finger, relative to where you first touched.', hl: { x: 8, y: 74, w: 344, h: 388 } },
+  { title: 'Move your pack', body: 'Touch the arena and drag. Your dogs follow your finger, relative to where you first touched.', hl: { x: 8, y: 74, w: 344, h: 330 } },
   { title: 'Buy and merge weapons', body: 'Each dog fires the weapon it carries. Drag two matching weapons together to merge them into a stronger one. Every dog keeps its own gun.', hl: { x: 8, y: 466, w: 344, h: 116 } },
   { title: 'Action bar', body: 'BUY a weapon, MERGE all matching pairs, or HOLD to plant your support dogs so Rudy and Cooper can flank enemy barricades.', hl: { x: 8, y: 596, w: 344, h: 40 } },
   { title: 'Abilities', body: 'Shield blocks all damage, Frenzy doubles your fire rate, and Grenade blasts the biggest clump. Each has a cooldown.', hl: { x: 208, y: 416, w: 142, h: 46 } },
@@ -14,8 +15,9 @@ const STEPS: Step[] = [
   { title: 'Menu', body: 'Gear, daily quests, login streak, rebirth and stats all live under MENU. A red dot means something is ready.', hl: { x: 204, y: 464, w: 148, h: 24 } },
 ]
 export const TOUR_KEY = 'ig_tut'
-export const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) !== null } catch { return true } }
-export const markTour = (v: string) => { try { localStorage.setItem(TOUR_KEY, v) } catch { /* storage unavailable */ } }
+// fresh runs always get the tutorial and never mark it done for the normal game
+export const tourSeen = () => { if (FRESH) return false; try { return localStorage.getItem(TOUR_KEY) !== null } catch { return true } }
+export const markTour = (v: string) => { if (FRESH) return; try { localStorage.setItem(TOUR_KEY, v) } catch { /* storage unavailable */ } }
 
 function dim(ctx: Ctx, hl?: Step['hl']) {
   ctx.save(); ctx.fillStyle = 'rgba(2,5,7,.78)'; ctx.beginPath(); ctx.rect(0, 0, W, H)
