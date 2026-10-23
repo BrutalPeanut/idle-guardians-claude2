@@ -346,13 +346,13 @@ export function startStage() {
     x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),
     spd: 0, r: 12, kind: u.kind, flash: 0, wob: Math.random() * 6, dmg: 0, cd: rnd(0.8, 2.4), dug: true, coverId: u.coverId,
   })
-  // Opening stages are lighter so the player can read the field: stage 1 ~5 zombies, stage 2 ~7, then the normal ramp.
-  const opening = s === 1 ? 0.55 : s === 2 ? 0.65 : 1
-  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * opening)
+  G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * openingMul(s))
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: s === 2 ? 'Sniper behind a barricade. Drag your pack to its side to flank it' : localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
+/** Opening stages are lighter so the player can read the field: 40% of the crowd at stage 1, easing to the full ramp by stage 13. */
+export const openingMul = (s: number) => 0.4 + 0.6 * Math.min(1, Math.max(0, (s - 1) / 12))
 const seenKinds = new Set<string>()
 /** Stage 7+: packs of fast, fragile Feral Hounds. Stage 11+: slow Missile Bots that stop at range and fire dodgeable missiles. */
 function spawnEnemy() {
@@ -585,7 +585,7 @@ export function update(dtReal: number) {
   if (G.comboT > 0 && (G.comboT -= dt) <= 0) G.combo = 0
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null
   for (const c of G.cover) if (c.flash > 0) c.flash -= dt
-  if (G.spawned < G.toSpawn && (G.spawnT -= dt) <= 0) { spawnEnemy(); G.spawnT = isBoss(G.stage) ? 0.45 : 0.7 }
+  if (G.spawned < G.toSpawn && (G.spawnT -= dt) <= 0) { spawnEnemy(); G.spawnT = isBoss(G.stage) ? 0.45 : 0.7 / Math.max(0.6, openingMul(G.stage)) }
   if (!G.raid && G.best >= 3) {
     if (G.crate) { if ((G.crate.t -= dt) <= 0) G.crate = null }
     else if ((G.crateT -= dt) <= 0) {
