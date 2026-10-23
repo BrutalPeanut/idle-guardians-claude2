@@ -315,7 +315,8 @@ export const dHp = (s: number) => 1.8 + (DIFF.hp - 1.8) * diffRamp(s), dCount = 
 const earlyHp = (s: number) => 0.45 + 0.55 * Math.min(1, Math.max(0, (s - 1) / 7))
 /** Late HP grows polynomially ((s/12)^3.5) instead of compounding 1.23x a stage: steady climb, no runaway wall. */
 export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(Math.max(1, s / 12), 3.5) * (1 + 2.2 / (1 + s / 5)) * earlyHp(s)
-export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought))
+// weapon price: climbs with each weapon bought this run and with the stage reached (both reset on rebirth, so each run gets cheaper again)
+export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought) * Math.pow(1.1, G.stage - 1))
 export const isBoss = (s: number) => s % 10 === 0
 
 let bakAt = 0
