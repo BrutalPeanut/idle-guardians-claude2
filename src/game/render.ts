@@ -6,7 +6,7 @@ import { PERKS } from './clan'
 import { track, trackError } from './telemetry'
 import { IAP } from './iap'
 import { collarOf } from './cosmetics'
-import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_BONUS, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
+import { WALL_WIPES, REINFORCE_GEMS, baseSpeed, G, RAID, raidBase, rnd, buyCost, isBoss, guardianPos, sortedWeapons, idleCap, IDLE, questReady, REROLL_COST, REBIRTH_MIN, STAR_CAP, starBonus, rebirthGain, nadeCdMax, shieldDur, frenzyDur, bl, MODES, unlocked, dogId } from './sim'
 import { rulesFor, biomeIndex } from './cover'
 import { drawCover, drawHazard, drawEBullets, drawShells, drawMissiles, drawStatus, drawHold, coverDust } from './coverRender'
 import type { Enemy, Shot } from './sim'
@@ -819,7 +819,7 @@ export function render(ctx: Ctx, t: number) {
     glass(ctx, sx, 45, sw, 24, 10)
     ctx.strokeStyle = can ? 'rgba(190,150,255,' + (0.45 + 0.5 * pulse) + ')' : 'rgba(255,255,255,.12)'; ctx.lineWidth = can ? 1.6 : 1; rr(ctx, sx + 0.5, 45.5, sw - 1, 23, 10); ctx.stroke()
     icons.star(ctx, sx + 13, 57, '#c9a6ff'); ctx.textAlign = 'left'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#e4d3ff'
-    ctx.fillText(fmt(G.stardust) + (G.stardust ? '  +' + Math.round(G.stardust * STAR_BONUS * 100) + '%' : ''), sx + 25, 57.5)
+    ctx.fillText(fmt(G.stardust) + (G.stardust ? '  +' + Math.round(starBonus(G.stardust) * 100) + '%' : ''), sx + 25, 57.5)
     if (can) { ctx.textAlign = 'right'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillStyle = '#c9a6ff'; ctx.fillText('REBIRTH', sx + sw - 8, 57.5) } }
 
   { let bx = 10 // owned blessings as small coloured chips under the HUD
@@ -1051,7 +1051,7 @@ export function drawRebirth(ctx: Ctx, t: number) {
   if (gain) {
     ctx.fillStyle = '#e4d3ff'; ctx.font = '400 28px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('+' + gain + ' Stardust', W / 2, cy + 134)
     ctx.fillStyle = '#9fb5aa'; ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
-    ctx.fillText('Permanent damage & gold: +' + Math.round(G.stardust * STAR_BONUS * 100) + '%  →  +' + Math.round((G.stardust + gain) * STAR_BONUS * 100) + '%', W / 2, cy + 162)
+    ctx.fillText('Permanent damage & gold: +' + Math.round(starBonus(G.stardust) * 100) + '%  →  +' + Math.round(starBonus(G.stardust + gain) * 100) + '% (max +' + Math.round(STAR_CAP * 100) + '%)', W / 2, cy + 162)
     ctx.fillStyle = '#ffb27a'; ctx.fillText('Resets stage, gold, weapons, blessings and stash.', W / 2, cy + 192)
     ctx.fillStyle = '#7f929a'; ctx.fillText('Stardust and Rebirths are kept forever.', W / 2, cy + 212)
   } else {

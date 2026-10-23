@@ -133,12 +133,14 @@ export const IDLE = { killsPerMin: 40, factor: 0.1, capHours: 3, minAwayMin: 1 }
 export const killGold = (s: number) => Math.ceil((2 + s * 0.9) * Math.pow(1.1, s - 1))
 export const idleRate = (s: number) => IDLE.killsPerMin * killGold(s) * IDLE.factor // gold per minute
 export const idleCap = (s: number) => idleRate(s) * IDLE.capHours * 60 * (1 + 0.1 * sk('keeper') + 0.15 * pk('lucky') + ext('stash'))
-/** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold. */
-export const REBIRTH_MIN = 20, STAR_BONUS = 0.04
+/** Rebirth: from stage REBIRTH_MIN you may reset the run for Stardust. Each Stardust is a permanent +STAR_BONUS damage and gold, capped at +STAR_CAP (reached after about 50 Stardust). */
+export const REBIRTH_MIN = 16, STAR_BONUS = 0.04, STAR_CAP = 3
 /** Prestige perk: once you have rebirthed, stages you have already passed (below your best) run at 2x; your frontier stage stays 1x; the manual 2x button multiplies on top (4x). */
 export const baseSpeed = () => (G.rebirths > 0 && G.stage < G.best ? 2 : 1)
-export const starMul = () => 1 + STAR_BONUS * G.stardust
-export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 10) / 5, 1.5)))
+/** Permanent bonus from Stardust, capped so late rebirths keep adding but never make the run trivial. */
+export const starBonus = (stardust: number) => Math.min(STAR_CAP, STAR_BONUS * stardust)
+export const starMul = () => 1 + starBonus(G.stardust)
+export const rebirthGain = (stage: number) => stage < REBIRTH_MIN ? 0 : Math.max(1, Math.floor(Math.pow((stage - 8) / 4, 1.5)))
 // ---- daily quests ----
 /** Roll a fresh set when the local date changes. */
 // ---- shop ----
