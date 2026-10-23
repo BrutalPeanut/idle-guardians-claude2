@@ -121,7 +121,7 @@ const PACK_R = 22, STRIKE = 2 // guardians 0..1 (Rudy, Cooper) are the strike te
 export const G: State = {
   tipsSeen: {},
   gold: 40, stage: 1, bought: 0, bench: new Array(8).fill(null), maxLevel: 0,
-  pack: { x: 180, y: 425, tx: 180, ty: 425 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
+  pack: { x: 180, y: ARENA.y1 - 37, tx: 180, ty: ARENA.y1 - 37 }, stats: newStats(), gear: [], chests: [0, 0, 0], nextItem: 1, dpsEma: 0, dpsLast: 0, login: { last: '', streak: 0 }, skills: {}, best: 1, hp: [1, 1, 1, 1], mhp: [1, 1, 1, 1], reviveT: [0, 0, 0, 0], sup: { x: 180, y: 425 }, hold: null,
   enemies: [], shots: [], ebullets: [], shells: [], missiles: [], cover: [], hazards: [], events: [], t: 0,
   fail: 0, failStage: 0, wipe: null, reviveStage: 0, reinforce: false, spawned: 0, toSpawn: 0, spawnT: 0, speed: 1, cd: [0, 0, 0, 0], flankOff: [0, 0, 0, 0],
   boostT: 0, status: [0, 1, 2, 3].map(() => ({ cover: false, flank: 0 as const })), nades: [], nadeCd: 0, blessings: {}, pick: null, stardust: 0, rebirths: 0, gems: 0, daily: rollDaily(dayKey()), ads: { day: dayKey(), used: 0 }, noAds: false, collar: 'red', collarOwned: ['red'], starterSeen: false, starterDue: false, shop: { day: '', chest: 0, gems: 0 }, frenzyT: 0, frenzyCd: 0, shieldT: 0, shieldCd: 0, tankT: 0, tankCd: 0, panicT: 0, panicCd: 0, banner: null, kills: 0, combo: 0, comboT: 0, train: {}, crate: null, crateT: 25,
@@ -350,7 +350,7 @@ export function startStage() {
   G.enemies.length = 0; G.shots.length = 0; G.ebullets.length = 0; G.shells.length = 0; G.missiles.length = 0; G.nades.length = 0; G.frenzyT = 0; G.shieldT = 0; G.tankT = 0; G.panicT = 0
   G.cover = L.cover; G.hazards = L.hazards; G.hold = null
   for (const c of G.cover) if (c.side === 'player') { c.hp *= 1 + 0.08 * sk('bunker'); c.max *= 1 + 0.08 * sk('bunker') }
-  Object.assign(G.pack, { x: 180, y: 425, tx: 180, ty: 425 }); G.sup.x = 180; G.sup.y = 425
+  Object.assign(G.pack, { x: 180, y: ARENA.y1 - 37, tx: 180, ty: ARENA.y1 - 37 }); G.sup.x = 180; G.sup.y = ARENA.y1 - 37
   G.flankOff = [0, 0, 0, 0]; G.spawned = 0; G.spawnT = 0.5
   for (const u of L.units) G.enemies.push({
     x: u.x, y: u.y, hp: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5), max: hpScale(s) * (u.kind === 'mortar' ? 1.8 : 1.5),

@@ -1,5 +1,7 @@
 // Cover, hazards and per-biome rules. Pure data + geometry: no rendering, no global state.
 import { ARENA } from './data'
+// player cover and hazards were placed for a 462px-tall arena; keep them in the same spot relative to the pack's bounds
+const ARENA_DY = ARENA.y1 - 462
 
 export type CoverKind = 'log' | 'stump' | 'boulder' | 'sandstone' | 'ruin' | 'driftwood' | 'sandcastle' | 'crate' | 'obsidian' | 'iceblock' | 'snowwall' | 'rotlog' | 'dock'
 export type HazardKind = 'lava' | 'mud' | 'ice' | 'shallows'
@@ -79,10 +81,10 @@ export function buildLayout(stage: number, enemyHp: (s: number) => number) {
   const count = Math.round(R(rules.coverCount[0], rules.coverCount[1])), php = bulletDmg(stage) * 16 * rules.coverHpMul
   for (let i = 0; i < count; i++) for (let tries = 0; tries < 14; tries++) {
     const first = i === 0 // first piece guards the pack's starting spot so cover is learnable straight away
-    const w = first ? rules.coverW[1] : R(rules.coverW[0], rules.coverW[1]), x = first ? 180 + R(-30, 30) : R(ARENA.x0 + w / 2 + 6, ARENA.x1 - w / 2 - 6), y = first ? R(352, 376) : R(296, 380)
+    const w = first ? rules.coverW[1] : R(rules.coverW[0], rules.coverW[1]), x = first ? 180 + R(-30, 30) : R(ARENA.x0 + w / 2 + 6, ARENA.x1 - w / 2 - 6), y = first ? R(352, 376) + ARENA_DY : R(296, 380) + ARENA_DY
     if (cover.some(c => c.side === 'player' && Math.abs(c.x - x) < (c.w + w) / 2 + 14 && Math.abs(c.y - y) < 44)) continue
     cover.push({ id: id++, side: 'player', kind: pick(rules.playerCover), x, y, w, h: 28, hp: php, max: php, flash: 0 }); break
   }
-  if (rules.hazard) for (let i = 0; i < rules.hazardCount; i++) hazards.push({ kind: rules.hazard, x: R(46, 314), y: R(176, 330), r: R(26, 42) })
+  if (rules.hazard) for (let i = 0; i < rules.hazardCount; i++) hazards.push({ kind: rules.hazard, x: R(46, 314), y: R(176, 330) + ARENA_DY, r: R(26, 42) })
   return { cover, units, hazards }
 }
