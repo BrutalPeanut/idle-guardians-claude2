@@ -854,6 +854,12 @@ export function buyWeapon() {
   G.bench[slot] = lone.length ? Math.min(...lone) : base
   save(); return true
 }
+/** True when a merge would actually go through right now (two matching weapons, and the pack keeps one gun per dog). */
+export function canMergeNow() {
+  if (G.bench.filter(v => v !== null).length - 1 < unlockedGuardians(G.stage)) return false
+  for (let a = 0; a < G.bench.length; a++) for (let b = a + 1; b < G.bench.length; b++) { const va = G.bench[a]; if (va !== null && va === G.bench[b] && va < WEAPONS.length - 1) return true }
+  return false
+}
 export function tryMerge(a: number, b: number) {
   const va = G.bench[a], vb = G.bench[b]
   if (a === b || va === null || va !== vb || va >= WEAPONS.length - 1) return false
