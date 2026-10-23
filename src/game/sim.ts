@@ -347,7 +347,7 @@ export function startStage() {
   const opening = s === 1 ? 0.55 : s === 2 ? 0.65 : 1
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * opening)
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
-  G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: s === 2 ? 'A sniper hides behind a barricade. Put your logs between you and it' : localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
+  G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, sub: s === 2 ? 'Sniper behind a barricade. Drag your pack to its side to flank it' : localStage(s) === 1 || s === 1 ? rules.tip : undefined, t: localStage(s) === 1 || s === 1 ? 3 : 1.6, big: isBoss(s) }
 }
 
 const seenKinds = new Set<string>()
