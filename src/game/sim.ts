@@ -585,7 +585,11 @@ export function update(dtReal: number) {
   if (G.comboT > 0 && (G.comboT -= dt) <= 0) G.combo = 0
   if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null
   for (const c of G.cover) if (c.flash > 0) c.flash -= dt
-  if (G.spawned < G.toSpawn && (G.spawnT -= dt) <= 0) { spawnEnemy(); G.spawnT = isBoss(G.stage) ? 0.45 : 0.7 / Math.max(0.6, openingMul(G.stage)) }
+  if (G.spawned < G.toSpawn && (G.spawnT -= dt) <= 0) {
+    // Early stages cap how many walkers are on the field at once, so the opening never feels like a flood.
+    const onField = G.enemies.reduce((n, e) => n + (!e.dug && e.hp > 0 ? 1 : 0), 0), cap = G.stage < 8 && !isBoss(G.stage) ? 3 + Math.floor(G.stage / 2) : Infinity
+    if (onField < cap) { spawnEnemy(); G.spawnT = isBoss(G.stage) ? 0.45 : 0.7 / Math.max(0.6, openingMul(G.stage)) } else G.spawnT = 0.3
+  }
   if (!G.raid && G.best >= 3) {
     if (G.crate) { if ((G.crate.t -= dt) <= 0) G.crate = null }
     else if ((G.crateT -= dt) <= 0) {
@@ -703,7 +707,7 @@ export function update(dtReal: number) {
     const moved = Math.hypot(e.x - (e.lx ?? e.x), e.y - (e.ly ?? e.y)); e.lx = e.x; e.ly = e.y
     const engaged = centers.some(c => Math.hypot(c.x - e.x, c.y - e.y) <= 40)
     e.still = moved < 0.5 && !engaged ? (e.still ?? 0) + dt : 0
-    if ((e.still ?? 0) > 20) { e.hp = 0; killReward(e) }
+    if ((e.still ?? 0) > 10) { e.hp = 0; killReward(e) }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0)
 
