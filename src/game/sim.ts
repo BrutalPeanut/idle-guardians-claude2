@@ -374,13 +374,13 @@ function spawnEnemy() {
   const launcher = !boss && launchShare > 0 && roll < launchShare, runner = !boss && !launcher && s >= 7 && roll < launchShare + 0.2
   const robot = !boss && !launcher && !runner && s >= 6 && Math.random() < 0.35
   const kind: Enemy['kind'] = boss ? 'boss' : launcher ? 'launcher' : runner ? 'runner' : robot ? 'robot' : 'zombie'
-  const hp = hpScale(s) * (boss ? 14 : launcher ? 2 : runner ? 0.32 : 1) * rnd(0.9, 1.15) * (robot ? 1.4 : 1)
+  const hp = hpScale(s) * (boss ? (s <= 10 ? 10 : 14) : launcher ? 2 : runner ? 0.32 : 1) * rnd(0.9, 1.15) * (robot ? 1.4 : 1)
   const n = runner ? 1 + Math.floor(Math.random() * 3) : 1, x0 = rnd(ARENA.x0 + 30, ARENA.x1 - 30)
   for (let k = 0; k < n; k++) {
     G.enemies.push({
       x: runner ? Math.max(ARENA.x0 + 10, Math.min(ARENA.x1 - 10, x0 + rnd(-26, 26))) : rnd(ARENA.x0 + 20, ARENA.x1 - 20), y: ARENA.y0 - 10 - (runner ? k * 8 : 0), hp, max: hp,
       spd: boss ? 16 : launcher ? 15 : runner ? rnd(64, 80) : rnd(22, 34) * dSpd(s) * (robot ? 0.8 : 1), r: boss ? 24 : launcher ? 14 : runner ? 8 : robot ? 13 : 11,
-      kind, flash: 0, wob: Math.random() * 6, dmg: dDmg(s) * (4 + s * 1.3) * (boss ? 3 : runner ? 0.8 : 1), cd: launcher ? rnd(2.2, 3.4) : 0,
+      kind, flash: 0, wob: Math.random() * 6, dmg: dDmg(s) * (4 + s * 1.3) * (boss ? (s <= 10 ? 2 : 3) : runner ? 0.8 : 1), cd: launcher ? rnd(2.2, 3.4) : 0,
       ...(boss ? { drake: drakeFor(s), ab: 3.5 } : {}),
     })
     G.spawned++
@@ -412,7 +412,7 @@ function bossCast(e: Enemy, dt: number, n: number) {
   if (e.drake === undefined || e.ab === undefined || (e.ab -= dt) > 0) return
   const live: number[] = []; for (let k = 0; k < n; k++) if (G.hp[k] > 0) live.push(k)
   if (!live.length) { e.ab = 1; return }
-  const d = DRAKES[e.drake], enr = e.hp < e.max * 0.35, base = [6.5, 7.5, 6, 9][e.drake] * (enr ? 0.65 : 1) * (G.raid ? 1.4 : 1), sd = 8 + G.stage * 1.8
+  const d = DRAKES[e.drake], enr = e.hp < e.max * 0.35, base = [8.5, 7.5, 6, 9][e.drake] * (enr ? 0.65 : 1) * (G.raid ? 1.4 : 1), sd = 8 + G.stage * 1.8
   const tgt = () => { const gp = guardianPos(live[Math.floor(Math.random() * live.length)]); return { x: gp.x + rnd(-12, 12), y: gp.y + rnd(-8, 8) } }
   G.events.push({ type: 'boss_cast', x: e.x, y: e.y, name: d.cast, col: d.col }); e.ab = base
   if (e.drake === 0) { for (let k = 0; k < (enr ? 5 : 3); k++) { const t = tgt(); G.shells.push({ x: e.x, y: e.y, tx: t.x, ty: t.y, t: -k * 0.2, dur: 1.3, r: 42, dmg: sd, col: d.col }) } }
