@@ -10,7 +10,7 @@ const STEPS: Step[] = [
   { title: 'Move your pack', body: 'Touch the arena and drag. Your dogs follow your finger, relative to where you first touched.', hl: { x: 8, y: 74, w: 344, h: 330 } },
   { title: 'Buy and merge weapons', body: 'Each dog fires the weapon it carries. Drag two matching weapons together to merge them into a stronger one. Every dog keeps its own gun.', hl: { x: 8, y: 466, w: 344, h: 116 } },
   { title: 'Action bar', body: 'BUY a weapon, MERGE all matching pairs, or HOLD to plant your support dogs so Rudy and Cooper can flank enemy barricades.', hl: { x: 8, y: 596, w: 344, h: 40 } },
-  { title: 'Abilities', body: 'Shield blocks all damage, Frenzy doubles your fire rate, and Grenade blasts the biggest clump. Each has a cooldown.', hl: { x: 208, y: 416, w: 142, h: 46 } },
+  { title: 'Abilities', body: 'Shield blocks all damage, Frenzy doubles your fire rate, and Grenade blasts the biggest clump. Each has a cooldown.', hl: { x: 64, y: 408, w: 292, h: 58 } },
   { title: 'Idle gold', body: 'Your pack earns gold even while you are away. Tap this chip to collect it.', hl: { x: 82, y: 43, w: 128, h: 28 } },
   { title: 'Menu', body: 'Gear, daily quests, login streak, rebirth and stats all live under MENU. A red dot means something is ready.', hl: { x: 214, y: 464, w: 138, h: 24 } },
 ]

@@ -973,13 +973,15 @@ export function render(ctx: Ctx, t: number) {
       if (held) { const k = 0.5 + 0.5 * Math.sin(t * 6); ctx.strokeStyle = 'rgba(255,179,71,' + (0.4 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hx + hs / 2, hy + hs / 2, hs / 2 + 3 + k * 2, 0, 6.283); ctx.stroke() }
       button(ctx, 'hold', hx, hy, hs, hs, { top: lock ? '#5a666d' : held ? '#ffb347' : '#b58cf0', bot: lock ? '#39434a' : held ? '#e0731a' : '#7a4ec0', disabled: lock, label: held ? 'RECALL' : 'HOLD', size: held ? 10 : 12, round: true })
       ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lock ? 'STAGE 5' : held ? 'PLANTED' : 'FOLLOW', hx + hs / 2, hy + hs - 8) }
-    button(ctx, 'auto', 70, ny, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
-    ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 90, ny + 36)
+    // every auto control sits in one box: AUTO on/off plus the abilities it can fire. Hold and the grenade stay outside.
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; rr(ctx, 66, ny - 6, 232, 52, 14); ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2; rr(ctx, 66, ny - 6, 232, 52, 14); ctx.stroke()
+    button(ctx, 'auto', 74, ny, 40, 40, { top: G.auto.on ? '#52d273' : '#5a666d', bot: G.auto.on ? '#25994a' : '#39434a', label: 'AUTO', size: 11, round: true })
+    ctx.fillStyle = '#fff'; ctx.font = '400 8px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.auto.on ? 'ON' : 'OFF', 94, ny + 36)
     abil('tank', 118, 'tank', '#7fcf86', '#2f8a45', G.tankCd, MODES.tank.cd, G.tankT, MODES.tank.dur)
-    abil('panic', 165, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
-    abil('shield', 212, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
-    abil('frenzy', 259, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
-    abil('nade', 297, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1, 50, -5)
+    abil('panic', 162, 'panic', '#ff7a6a', '#c42f2f', G.panicCd, MODES.panic.cd, G.panicT, MODES.panic.dur)
+    abil('shield', 206, 'shield', '#5ab8ff', '#2b6fd0', G.shieldCd, 22, G.shieldT, shieldDur())
+    abil('frenzy', 250, 'frenzy', '#ffd84a', '#e08a1a', G.frenzyCd, 18, G.frenzyT, frenzyDur())
+    abil('nade', 304, 'nade', '#ff9a3a', '#d4501a', G.nadeCd, nadeCdMax(), 0, 1, 50, -5)
   }
   if (G.stage <= 5 && !G.nadeTaught && G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1) { // grenade teaching hint: pulsing ring + bubble over the button
     const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 + 34
