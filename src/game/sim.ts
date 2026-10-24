@@ -317,7 +317,7 @@ const earlyHp = (s: number) => 0.45 + 0.55 * Math.min(1, Math.max(0, (s - 1) / 7
 /** Late HP grows polynomially ((s/12)^3.5) instead of compounding 1.23x a stage: steady climb, no runaway wall. */
 export const hpScale = (s: number) => dHp(s) * Math.pow(1.03, Math.max(0, s - 12)) * 20 * Math.pow(1.27, Math.min(s, 12) - 1) * Math.pow(Math.max(1, s / 12), 3.5) * (1 + 2.2 / (1 + s / 5)) * earlyHp(s)
 // weapon price: climbs with each weapon bought this run and with the stage reached (both reset on rebirth, so each run gets cheaper again)
-export const buyCost = () => Math.ceil(15 * Math.pow(1.11, G.bought) * Math.pow(1.1, G.stage - 1))
+export const buyCost = () => Math.ceil(15 * Math.pow(1.06, G.bought) * Math.pow(1.1, G.stage - 1))
 export const isBoss = (s: number) => s % 10 === 0
 
 let bakAt = 0
@@ -487,6 +487,8 @@ export function reinforceRegroup(paid: 'ad' | 'gems'): boolean {
 const hpBonus = (i: number) => 1 + cp('hp') + 0.15 * bl('vital') + gb(i, 'hp') + 0.04 * sk('coat') + 0.05 * tl('vital') + (wm('iron') ? 0.3 : 0) + ext('hp', i)
 /** Enemies the stall watchdog had to clear (a pathing failure, not a real kill). Tests and telemetry read it. */
 export const STALL = { kills: 0, secs: 0 }
+/** Seconds a walker can stay pinned (not engaged, not moving) before the watchdog clears it. Pathing around barricades is still the real fix. */
+const STALL_S = 4
 /** Pressure: dogs knocked down. A stage that never hurts the pack is not really being played. */
 export const PRESSURE = { downs: 0 }
 const alive = (i: number) => G.hp[i] > 0
@@ -748,7 +750,7 @@ export function update(dtReal: number) {
       e.still = moved < 4 && !engaged ? (e.still ?? 0) + 0.5 : 0 // under 4px in half a second = not moving
     }
     if ((e.still ?? 0) > 3) STALL.secs += dt
-    if ((e.still ?? 0) > 10) { e.hp = 0; STALL.kills++; killReward(e) }
+    if ((e.still ?? 0) > STALL_S) { e.hp = 0; STALL.kills++; killReward(e) }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0)
 
