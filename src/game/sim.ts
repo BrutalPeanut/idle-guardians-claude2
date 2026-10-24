@@ -1,5 +1,7 @@
 import { FRESH } from './fresh'
 import { note } from './notes'
+/** A teaching note, shown once per player (remembered in the save), so it stops getting in the way after it has been read. */
+const noteOnce = (key: string, title: string, text: string) => { if (G.tipsSeen['n_' + key]) return; G.tipsSeen['n_' + key] = 1; note(title, text) }
 import { ext, ON, fire, XS, loadXS, HOOK } from './ext'
 import { ARENA, WEAPONS, GUARDIANS, ROSTER, SLOT_OFF, unlockedGuardians } from './data'
 import type { WeaponKind } from './data'
@@ -362,8 +364,8 @@ export function startStage() {
   G.toSpawn = Math.floor((isBoss(s) ? 8 + s : 6 + Math.floor(s * 1.5)) * rules.zombieMul * (isBoss(s) ? 1 : dCount(s)) * openingMul(s) * breather)
   for (let i = 0; i < 4; i++) { G.mhp[i] = Math.round((110 + s * 7) * GUARDIANS[i].hpMul * hpBonus(i) * (1 + resolve())); G.hp[i] = G.mhp[i]; G.reviveT[i] = 0 }
   G.banner = { text: isBoss(s) ? 'BOSS STAGE ' + s : 'STAGE ' + s, t: 1.6, big: isBoss(s) }
-  if (s === 2) note('Sniper', 'Sniper behind a barricade. Drag your pack to its side to flank it')
-  else if (localStage(s) === 1 || s === 1) note('Tip', rules.tip)
+  if (s === 2) noteOnce('sniper', 'Sniper', 'Sniper behind a barricade. Drag your pack to its side to flank it')
+  else if (localStage(s) === 1 || s === 1) noteOnce(rules.tip, 'Tip', rules.tip)
 }
 
 /** Opening stages are lighter so the player can read the field: 30% of the crowd at stage 1, easing to the full ramp by stage 13. */
@@ -390,8 +392,8 @@ function spawnEnemy() {
   }
   if ((runner || launcher) && !seenKinds.has(kind)) {
     seenKinds.add(kind)
-    if (runner) { G.banner = { text: 'FERAL HOUNDS', t: 1.6 }; note('Feral Hounds', 'Fast, but fragile') }
-    else { G.banner = { text: 'MISSILE BOT', t: 1.8 }; note('Missile Bot', 'Move away or hide behind cover') }
+    if (runner) { G.banner = { text: 'FERAL HOUNDS', t: 1.6 }; noteOnce('hounds', 'Feral Hounds', 'Fast, but fragile') }
+    else { G.banner = { text: 'MISSILE BOT', t: 1.8 }; noteOnce('missile', 'Missile Bot', 'Move away or hide behind cover') }
   }
 }
 
@@ -894,7 +896,7 @@ export function tryMerge(a: number, b: number) {
   const va = G.bench[a], vb = G.bench[b]
   if (a === b || va === null || va !== vb || va >= WEAPONS.length - 1) return false
   // every guardian keeps its own gun: only surplus weapons (beyond one per dog) can be merged away
-  if (G.bench.filter(v => v !== null).length - 1 < unlockedGuardians(G.stage)) { G.banner = { text: 'EACH DOG NEEDS A GUN', t: 1.6 }; note('Armory', 'Buy a spare weapon, then merge the extra'); return false }
+  if (G.bench.filter(v => v !== null).length - 1 < unlockedGuardians(G.stage)) { G.banner = { text: 'EACH DOG NEEDS A GUN', t: 1.6 }; noteOnce('armory', 'Armory', 'Buy a spare weapon, then merge the extra'); return false }
   const lvl = va + 1; G.bench[b] = lvl; G.bench[a] = null; track('merges')
   G.events.push({ type: 'merge', slot: b, level: lvl })
   if (lvl > G.maxLevel) { G.maxLevel = lvl; G.events.push({ type: 'unlock', level: lvl, newEra: WEAPONS[lvl].era !== WEAPONS[lvl - 1].era }) }
