@@ -511,13 +511,14 @@ function drawRobot(ctx: Ctx, e: Enemy, t: number, x: number, y: number, s: numbe
 function fireAura(ctx: Ctx, x: number, y: number, sc: number, t: number, fade: number) {
   ctx.save(); ctx.globalAlpha = fade
   for (let i = 0; i < 11; i++) {
-    const d = (i - 5) / 5, bx = x + d * 13 * sc, by = y + (7 - Math.abs(d) * 3 - Math.sin(i) * 1.5) * sc
-    const h = (16 + 12 * Math.abs(Math.sin(t * 12 + i * 1.9)) + (i === 5 ? 7 : 0)) * sc * (1 - Math.abs(d) * 0.2), w = (4.2 - Math.abs(d) * 1.2) * sc, sway = Math.sin(t * 9 + i * 2.3) * 2.4 * sc
+    // flames start at his belly and stay low, so his head and big eyes stay clear
+    const d = (i - 5) / 5, bx = x + d * 13 * sc, by = y + (18 - Math.abs(d) * 3 - Math.sin(i) * 1.5) * sc
+    const h = (9 + 6 * Math.abs(Math.sin(t * 12 + i * 1.9)) + (i === 5 ? 4 : 0)) * sc * (1 - Math.abs(d) * 0.2), w = (4.2 - Math.abs(d) * 1.2) * sc, sway = Math.sin(t * 9 + i * 2.3) * 2.4 * sc
     const g = ctx.createLinearGradient(bx, by, bx, by - h); g.addColorStop(0, 'rgba(255,230,120,0.95)'); g.addColorStop(0.45, 'rgba(255,140,30,0.9)'); g.addColorStop(1, 'rgba(210,40,20,0)')
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(bx - w, by); ctx.quadraticCurveTo(bx - w * 0.8 + sway * 0.4, by - h * 0.55, bx + sway, by - h); ctx.quadraticCurveTo(bx + w * 0.8 + sway * 0.4, by - h * 0.55, bx + w, by); ctx.closePath(); ctx.fill()
     ctx.fillStyle = 'rgba(255,250,200,0.7)'; ctx.beginPath(); ctx.moveTo(bx - w * 0.4, by); ctx.quadraticCurveTo(bx + sway * 0.4, by - h * 0.45, bx + sway * 0.6, by - h * 0.62); ctx.quadraticCurveTo(bx + w * 0.4, by - h * 0.3, bx + w * 0.4, by); ctx.closePath(); ctx.fill()
   }
-  for (let i = 0; i < 6; i++) { const u = (t * 1.3 + i / 6) % 1, ex = x + Math.sin(i * 5.1 + t * 3) * 12 * sc, ey = y + (4 - u * 30) * sc; ctx.fillStyle = 'rgba(255,' + (150 + i * 15) + ',60,' + (1 - u) + ')'; ctx.beginPath(); ctx.arc(ex, ey, (1.8 - u) * sc, 0, 6.283); ctx.fill() }
+  for (let i = 0; i < 6; i++) { const u = (t * 1.3 + i / 6) % 1, ex = x + Math.sin(i * 5.1 + t * 3) * 12 * sc, ey = y + (16 - u * 22) * sc; ctx.fillStyle = 'rgba(255,' + (150 + i * 15) + ',60,' + (1 - u) + ')'; ctx.beginPath(); ctx.arc(ex, ey, (1.8 - u) * sc, 0, 6.283); ctx.fill() }
   ctx.restore()
 }
 
