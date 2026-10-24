@@ -30,7 +30,7 @@ export type Ctx = CanvasRenderingContext2D
 export const OUT = '#241810';
 let bannerRef: unknown = null, bannerAt = 0, pstage = 0, pmax = 1
 export const FONT = '"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif';
-export const R = { freshAsk: false, freshChecked: false, freshStage: 1, chestMoment: null as null | { tier: number }, gearIntro: false, lastChests: -1, coach: null as null | { id: string; text: string; target?: string; start: number }, coachBox: null as Rect | null, coachX: null as Rect | null, rbAnnounced: -1, blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
+export const R = { freshAsk: false, freshChecked: false, freshStage: 1, chestMoment: null as null | { tier: number }, gearIntro: false, lastChests: -1, coach: null as null | { id: string; text: string; target?: string; start: number }, coachBox: null as Rect | null, coachX: null as Rect | null, rbAnnounced: -1, nudge: { on: false, t0: 0, lastSim: -999 }, blasts: [] as Blast[], scorch: [] as { x: number; y: number; r: number; t: number }[], parts: [] as Part[], floats: [] as Floater[], shake: 0, flash: 0, drag: null as { from: number; x: number; y: number } | null, btns: {} as Record<string, Rect>, hint: 1, spinAnim: null as null | { t: number; from: number; to: number; idx: number; done: boolean; last?: number }, passPage: 0, achPage: 0, coinsFly: [] as { x: number; y: number; sx: number; sy: number; t: number; dur: number }[], goldBump: 0, errLogged: false, help: false, skillTab: 0, tour: null as number | null, tourAsk: false, screen: null as string | null, hubTab: null as number | null, shopTab: 0, gearDog: 0, summary: null as null | { ids: number[]; sold: number; chests: number }, kSlot: 0, clanTab: 0, leaveArm: false, sel: -1, reveal: null as null | { id: number; tier: number; sold: number; phase: number; t: number }, rebirth: false, quests: false, coverT: {} as Record<number, number>, dragOver: -1, dragAnchor: null as { sx: number; sy: number; cx: number; cy: number } | null, pressed: null as string | null, popSlot: null as { slot: number; t: number } | null };
 
 export function benchRect(i: number): Rect {
   const c = i % BENCH.cols, r = Math.floor(i / BENCH.cols);
@@ -985,6 +985,16 @@ export function render(ctx: Ctx, t: number) {
     const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 + 34
     ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 34 + 3 * k, 0, 6.283); ctx.stroke()
     const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
+  }
+  { // grenade reminder: auto never throws it, so after 40s of game time without one, pulse the button for 6s (then wait another 40s)
+    const idle = G.nadeCd <= 0 && !G.raid && G.enemies.length >= 1 && G.t - (G.lastNade ?? 0) > 40 && !(G.stage <= 5 && !G.nadeTaught) && !R.screen && !R.quests && !R.rebirth
+    if (idle && !R.nudge.on && G.t - R.nudge.lastSim > 40) R.nudge = { on: true, t0: t, lastSim: G.t }
+    if (R.nudge.on && (!idle || t - R.nudge.t0 > 6)) R.nudge.on = false
+    if (R.nudge.on) {
+      const k = 0.5 + 0.5 * Math.sin(t * 6), cx = 322, cy = ARENA.y1 + 34
+      ctx.strokeStyle = 'rgba(255,170,60,' + (0.5 + 0.5 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 34 + 3 * k, 0, 6.283); ctx.stroke()
+      const t3 = 'Grenade ready. Auto never throws it. Tap it!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw3 = ctx.measureText(t3).width + 22; glass(ctx, W - 10 - tw3, ARENA.y1 - 80, tw3, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t3, W - 10 - tw3 / 2, ARENA.y1 - 67.5)
+    }
   }
   drawCoachTip(ctx, t)
   drawNote(ctx, t)

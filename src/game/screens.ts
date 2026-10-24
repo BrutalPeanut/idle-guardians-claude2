@@ -557,6 +557,12 @@ export function drawAuto(ctx: Ctx) {
     const words = r.when.split(' '); let line = '', ly = y + 38; for (const w of words) { if (ctx.measureText(line + w).width > 170) { ctx.fillText(line, 74, ly); line = ''; ly += 12 } line += w + ' ' } ctx.fillText(line, 74, ly)
     button(ctx, 'au_' + r.key, W - 86, y + 14, 60, 32, { top: on ? '#52d273' : '#5a666d', bot: on ? '#25994a' : '#39434a', label: G.auto[r.key] ? 'ON' : 'OFF', size: 13 })
   })
+  // the grenade is the one ability auto never throws: a plain row, no toggle, so it's obvious it is manual
+  const gy = 134 + AUTO_ROWS.length * 68 + 4
+  plate(ctx, 16, gy, W - 32, 62, 14)
+  ctx.save(); ctx.translate(44, gy + 31); ctx.scale(1.5, 1.5); icons.nade?.(ctx, 0, 0, '#ff9a3a'); ctx.restore()
+  ctx.textAlign = 'left'; ctx.fillStyle = '#ffd9a0'; ctx.font = '400 14px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Grenade: YOU throw it', 74, gy + 20)
+  ctx.fillStyle = '#9fb5aa'; ctx.font = '400 10px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; ctx.fillText('Auto never fires the grenade. Tap the', 74, gy + 38); ctx.fillText('grenade button when a crowd builds up.', 74, gy + 50)
 }
 registerTile({ id: 'auto', label: 'Auto Mode', sub: () => G.auto.on ? 'On' : 'Off', icon: 'frenzy', col: '#52d273' })
 
