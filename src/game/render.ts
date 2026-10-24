@@ -698,7 +698,8 @@ function drawCoachTip(ctx: Ctx, t: number) {
   R.coachBox = null; R.coachX = null
   if (busy) { R.coach = null; return }
   if (R.coach && !(coachTips().find(x => x.id === R.coach!.id)?.when() ?? false)) { G.tipsSeen[R.coach.id] = 1; R.coach = null } // the player acted: done
-  else if (R.coach && now - R.coach.start > 7000) { const pt = coachTips().find(x => x.id === R.coach!.id); if (pt?.persist) coachCool[R.coach.id] = now; else G.tipsSeen[R.coach.id] = 1; R.coach = null }
+  // buy and merge (sticky) stay until the player acts
+  else if (R.coach && now - R.coach.start > 7000 && !coachTips().find(x => x.id === R.coach!.id)?.sticky) { const pt = coachTips().find(x => x.id === R.coach!.id); if (pt?.persist) coachCool[R.coach.id] = now; else G.tipsSeen[R.coach.id] = 1; R.coach = null }
   if (!R.coach) { const nx = nextTip(); if (nx) R.coach = { id: nx.id, text: nx.text, target: nx.target, start: now } }
   if (!R.coach) return
   const c = R.coach, hot = !!coachTips().find(x => x.id === c.id)?.persist // buy and merge: big, gold, hard to miss
