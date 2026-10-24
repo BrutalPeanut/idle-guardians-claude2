@@ -81,7 +81,7 @@ interface State {
   sup: { x: number; y: number }; hold: { x: number; y: number } | null
   enemies: Enemy[]; shots: Shot[]; ebullets: EBullet[]; shells: Shell[]; missiles: Missile[]; cover: Cover[]; hazards: Hazard[]; events: GEvent[]; t: number
   fail: number; failStage: number; wipe: null | { stage: number; fails: number }; reviveStage: number; reinforce: boolean; spawned: number; toSpawn: number; spawnT: number; speed: number; cd: number[]; flankOff: number[]; status: Status[]
-  nades: Nade[]; nadeCd: number
+  nades: Nade[]; nadeCd: number; lastNade?: number
   /** Blessing stacks (id -> count) and a pending 3-way pick (ids) that pauses the game until chosen. */
   blessings: Record<string, number>; pick: string[] | null
   /** Rebirth currency (permanent) and how many times the player has reborn. */
@@ -565,7 +565,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
   G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: Math.max(2 * (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG), NADE_FLOOR * hpScale(G.stage)) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
-  G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
+  G.nadeCd = nadeCdMax(); G.lastNade = G.t; track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
 /** Frenzy: every gun fires at double rate. Shield: the whole pack takes no damage. Both are tap-to-use with a cooldown. */
