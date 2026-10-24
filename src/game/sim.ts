@@ -529,6 +529,8 @@ export const NADE = { cd: 12, r: 64, dur: 0.75 }
 export const NADE_DMG = 0.03 // only used before any gun damage has been measured (first seconds of a session): fraction of one enemy's HP
 /** Grenade damage per enemy caught = this many seconds of the pack's recent gun DPS. Anchoring it to gun output (not enemy HP) keeps the grenade at roughly a quarter to a third of damage at any stage. */
 export const NADE_SECONDS = 0.8
+/** Early-game floor: a grenade always hits for at least this fraction of one enemy's HP per target, so it matters before the guns ramp. Gun-based damage takes over once it is bigger. */
+export const NADE_FLOOR = 0.25
 /** A grenade deals at most this many enemies' worth of damage per throw, however many it catches, so it can't dominate against huge hordes. */
 export const NADE_TARGETS = 5
 /** A direct hit on a small group still counts as at least this many enemies' worth, so the grenade stays a meaningful ability even in thin waves. */
@@ -560,7 +562,7 @@ export function throwGrenade(): 'ok' | 'cooldown' | 'none' {
   }
   let sx = 0, sy = 0, k = 0
   for (const o of live) if (Math.hypot(o.x - best.x, o.y - best.y) < NADE.r) { sx += o.x; sy += o.y; k++ }
-  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: 2 * (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
+  G.nades.push({ x: G.pack.x, y: G.pack.y - 10, tx: sx / k, ty: sy / k, t: 0, dur: NADE.dur, r: NADE.r, dmg: Math.max(2 * (G.dpsEma > 0 ? G.dpsEma * NADE_SECONDS : hpScale(G.stage) * NADE_DMG), NADE_FLOOR * hpScale(G.stage)) * (wm('bomb') ? 1.25 : 1) * (1 + 0.08 * sk('boomS')) })
   G.nadeCd = nadeCdMax(); track('nades'); G.events.push({ type: 'nade_throw', x: G.pack.x, y: G.pack.y - 10 }); return 'ok'
 }
 
