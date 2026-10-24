@@ -271,7 +271,7 @@ function helmet(ctx: Ctx, x: number, y: number, hw: number, strapped: boolean, t
 function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: number) {
   const wag = Math.sin(t * 9 + x) * 3
   blob(ctx, x + 12 + wag * 0.4, y + 3 + wag * 0.3, 7.5, 4.4, g.shade, g.ear)                         // feathered tail plume
-  blob(ctx, x, y + 6, 10.5, 8.8, g.fur, g.shade, 16)                                                    // body
+  blob(ctx, x, y + 6, 12, 10, g.fur, g.shade, 16)                                                       // body (heavier build)
   blob(ctx, x, y + 9.5, 7, 5.2, '#fbeccb', null)                                                    // fluffy chest ruff
   for (const dx of [-5, 0, 5]) blob(ctx, x + dx, y + 12, 2.6, 2.2, '#fbeccb', null)                 // feathering tufts
   blob(ctx, x - 6.5 + pawX(-1), y + 14.5 - pawY(-1), 4.2, 3.3, g.fur, g.shade); blob(ctx, x + 6.5 + pawX(+1), y + 14.5 - pawY(+1), 4.2, 3.3, g.fur, g.shade) // paws
@@ -279,7 +279,7 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
     ctx.fillStyle = g.ear; ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.lineJoin = 'round'
     ctx.beginPath(); ctx.moveTo(x + sx * 8, y - 12); ctx.quadraticCurveTo(x + sx * 18, y - 11, x + sx * 15.5, y + 3); ctx.quadraticCurveTo(x + sx * 12, y + 5, x + sx * 9.5, y - 1); ctx.closePath(); ctx.fill(); ctx.stroke()
   }
-  blob(ctx, x, y - 4.5, 14.2, 12.8, g.fur, g.shade, 18)                                                   // big round head
+  blob(ctx, x, y - 4.5, 16.2, 14.6, g.fur, g.shade, 18)                                                   // big broad head
   for (const a of [3.05, 0.1, 2.4, 0.75]) blob(ctx, x + Math.cos(a) * 12.9, y - 4.5 + Math.sin(a) * 11.6, 3.4, 2.8, g.fur, null)   // soft fluffy cheek tufts (scruffy but friendly)
   blob(ctx, x, y + 1.8, 6, 4.2, '#fffaf0', null)                                                  // light muzzle
   ctx.fillStyle = 'rgba(255,130,120,.55)'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + sx * 9.6, y - 0.2, 3.2, 2.1, 0, 0, 6.283); ctx.fill() } // rosy cheeks
@@ -295,6 +295,7 @@ function drawRudy(ctx: Ctx, g: Guardian, x: number, y: number, t: number, look: 
   ctx.fillStyle = '#ff8fa8'; ctx.beginPath(); ctx.ellipse(x + 0.6, y + 6.6, 2.9, 2, 0, Math.PI, 0, true); ctx.fill()   // tongue
   ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.lineCap = 'round'; for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 5.2, y + 2.6); ctx.quadraticCurveTo(x + sx * 6.6, y + 1.6, x + sx * 6.9, y + 0.2); ctx.stroke() } ctx.lineCap = 'butt'   // smile cheeks
   for (const dx of [-6, 0, 6]) blob(ctx, x + dx, y + 13.2, 3.6, 2.6, '#fbeccb', null)   // fluffy chest ruff
+  for (const sx of [-1, 1]) blob(ctx, x + sx * 7.5, y + 13.2, 3.4, 2.5, '#fbeccb', null)            // feathered legs
   collar(ctx, x, y + 4.2, '#c0392b', true)
   helmet(ctx, x + 0.3, y - 12.4, 12, false, t, -0.1)   // green helmet pushed back, straps hanging loose
 }
