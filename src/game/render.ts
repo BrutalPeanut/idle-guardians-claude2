@@ -1,6 +1,7 @@
 import { DRAW, drawAll, ON, fire } from './ext'
 import { nextGoal } from './meta'
 import { coachTips, nextTip, coachCool } from './coach'
+import { notes, noteBox, noteHoldS } from './notes'
 import { W, H, ARENA, WEAPONS, GUARDIANS, ERAS, BIOMES, BENCH, ACTION_BAR, unlockedGuardians } from './data'
 import type { Guardian } from './data'
 import { PERKS } from './clan'
@@ -725,6 +726,30 @@ function drawCoachTip(ctx: Ctx, t: number) {
   R.coachX = { x: xc.x - 12, y: xc.y - 12, w: 24, h: 24 }
 }
 
+/** Explainer card at the top of the arena. Stays until tapped or read long enough; the queue shows one at a time. */
+function drawNote(ctx: Ctx, _t: number) {
+  const n = notes[0], now = performance.now()
+  const busy = !!(R.screen || R.quests || R.rebirth || G.pick || G.wipe || G.away || R.tour !== null || R.tourAsk || G.raid || R.chestMoment || R.gearIntro || R.freshAsk)
+  noteBox.r = null
+  if (!n) return
+  if (busy) { n.at = undefined; return }                  // paused while a menu is open, so it's not missed
+  if (n.at === undefined) n.at = now
+  if ((now - n.at) / 1000 > noteHoldS(n)) { notes.shift(); return }
+  ctx.font = '400 13px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'
+  const bw = 290, x = 12, y = ARENA.y0 + 30               // left of the flank and stash chips on the right
+  const maxW = bw - 28, words = n.text.split(' '), lines: string[] = []
+  let cur = ''; for (const w of words) { const tryS = cur ? cur + ' ' + w : w; if (ctx.measureText(tryS).width > maxW && cur) { lines.push(cur); cur = w } else cur = tryS }
+  if (cur) lines.push(cur)
+  const lh = 17, bh = 26 + lines.length * lh + 16
+  glass(ctx, x, y, bw, bh, 12)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+  ctx.font = '400 11px ' + FONT; ctx.fillStyle = '#ffd84a'; ctx.fillText(n.title.toUpperCase(), x + 14, y + 13)
+  ctx.font = '400 13px ' + FONT; ctx.fillStyle = '#fff6d8'; lines.forEach((l, i) => ctx.fillText(l, x + 14, y + 27 + i * lh))
+  ctx.textAlign = 'right'; ctx.font = '400 9.5px ' + FONT; ctx.fillStyle = '#9fb8aa'; ctx.fillText(notes.length > 1 ? 'TAP TO CONTINUE (' + (notes.length - 1) + ' more)' : 'TAP TO CLOSE', x + bw - 12, y + bh - 10)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'
+  noteBox.r = { x, y, w: bw, h: bh }
+}
+
 export function button(ctx: Ctx, key: string, x: number, y: number, w: number, h: number, o: BtnOpts) {
   R.btns[key] = { x, y, w, h }
   const down = R.pressed === key, dy = down ? 2.5 : 0, rad = o.round ? h / 2 : Math.min(14, h / 2.2), lip = down ? 1 : 4, fh = h - 4
@@ -960,6 +985,7 @@ export function render(ctx: Ctx, t: number) {
     const t2 = 'Tap the grenade to blast a bunch!'; ctx.font = '400 11px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t2).width + 22; glass(ctx, W - 10 - tw, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#ffd9a0'; ctx.textAlign = 'center'; ctx.fillText(t2, W - 10 - tw / 2, ARENA.y1 - 67.5)
   }
   drawCoachTip(ctx, t)
+  drawNote(ctx, t)
   if (R.hint > 0 && G.stage <= 2) { const t1 = 'Drag the arena to move the pack'; ctx.font = '400 12px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif'; const tw = ctx.measureText(t1).width + 24; glass(ctx, 14, ARENA.y1 - 80, tw, 24, 12); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(t1, 14 + tw / 2, ARENA.y1 - 67) }
 
   if (G.raid && !G.raid.result) { // raid scoreboard: damage bar with tier ticks
