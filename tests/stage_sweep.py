@@ -15,7 +15,7 @@ Requires Playwright with the pre-installed Chromium at /opt/pw-browsers/chromium
 import asyncio, os, sys
 from playwright.async_api import async_playwright
 
-STAGES = [1, 3, 6, 9, 11, 15, 19, 21, 24, 26]
+STAGES = [1, 3, 6, 9, 11, 15, 19, 20, 21, 24, 26]
 BUDGET_S = 300            # simulated seconds allowed per stage
 MAX_STALL = 0             # stall-watchdog clears allowed per stage (a pathing failure if above this)
 GAME = 'file:///home/claude/idle-guardians.html'
