@@ -1,4 +1,5 @@
 import { submit } from './leaderboard'
+import { notes, noteBox } from './notes'
 import { coachTips } from './coach'
 import { W, H, ARENA } from './data'
 import { unlocked, unlockStage, spinsLeft, collectCrate } from './sim'
@@ -43,6 +44,7 @@ export function startGame(cv: HTMLCanvasElement): () => void {
     const p = pt(ev); R.hint = 0
     if (R.freshAsk) { for (const k of ['fresh_continue', 'fresh_restart']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
     if (R.chestMoment || (R.gearIntro && !R.summary)) { for (const k of ['chest_open', 'gear_intro_ok']) { const r = R.btns[k]; if (r && inR(p, r)) { R.pressed = k; mode = 'btn'; Audio_.ui() } } return }
+    if (noteBox.r && inR(p, noteBox.r)) { notes.shift(); Audio_.ui(); return }
     if (R.coach && R.coachX && inR(p, R.coachX)) { G.tipsSeen[R.coach.id] = 1; R.coach = null; Audio_.ui(); return }
     if (R.coach && R.coachBox && inR(p, R.coachBox)) {
       // tapping the bubble dismisses it and, when the tip names a button, goes there
